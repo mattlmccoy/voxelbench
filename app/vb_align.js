@@ -9,6 +9,7 @@
 
   const IDENTITY = { R: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0], s: 1 };
   const MAX_ICP_POINTS = 20000;
+  const SCALE_RANGE = [0.5, 1.5]; // a fitted uniform scale is kept within this range, so the model cannot collapse
 
   /** Eigen-decomposition of a symmetric n x n matrix (row-major array) by cyclic Jacobi: { values, vectors } with
       vectors[k] the k-th eigenvector, sorted by decreasing value. */
@@ -52,7 +53,7 @@
   }
 
   /** Horn's quaternion fit: the transform taking src[i] to dst[i] in least squares (both flat xyz arrays). */
-  function fitTransform(src, dst, { scale = false, keep = null } = {}) {
+  function fitTransform(src, dst, { scale = false, keep = null, scaleRange = null } = {}) {
     const cs = centroid(src, keep), cd = centroid(dst, keep);
     const S = new Array(9).fill(0);
     let ss = 0;
@@ -71,6 +72,7 @@
       let dot = 0; // Σ b·(R a)
       for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) dot += R[3 * r + c] * S[3 * c + r];
       s = dot / ss;
+      if (scaleRange) s = Math.min(scaleRange[1], Math.max(scaleRange[0], s));
     }
     const t = [0, 1, 2].map((r) => cd[r] - s * (R[3 * r] * cs[0] + R[3 * r + 1] * cs[1] + R[3 * r + 2] * cs[2]));
     return { R, t, s };
@@ -152,10 +154,17 @@
     return Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
   }
 
-  /** Trimmed point-to-point ICP from `init`: pairs farther than trim x the median pair distance are dropped. */
+  /** Trimmed point-to-point ICP from `init`: pairs farther than trim x the median pair distance are dropped. With
+      scale, a rigid fit runs to convergence first and the scale is then freed within SCALE_RANGE: a free scale from a
+      poor pose can otherwise shrink the model onto a patch of the target. */
   function icp(srcAll, dst, { init = IDENTITY, iterations = 60, scale = false, trim = 3, tol = 1e-4, index = null } = {}) {
-    const src = thin(srcAll, MAX_ICP_POINTS), n = src.length / 3;
     const grid = index || nearestIndex(dst, Math.max(extentOf(dst) / 48, 1e-6));
+    const rigid = run(srcAll, dst, { init, iterations, scale: false, trim, tol, grid });
+    return scale ? run(srcAll, dst, { init: rigid, iterations, scale: true, trim, tol, grid }) : rigid;
+  }
+
+  function run(srcAll, dst, { init, iterations, scale, trim, tol, grid }) {
+    const src = thin(srcAll, MAX_ICP_POINTS), n = src.length / 3;
     const pair = new Float64Array(src.length), dist = new Float64Array(n), keep = new Uint8Array(n);
     let T = init, rms = Infinity, done = 0;
     for (; done < iterations; done++) {
@@ -171,7 +180,7 @@
       const now = Math.sqrt(sum / (kept || 1));
       if (Math.abs(rms - now) < tol) { rms = now; break; }
       rms = now;
-      T = fitTransform(src, pair, { scale, keep });
+      T = fitTransform(src, pair, { scale, keep, scaleRange: scale ? SCALE_RANGE : null });
     }
     return { ...T, rms, iterations: done };
   }

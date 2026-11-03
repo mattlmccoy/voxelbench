@@ -168,7 +168,7 @@
   function saveSample() {
     if (!state.folder) return;
     const v = (id) => $(id).value.trim();
-    App.saveRecord('samples', { id: state.folder, folder: state.folder, name: v('sampleName') || state.folder, material: v('sampleMaterial'), process: v('sampleProcess'), notes: v('sampleNotes'), calibration_air: CT.sampleInfo(state.folder, state.samples).calibration_air, updated_at: new Date().toISOString() });
+    App.saveRecord('samples', CT.sampleRecord(state.folder, state.samples, { name: v('sampleName') || state.folder, material: v('sampleMaterial'), process: v('sampleProcess'), notes: v('sampleNotes') }));
   }
 
   function renderFacts() {

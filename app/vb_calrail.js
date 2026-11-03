@@ -21,8 +21,7 @@
 
   function setAir(include) {
     if (!state.folder) return;
-    const s = CT.sampleInfo(state.folder, state.samples);
-    App.saveRecord('samples', { id: state.folder, folder: state.folder, name: s.name, material: s.material, process: s.process, notes: s.notes, calibration_air: include, updated_at: new Date().toISOString() });
+    App.saveRecord('samples', CT.sampleRecord(state.folder, state.samples, { calibration_air: include }));
   }
 
   function render() {

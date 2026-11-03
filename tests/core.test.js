@@ -75,12 +75,12 @@ test('groupStacks groups by folder, sorts by the number in the name, ignores oth
 });
 
 test('sampleInfo gives the folder name and blank fields for a sample nobody described', () => {
-  assert.deepEqual(CT.sampleInfo('S9', new Map()), { folder: 'S9', name: 'S9', material: '', process: '', notes: '', calibration_air: true });
+  assert.deepEqual(CT.sampleInfo('S9', new Map()), { folder: 'S9', name: 'S9', material: '', process: '', notes: '', calibration_air: true, cad: null });
 });
 
 test('sampleInfo returns the fields a user stored for the folder', () => {
   const m = new Map([['S2', { id: 'S2', folder: 'S2', name: 'Cube A', material: 'PA12', process: 'SLS', notes: 'first build', calibration_air: false, updated_at: 't' }]]);
-  assert.deepEqual(CT.sampleInfo('S2', m), { folder: 'S2', name: 'Cube A', material: 'PA12', process: 'SLS', notes: 'first build', calibration_air: false });
+  assert.deepEqual(CT.sampleInfo('S2', m), { folder: 'S2', name: 'Cube A', material: 'PA12', process: 'SLS', notes: 'first build', calibration_air: false, cad: null });
 });
 
 test('extractPlane returns the right voxels in every plane', () => {
@@ -253,4 +253,17 @@ test('REAL STACK: parser, planes and circle match tifffile', { skip: !haveReal }
   assert.ok(Math.abs(c.cx - REF.circle.cx) < 1 && Math.abs(c.cy - REF.circle.cy) < 1 && Math.abs(c.r - REF.circle.r) < 1, JSON.stringify(c));
   const w = CT.autoWindow(slices, dims, 8);
   assert.ok(Math.abs(w.high - REF.autowindow_high_about) < 60, JSON.stringify(w));
+});
+
+test('sampleRecord merges changes into the saved sample, keeping fields other steps wrote', () => {
+  const samples = new Map([['S1', { id: 'S1', folder: 'S1', name: 'Bar', material: 'PA12', process: '', notes: '', calibration_air: false, cad: { file: 'bar.stl', rms_mm: 0.01 } }]]);
+  const r = CT.sampleRecord('S1', samples, { name: 'Bar 2' });
+  assert.equal(r.name, 'Bar 2');
+  assert.equal(r.calibration_air, false);
+  assert.deepEqual(r.cad, { file: 'bar.stl', rms_mm: 0.01 });
+  assert.equal(r.id, 'S1'); assert.ok(r.updated_at);
+  const fresh = CT.sampleRecord('S2', samples, { cad: { file: 'x.stl' } });
+  assert.equal(fresh.name, 'S2'); assert.equal(fresh.calibration_air, true); assert.deepEqual(fresh.cad, { file: 'x.stl' });
+  assert.equal(CT.sampleInfo('S1', samples).cad.file, 'bar.stl');
+  assert.equal(CT.sampleInfo('S2', samples).cad, null);
 });

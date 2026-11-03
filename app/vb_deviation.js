@@ -9,6 +9,7 @@
   'use strict';
 
   const STEP_VOXELS = 0.25; // search step, in analysis voxels
+  const MIN_FACING = 0.5; // cos 60°: a crossing counts only where the scanned surface faces within 60° of the normal
   const MAX_MATRIX_SAMPLES = 2e6;
 
   const isoLevel = (air, matrix) => (air + matrix) / 2;
@@ -66,12 +67,21 @@
     return thin;
   }
 
-  /** Signed deviation (mm) of every nominal point, NaN where no crossing lies within ±rangeMm inside the volume. */
-  function deviations({ gray, dims, bin, voxelMm, level, circle = null, points, normals, transform, rangeMm = 2 }) {
+  /** Cosine between the scanned surface's outward normal (minus the gray gradient) at a point and direction d. */
+  function facing(at, x, y, z, d, h) {
+    const gx = at(x + h, y, z) - at(x - h, y, z), gy = at(x, y + h, z) - at(x, y - h, z), gz = at(x, y, z + h) - at(x, y, z - h);
+    const len = Math.hypot(gx, gy, gz);
+    return len > 0 ? -(gx * d[0] + gy * d[1] + gz * d[2]) / len : NaN;
+  }
+
+  /** Signed deviation (mm) of every nominal point: the nearest crossing within ±rangeMm inside the volume where the
+      scanned surface faces within 60° of the normal; NaN where there is none. */
+  function deviations({ gray, dims, bin, voxelMm, level, circle = null, points, normals, edge = null, transform, rangeMm = 2 }) {
     const at = sampler({ gray, dims, bin, voxelMm, circle });
     const { R, t, s } = transform, step = STEP_VOXELS * bin * voxelMm, n = Math.ceil(rangeMm / step);
     const out = new Float32Array(points.length / 3);
     for (let k = 0; k < out.length; k++) {
+      if (edge && edge[k]) { out[k] = NaN; continue; }
       const px = points[3 * k], py = points[3 * k + 1], pz = points[3 * k + 2], qx = normals[3 * k], qy = normals[3 * k + 1], qz = normals[3 * k + 2];
       const c = [0, 1, 2].map((r) => s * (R[3 * r] * px + R[3 * r + 1] * py + R[3 * r + 2] * pz) + t[r]);
       const d = [0, 1, 2].map((r) => R[3 * r] * qx + R[3 * r + 1] * qy + R[3 * r + 2] * qz);
@@ -80,7 +90,7 @@
         const g = at(c[0] + j * step * d[0], c[1] + j * step * d[1], c[2] + j * step * d[2]);
         if (prev >= level && g < level) { // NaN on either side fails both comparisons
           const sCross = (j - 1 + (prev - level) / (prev - g)) * step;
-          if (!(Math.abs(sCross) >= Math.abs(best))) best = sCross;
+          if (!(Math.abs(sCross) >= Math.abs(best)) && facing(at, c[0] + sCross * d[0], c[1] + sCross * d[1], c[2] + sCross * d[2], d, bin * voxelMm) >= MIN_FACING) best = sCross;
         }
         prev = g;
       }
@@ -96,13 +106,17 @@
     return sorted[lo] + (pos - lo) * (sorted[hi] - sorted[lo]);
   }
 
-  function deviationStats(dev, toleranceMm) {
+  /** Statistics of the measured points; points on sharp edges (edge mask) are counted as on_edge, the rest that found
+      no surface as unmeasured. */
+  function deviationStats(dev, toleranceMm, edge = null) {
     const v = Array.from(dev).filter(Number.isFinite).sort((a, b) => a - b), n = v.length;
-    if (!n) return { measured: 0, unmeasured: dev.length, mean: null, sd: null, min: null, p05: null, p50: null, p95: null, max: null, within_percent: null };
+    let onEdge = 0;
+    if (edge) for (let k = 0; k < dev.length; k++) if (edge[k]) onEdge++;
+    if (!n) return { measured: 0, unmeasured: dev.length - onEdge, on_edge: onEdge, mean: null, sd: null, min: null, p05: null, p50: null, p95: null, max: null, within_percent: null };
     const mean = v.reduce((a, b) => a + b, 0) / n;
     const sd = Math.sqrt(v.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, n - 1));
     const within = v.filter((d) => Math.abs(d) <= toleranceMm + EPS).length;
-    return { measured: n, unmeasured: dev.length - n, mean, sd, min: v[0], p05: quantile(v, 0.05), p50: quantile(v, 0.5), p95: quantile(v, 0.95), max: v[n - 1], within_percent: (100 * within) / n };
+    return { measured: n, unmeasured: dev.length - n - onEdge, on_edge: onEdge, mean, sd, min: v[0], p05: quantile(v, 0.05), p50: quantile(v, 0.5), p95: quantile(v, 0.95), max: v[n - 1], within_percent: (100 * within) / n };
   }
 
   function histogram(dev, { bins = 40, range }) {
@@ -117,5 +131,21 @@
     return { edges: Array.from({ length: bins + 1 }, (_, k) => lo + k * w), counts, below, above };
   }
 
-  return { isoLevel, matrixGray, sampler, surfacePoints, deviations, deviationStats, histogram };
+  // Diverging map (Moreland's cool-warm): blue where material is missing, red where there is extra.
+  const COOL = [0.23, 0.299, 0.754], MID = [0.865, 0.865, 0.865], WARM = [0.706, 0.016, 0.15], UNMEASURED = [0.35, 0.35, 0.35];
+  function deviationColor(d, limit) {
+    if (!Number.isFinite(d)) return UNMEASURED.slice();
+    const x = Math.max(-1, Math.min(1, d / limit)), end = x < 0 ? COOL : WARM, f = Math.abs(x);
+    return MID.map((m, k) => m + f * (end[k] - m));
+  }
+
+  /** What is saved with the sample: the pose to reopen the comparison from, and the numbers the page reported. */
+  function cadSummary(result, { file, unitMm, spacingMm, points }) {
+    const { transform, rms, level, stats, options } = result, total = stats.measured + stats.unmeasured; // edge points left out
+    return { file, unit_mm: unitMm, spacing_mm: spacingMm, points, transform, rms_mm: rms, iso_level: level, scale_fitted: Boolean(options.scale),
+      shrinkage_percent: options.scale ? (1 - transform.s) * 100 : null, tolerance_mm: options.toleranceMm, range_mm: options.rangeMm,
+      unmeasured_percent: total ? (100 * stats.unmeasured) / total : null, stats, saved_at: new Date().toISOString() };
+  }
+
+  return { isoLevel, matrixGray, sampler, surfacePoints, deviations, deviationStats, histogram, deviationColor, cadSummary };
 }));

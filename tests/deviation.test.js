@@ -87,3 +87,40 @@ test('matrix gray is the median above the pore threshold inside the mask', () =>
   const gray = Float32Array.from([100, 1000, 2000, 2100, 2200, 5000]), filled = Uint8Array.from([1, 1, 1, 1, 1, 0]);
   assert.equal(D.matrixGray(gray, filled, 1300), 2100);
 });
+
+test('deviationColor is blue below, neutral at zero, red above, clipped at the limit, and gray where not measured', () => {
+  const [b, n, r] = [D.deviationColor(-0.3, 0.3), D.deviationColor(0, 0.3), D.deviationColor(0.3, 0.3)];
+  assert.ok(b[2] > b[0] && r[0] > r[2], `${b} ${r}`);
+  assert.ok(Math.abs(n[0] - n[1]) < 0.05 && Math.abs(n[1] - n[2]) < 0.05 && n[0] > 0.8, `${n}`);
+  assert.deepEqual(D.deviationColor(5, 0.3), r);
+  const g = D.deviationColor(NaN, 0.3);
+  assert.ok(g[0] === g[1] && g[1] === g[2] && g[0] < 0.5);
+});
+
+test('cadSummary keeps what reopening the comparison needs and the numbers the page reported', () => {
+  const result = { transform: { R: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [1, 2, 3], s: 0.97 }, rms: 0.012, level: 1350, stats: { measured: 90, unmeasured: 10, p50: 0.01 }, options: { scale: true, toleranceMm: 0.1, rangeMm: 2 } };
+  const s = D.cadSummary(result, { file: 'part.stl', unitMm: 1, spacingMm: 0.16, points: 100 });
+  assert.equal(s.file, 'part.stl');
+  assert.deepEqual(s.transform, result.transform);
+  assert.ok(Math.abs(s.shrinkage_percent - 3) < 1e-9);
+  assert.equal(s.rms_mm, 0.012); assert.equal(s.tolerance_mm, 0.1); assert.equal(s.unmeasured_percent, 10);
+  assert.equal(D.cadSummary({ ...result, transform: { ...result.transform, s: 1 }, options: { ...result.options, scale: false } }, { file: 'p.stl', unitMm: 1, spacingMm: 0.16, points: 100 }).shrinkage_percent, null);
+});
+
+test('a crossing whose surface faces more than 60° away from the nominal normal is not accepted', () => {
+  const gray = boxGray();
+  const at = (deg) => {
+    const a = (deg * Math.PI) / 180;
+    return D.deviations({ gray, dims, bin, voxelMm, level, points: Float32Array.from([2, 2, 3.05]), normals: Float32Array.from([Math.sin(a), 0, Math.cos(a)]), transform: identity, rangeMm: 1 })[0];
+  };
+  assert.ok(Math.abs(at(30)) < 0.05, `30°: ${at(30)}`);
+  assert.ok(Number.isNaN(at(70)), `70°: ${at(70)}`);
+});
+
+test('points on sharp edges are skipped and counted apart from points that found no surface', () => {
+  const dev = Float32Array.from([0.01, NaN, NaN, 0.02]), edge = Uint8Array.from([0, 1, 0, 0]);
+  const s = D.deviationStats(dev, 0.1, edge);
+  assert.equal(s.measured, 2); assert.equal(s.on_edge, 1); assert.equal(s.unmeasured, 1);
+  const out = D.deviations({ gray: boxGray(), dims, bin, voxelMm, level, points: Float32Array.from([2, 2, 2.75, 2, 2, 2.75]), normals: Float32Array.from([0, 0, 1, 0, 0, 1]), edge: Uint8Array.from([1, 0]), transform: identity, rangeMm: 1 });
+  assert.ok(Number.isNaN(out[0]) && Number.isFinite(out[1]));
+});

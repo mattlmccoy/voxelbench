@@ -97,13 +97,15 @@
     }, { passive: false });
   }
 
-  // Clicking the model moves all three planes to that spot.
+  // Clicking the model moves all three planes to that spot; clicking the CAD model also probes its deviation there.
   function pick(ctx, e) {
-    if (!ctx.mesh) return;
+    if (!ctx.mesh && !ctx.cad) return;
     const rect = ctx.renderer.domElement.getBoundingClientRect();
     const ray = new ctx.T.Raycaster();
     ray.setFromCamera(new ctx.T.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), ctx.camera);
-    const hit = ray.intersectObject(ctx.mesh)[0];
+    const cadHit = ctx.cad && ctx.cad.visible ? ray.intersectObject(ctx.cad)[0] : null;
+    if (cadHit) emit('cadProbe', { vertex: cadHit.face.a });
+    const hit = cadHit || (ctx.mesh ? ray.intersectObject(ctx.mesh)[0] : null);
     if (!hit) return;
     const { nx, ny, nz } = state.dims;
     const v = state.voxelMm;
@@ -175,7 +177,7 @@
   }
 
   function setLayers(ctx) {
-    if (ctx.mesh) ctx.mesh.visible = state.show.part;
+    if (ctx.mesh) ctx.mesh.visible = state.show.part && !ctx.cad;
     for (const [key, mesh] of Object.entries(ctx.voids)) mesh.visible = state.show[VOID_LAYERS[key].show];
     for (const p of Object.values(ctx.planes)) { p.mesh.visible = state.show.planes; p.edge.visible = state.show.planes; }
     render(ctx);
@@ -333,6 +335,12 @@
     return { solid, pores, markerEdgesMm: S3.markerEdgesMm, markerColors: S3.markerColors, sizeColors: S3.sizeColors, sizeOpacity: S3.sizeOpacity };
   }
   App.sheetRenders = sheetRenders;
+  /** For other 3D layers (the CAD model): the view, started on first use, and the scan-to-view mapping. */
+  App.model3D = {
+    ctx: () => { if (!three && state.dims && window.THREE) three = init(); return three; },
+    toWorld,
+    render: () => { if (three) render(three); },
+  };
 
   const withCtx = (fn) => () => {
     if (!state.dims || !window.THREE) return;

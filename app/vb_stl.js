@@ -58,8 +58,29 @@
     return Math.max(1, Math.ceil(e / spacing - 1e-9));
   };
 
+  const CREASE_COS = Math.cos(Math.PI / 6); // edges where the faces turn by more than 30° are sharp
+
+  /** Per triangle, which of its edges (AB, BC, CA) are sharp: a crease over 30°, or an open edge with no neighbor. */
+  function sharpEdges(mesh) {
+    const key = (p, i) => `${Math.round(p[i] * 1e5)},${Math.round(p[i + 1] * 1e5)},${Math.round(p[i + 2] * 1e5)}`;
+    const edgeKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+    const owners = new Map(), keys = [];
+    for (let t = 0; t < mesh.triangles; t++) {
+      const v = [0, 1, 2].map((k) => key(mesh.positions, 9 * t + 3 * k));
+      const e = [edgeKey(v[0], v[1]), edgeKey(v[1], v[2]), edgeKey(v[2], v[0])];
+      keys.push(e);
+      for (const k of e) (owners.get(k) || owners.set(k, []).get(k)).push(t);
+    }
+    const n = mesh.normals;
+    return keys.map((e, t) => e.map((k) => {
+      const others = owners.get(k).filter((u) => u !== t);
+      return !others.length || others.some((u) => n[3 * t] * n[3 * u] + n[3 * t + 1] * n[3 * u + 1] + n[3 * t + 2] * n[3 * u + 2] < CREASE_COS);
+    }));
+  }
+
   /** Barycentric grid on every triangle with edges no longer than the spacing (mm), raised until the points fit
-      maxPoints. Points are not shared between triangles, so each keeps its own triangle's normal. */
+      maxPoints. Points are not shared between triangles, so each keeps its own triangle's normal; edge marks the
+      points on sharp edges, where a deviation along one face's normal is not defined. */
   function measurePoints(mesh, { spacing, maxPoints = 400000, unitMm = 1 }) {
     const p = unitMm === 1 ? mesh.positions : mesh.positions.map((v) => v * unitMm);
     let step = spacing, total = Infinity;
@@ -69,22 +90,24 @@
       if (total <= maxPoints) break;
       step *= 1.25;
     }
-    const points = new Float32Array(3 * total), normals = new Float32Array(3 * total), tri = new Uint32Array(total), faces = [];
+    const points = new Float32Array(3 * total), normals = new Float32Array(3 * total), tri = new Uint32Array(total), edge = new Uint8Array(total), faces = [];
+    const sharp = sharpEdges(mesh);
     let w = 0;
     for (let t = 0; t < mesh.triangles; t++) {
-      const n = segments(p, t, step), q = p.subarray(9 * t, 9 * t + 9), base = w;
+      const n = segments(p, t, step), q = p.subarray(9 * t, 9 * t + 9), base = w, [ab, bc, ca] = sharp[t];
       const at = (i, j) => base + j * (n + 1) - (j * (j - 1)) / 2 + i; // row j holds n + 1 - j points
       for (let j = 0; j <= n; j++) {
         for (let i = 0; i + j <= n; i++, w++) {
           const a = i / n, b = j / n;
           for (let k = 0; k < 3; k++) { points[3 * w + k] = q[k] + a * (q[3 + k] - q[k]) + b * (q[6 + k] - q[k]); normals[3 * w + k] = mesh.normals[3 * t + k]; }
           tri[w] = t;
+          edge[w] = (ab && j === 0) || (ca && i === 0) || (bc && i + j === n) ? 1 : 0;
           if (i + j < n) faces.push(at(i, j), at(i + 1, j), at(i, j + 1));
           if (i + j + 1 < n) faces.push(at(i + 1, j), at(i + 1, j + 1), at(i, j + 1));
         }
       }
     }
-    return { points, normals, tri, faces: Uint32Array.from(faces), spacing: step };
+    return { points, normals, tri, edge, faces: Uint32Array.from(faces), spacing: step };
   }
 
   return { parseStl, writeStl, measurePoints, faceNormals };

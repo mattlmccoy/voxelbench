@@ -74,3 +74,12 @@ test('a truncated binary file throws', () => {
   new DataView(buf).setUint32(80, 1000, true);
   assert.throws(() => St.parseStl(buf), /Not an STL file/);
 });
+
+test('points on sharp edges (a crease over 30°) are flagged; the diagonal inside a flat face is not', () => {
+  const m = St.measurePoints(St.parseStl(St.writeStl(boxTriangles([0, 0, 0], [10, 10, 10]))), { spacing: 2 });
+  for (let i = 0; i < m.points.length / 3; i++) {
+    const p = [...m.points.subarray(3 * i, 3 * i + 3)];
+    const onBoundary = p.filter((v) => Math.abs(v) < 1e-4 || Math.abs(v - 10) < 1e-4).length >= 2; // on two faces at once
+    assert.equal(m.edge[i], onBoundary ? 1 : 0, `point ${p} edge ${m.edge[i]}`);
+  }
+});

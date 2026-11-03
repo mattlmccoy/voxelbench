@@ -427,7 +427,11 @@ window.CTApp = (function () {
       if (!data.refused) state.zoneThreshold = data.threshold;
       emit('statusText', data.refused ? 'Zone segmentation failed' : 'Zones segmented');
       emit('poresChanged');
+    } else if (data.type === 'cad') {
+      if (state.cad && state.cad.request === data.id) { state.cad.busy = false; state.cad.result = data.refused ? null : data; state.cad.refused = data.refused || null; }
+      emit('cadChanged');
     } else if (data.type === 'error') {
+      if (state.cad && state.cad.busy) { state.cad.busy = false; state.cad.refused = data.message; emit('cadChanged'); }
       state.porePhase = 'error';
       emit('statusText', data.message);
       emit('poresChanged');
@@ -462,11 +466,25 @@ window.CTApp = (function () {
     $('saveProject').addEventListener('click', saveProject);
     $('trySynthetic').addEventListener('click', () => openFiles(window.VBSynthetic.makeScan({}).files));
     $('trySyntheticPhantoms').addEventListener('click', () => openFiles(window.VBSynthetic.makeScan({ phantoms: true }).files));
+    $('trySyntheticCad').addEventListener('click', () => {
+      state.cadDemo = { name: 'synthetic_part.stl', buffer: window.VBSynthetic.partStl() };
+      openFiles(window.VBSynthetic.makePart({ scale: 0.97, bendMm: 0.12 }).files);
+    });
     $('projectFile').addEventListener('change', (e) => { if (e.target.files[0]) openProject(e.target.files[0]); e.target.value = ''; });
     connectStore();
     renderSaveState();
     emit('start');
   }
 
-  return { state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
+  /** Runs the CAD comparison in the worker: pre-alignment when pose is null, otherwise ICP from pose. */
+  function requestCad(pose) {
+    const cad = state.cad;
+    if (!worker || !cad || !cad.measure || cad.busy) return;
+    cad.busy = true; cad.refused = null; cad.request = (cad.request || 0) + 1;
+    worker.postMessage({ type: 'cad', id: cad.request, settings: state.settings, crops: cropOutlines(), points: cad.measure.points, normals: cad.measure.normals, edge: cad.measure.edge, pose,
+      options: { scale: cad.scale, toleranceMm: cad.toleranceMm, rangeMm: cad.rangeMm } });
+    emit('cadChanged');
+  }
+
+  return { requestCad, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
 }());

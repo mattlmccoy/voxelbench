@@ -182,10 +182,9 @@ onmessage = ({ data }) => {
       sendSheet(data);
     } else if (data.type === 'cad') {
       if (ensureBody(data.settings, data.crops)) sendModel();
-      say(data.pose ? 'Refining the CAD fit' : 'Aligning the CAD model');
       const r = self.VBCad.compareToCad({ gray: vol.gray, filled: body.filled, dims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm, circle: vol.circle, airGray,
-        poreThreshold: data.settings.poreThreshold, points: data.points, normals: data.normals, pose: data.pose || null, ...data.options });
-      const { points, normals, ...out } = r;
+        poreThreshold: data.settings.poreThreshold, points: data.points, normals: data.normals, edge: data.edge || null, pose: data.pose || null, ...data.options });
+      const { points, normals, edge, ...out } = r;
       postMessage({ type: 'cad', id: data.id, ...out }, out.deviations ? [out.deviations.buffer] : []);
     }
   } catch (e) {

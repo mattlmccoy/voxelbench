@@ -134,7 +134,12 @@
   /** What the user recorded about a scan folder; a folder nobody described keeps its own name and blank fields. */
   function sampleInfo(folder, samples) {
     const s = samples && samples.get(folder);
-    return { folder, name: (s && s.name) || folder, material: (s && s.material) || '', process: (s && s.process) || '', notes: (s && s.notes) || '', calibration_air: !(s && s.calibration_air === false) };
+    return { folder, name: (s && s.name) || folder, material: (s && s.material) || '', process: (s && s.process) || '', notes: (s && s.notes) || '', calibration_air: !(s && s.calibration_air === false), cad: (s && s.cad) || null };
+  }
+
+  /** The sample's full record with changes merged in, so a step that saves one field keeps the others. */
+  function sampleRecord(folder, samples, changes) {
+    return { ...sampleInfo(folder, samples), ...changes, id: folder, folder, updated_at: new Date().toISOString() };
   }
 
   function planeShape(plane, { nx, ny, nz }) {
@@ -317,7 +322,7 @@
   }
 
   return {
-    FEATURE_TYPES, parseTiff, writeTiff, groupStacks, sampleInfo, gridText, toGrid, provenanceLine, planeShape, voxelOf, planeOf,
+    FEATURE_TYPES, parseTiff, writeTiff, groupStacks, sampleInfo, sampleRecord, gridText, toGrid, provenanceLine, planeShape, voxelOf, planeOf,
     extractPlane, canvasToPlane, fitView, scaleForWidthMm, widthMmAtScale, centerOn, clampScale, zoomAt, autoWindow, grayToRgba, fitCircle, insideCircle, chordAt, makeAnnotation,
   };
 }));

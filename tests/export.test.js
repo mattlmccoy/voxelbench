@@ -153,3 +153,18 @@ test('the pore CSV carries open/closed, surface distance, network and sphericity
   assert.equal(cell(2, 'sphericity'), '', 'too small for a shape');
   assert.ok(lines.some((l) => l.startsWith('#') && /open: outside air reaches the pore/i.test(l)));
 });
+
+test('the CAD deviation CSV has scan-frame points, normals and deviations, edges marked and unmeasured left empty', () => {
+  const summary = { file: 'part.stl', transform: { R: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [1, 0, 0], s: 0.97 }, rms_mm: 0.012, iso_level: 1350, scale_fitted: true, shrinkage_percent: 3, tolerance_mm: 0.1, stats: { measured: 1, unmeasured: 1, on_edge: 1, p50: 0.02 } };
+  const csv = E.cadCsv({ points: Float32Array.from([0, 0, 0, 1, 0, 0, 2, 0, 0]), normals: Float32Array.from([0, 0, 1, 0, 0, 1, 0, 0, 1]), deviations: Float32Array.from([0.02, NaN, NaN]), edge: Uint8Array.from([0, 0, 1]) },
+    { sample: { folder: 'S', name: 'S' }, summary, provenance: 'VoxelBench test' });
+  const lines = csv.trim().split('\n'), data = lines.filter((l) => !l.startsWith('#'));
+  assert.equal(data[0], 'x_mm,y_mm,z_mm,normal_x,normal_y,normal_z,deviation_mm,on_sharp_edge');
+  const row = (k) => data[k].split(',');
+  assert.equal(row(1)[0], '1'); // transformed: s·R·p + t
+  assert.equal(row(1)[6], '0.02');
+  assert.equal(row(2)[6], ''); assert.equal(row(2)[7], 'false');
+  assert.equal(row(3)[7], 'true');
+  assert.ok(lines.some((l) => l.startsWith('#') && /positive: material outside the nominal/i.test(l)));
+  assert.ok(lines.some((l) => l.startsWith('#') && /shrinkage/i.test(l)));
+});

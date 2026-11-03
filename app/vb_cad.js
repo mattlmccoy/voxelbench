@@ -11,7 +11,7 @@
 
   /** gray, filled, dims, bin: the binned analysis grid; circle: FOV on the full grid; points, normals: the nominal's
       measurement points (CAD mm). With pose, ICP starts there; otherwise from pre-alignment. */
-  function compareToCad({ gray, filled, dims, bin, voxelMm, circle, airGray, poreThreshold, points, normals, pose = null, ...options }) {
+  function compareToCad({ gray, filled, dims, bin, voxelMm, circle, airGray, poreThreshold, points, normals, edge = null, pose = null, ...options }) {
     const o = { ...DEFAULTS, ...options };
     const matrix = D.matrixGray(gray, filled, poreThreshold);
     if (matrix === null || !Number.isFinite(airGray)) return { refused: 'No matrix or air gray: segment the scan first.' };
@@ -25,8 +25,8 @@
     for (let k = 0; k < few.length / 3; k++) for (let a = 0; a < 3; a++) few[3 * k + a] = points[3 * k * stride + a];
     const fit = pose ? A.icp(few, scan, { init: pose, scale: o.scale }) : A.preAlign(few, scan, { scale: o.scale });
     const transform = { R: fit.R, t: fit.t, s: o.scale ? fit.s : 1 };
-    const deviations = D.deviations({ gray, dims, bin, voxelMm, level, circle: fov, points, normals, transform, rangeMm: o.rangeMm });
-    return { transform, rms: fit.rms, level, matrixGray: matrix, airGray, scanPoints: scan.length / 3, deviations, points, normals, stats: D.deviationStats(deviations, o.toleranceMm), options: o };
+    const deviations = D.deviations({ gray, dims, bin, voxelMm, level, circle: fov, points, normals, edge, transform, rangeMm: o.rangeMm });
+    return { transform, rms: fit.rms, level, matrixGray: matrix, airGray, scanPoints: scan.length / 3, deviations, points, normals, edge, stats: D.deviationStats(deviations, o.toleranceMm, edge), options: o };
   }
 
   return { DEFAULTS, compareToCad };

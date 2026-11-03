@@ -95,3 +95,13 @@ test('rotate90 turns a pose a quarter turn about an axis through a point, and co
   const p = Float64Array.from([1, 2, 3]);
   assert.ok(maxDiff(A.apply(A.compose(a, b), p), A.apply(a, A.apply(b, p))) < 1e-12);
 });
+
+test('scaled ICP from a wrong pose does not collapse the model: scale stays within 0.5 to 1.5', () => {
+  const rnd = random(5);
+  const src = lShape(2000, rnd), dst = lShape(2000, rnd);
+  const wrong = { R: rotation([1, 0, 0], Math.PI / 2), t: [0, 0, 0], s: 1 };
+  const fit = A.icp(src, dst, { init: wrong, scale: true });
+  assert.ok(fit.s >= 0.5 && fit.s <= 1.5, `s ${fit.s}`);
+  const right = A.icp(src, A.apply({ R: rotation([0, 0, 1], 0.1), t: [0.5, 0, 0], s: 0.8 }, dst), { scale: true });
+  assert.ok(Math.abs(right.s - 0.8) < 0.01, `s ${right.s}`);
+});

@@ -171,5 +171,26 @@
     return chunks;
   }
 
-  return { poreCsv, annotationCsv, regionCsv, npyHeader, maskParts, zipStream, poreChunks, patchCsv, zoneCsv };
+  /** The CAD comparison point by point, in scan mm: each nominal point and normal moved by the fitted pose, its
+      deviation (empty where no surface was found or on a sharp edge), and the fit and statistics as comments. */
+  function cadCsv({ points, normals, deviations, edge }, { sample, summary, provenance }) {
+    const { R, t, s } = summary.transform, r5 = (v) => (Number.isFinite(v) ? Number(v.toFixed(5)) : null);
+    const out = [
+      `# CAD comparison for ${sample.folder} (${describe(sample)}) against ${summary.file}`,
+      ...provenanceRows(provenance),
+      '# deviation_mm: distance from the nominal surface to the scanned surface (gray halfway between air and matrix) along the nominal outward normal; positive: material outside the nominal, negative: material missing. Empty: no scanned surface facing within 60° of the normal within the search range, or a point on a sharp CAD edge.',
+      `# Pose (nominal to scan mm): p_scan = s·R·p + t with s = ${s}, R = ${JSON.stringify(R)}, t = ${JSON.stringify(t)}. Uniform scale ${summary.scale_fitted ? `fitted: shrinkage ${summary.shrinkage_percent.toFixed(3)} %` : 'not fitted (rigid)'}. RMS of fit ${summary.rms_mm} mm. Iso level ${summary.iso_level}.`,
+      `# Statistics (tolerance ±${summary.tolerance_mm} mm): ${JSON.stringify(summary.stats)}`,
+      row(['x_mm', 'y_mm', 'z_mm', 'normal_x', 'normal_y', 'normal_z', 'deviation_mm', 'on_sharp_edge']),
+    ];
+    for (let k = 0; k < deviations.length; k++) {
+      const p = points.subarray(3 * k, 3 * k + 3), n = normals.subarray(3 * k, 3 * k + 3);
+      const q = [0, 1, 2].map((a) => s * (R[3 * a] * p[0] + R[3 * a + 1] * p[1] + R[3 * a + 2] * p[2]) + t[a]);
+      const m = [0, 1, 2].map((a) => R[3 * a] * n[0] + R[3 * a + 1] * n[1] + R[3 * a + 2] * n[2]);
+      out.push(row([...q.map(r5), ...m.map(r5), r5(deviations[k]), Boolean(edge && edge[k])]));
+    }
+    return out.join('\n') + '\n';
+  }
+
+  return { cadCsv, poreCsv, annotationCsv, regionCsv, npyHeader, maskParts, zipStream, poreChunks, patchCsv, zoneCsv };
 }));
