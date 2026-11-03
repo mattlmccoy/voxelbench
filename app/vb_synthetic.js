@@ -8,6 +8,9 @@
   'use strict';
 
   const MATRIX_GRAY = 2000, AIR_GRAY = 700, NOISE_SD = 60, PORES = 40, RADIUS = [3, 8];
+  // With phantoms: gray = AIR_GRAY + GRAY_PER_DENSITY x density, so the matrix is (2000 - 700) / 1290 g/cm³.
+  const GRAY_PER_DENSITY = 1290;
+  const RODS = [{ name: 'Rod A (0.50 g/cm³)', density_g_cm3: 0.5, angle: Math.PI / 4 }, { name: 'Rod B (1.40 g/cm³)', density_g_cm3: 1.4, angle: (5 * Math.PI) / 4 }];
 
   // mulberry32: a small seeded generator, so a seed always gives the same scan.
   function random(seed) {
@@ -22,10 +25,13 @@
 
   /** Scan of size^3 voxels: cylinder along z of radius 0.3 size, pores of radius 3 to 8 voxels inside it, FOV radius
       0.47 size. */
-  function makeScan({ size = 160, voxelMm = 0.04, seed = 1 } = {}) {
+  function makeScan({ size = 160, voxelMm = 0.04, seed = 1, phantoms = false } = {}) {
     const rnd = random(seed);
     const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
     const c = (size - 1) / 2, R = 0.3 * size, FOV = 0.47 * size;
+    // Phantom rods along z between the part and the FOV edge, for the density calibration.
+    const rods = phantoms ? RODS.map((r) => ({ name: r.name, density_g_cm3: r.density_g_cm3, radius: 0.06 * size,
+      center: { x: c + 0.39 * size * Math.cos(r.angle), y: c + 0.39 * size * Math.sin(r.angle) } })) : [];
     const pores = [];
     for (let tries = 0; pores.length < PORES && tries < 20000; tries++) {
       const r = RADIUS[0] + rnd() * (RADIUS[1] - RADIUS[0]);
@@ -44,7 +50,9 @@
           const inside = Math.hypot(x - c, y - c) <= R;
           const pore = inside && near.some((p) => (x - p.x) ** 2 + (y - p.y) ** 2 + (z - p.z) ** 2 <= p.r * p.r);
           if (inside) { body++; if (pore) open++; }
-          const gray = Math.max(1, Math.round((inside && !pore ? MATRIX_GRAY : AIR_GRAY) + NOISE_SD * gauss()));
+          const rod = rods.find((r) => Math.hypot(x - r.center.x, y - r.center.y) <= r.radius);
+          const mean = inside && !pore ? MATRIX_GRAY : rod ? AIR_GRAY + GRAY_PER_DENSITY * rod.density_g_cm3 : AIR_GRAY;
+          const gray = Math.max(1, Math.round(mean + NOISE_SD * gauss()));
           s[i] = Math.hypot(x - c, y - c) <= FOV ? gray : 0;
         }
       }
@@ -54,7 +62,8 @@
       const name = `synthetic_${String(z + 1).padStart(3, '0')}.tif`;
       return { name, webkitRelativePath: `synthetic_scan/${name}`, arrayBuffer: async () => CT.writeTiff(size, size, s, voxelMm) };
     });
-    return { files, truth: { porosity_percent: (100 * open) / body, pore_count: pores.length, matrix_gray: MATRIX_GRAY, air_gray: AIR_GRAY } };
+    return { files, truth: { porosity_percent: (100 * open) / body, pore_count: pores.length, matrix_gray: MATRIX_GRAY, air_gray: AIR_GRAY,
+      ...(phantoms ? { phantoms: rods, matrix_density: (MATRIX_GRAY - AIR_GRAY) / GRAY_PER_DENSITY } : {}) } };
   }
 
   return { makeScan };

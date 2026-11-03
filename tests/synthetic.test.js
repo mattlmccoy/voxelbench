@@ -30,3 +30,25 @@ test('segmenting the synthetic scan finds every pore and its porosity', async ()
   const got = a.summary.all_void_percent_of_body;
   assert.ok(Math.abs(got - truth.porosity_percent) / truth.porosity_percent < 0.1, `porosity ${got} vs ${truth.porosity_percent}`);
 });
+
+test('the synthetic scan with phantom rods calibrates the matrix to its true density', async () => {
+  const R = require('../app/ct_regions.js');
+  const Cal = require('../app/vb_calibration.js');
+  const size = 160;
+  const { files, truth } = S.makeScan({ size, phantoms: true });
+  assert.equal(truth.phantoms.length, 2);
+  const tiffs = await Promise.all(files.map(async (f) => CT.parseTiff(await f.arrayBuffer())));
+  const slices = tiffs.map((t) => t.pixels), dims = { nx: size, ny: size, nz: size }, voxelMm = tiffs[0].voxelMm;
+  const circle = CT.fitCircle(slices[size >> 1], size, size);
+  const disk = (cx, cy, r) => Array.from({ length: 16 }, (_, k) => ({ col: cx + r * Math.cos((k * Math.PI) / 8), row: cy + r * Math.sin((k * Math.PI) / 8) }));
+  const statsOf = (points) => R.regionStats({ slices, dims, region: { plane: 'XY', points, slice_from: 20, slice_to: size - 20 }, voxelMm, pores: null, circle });
+  const phantoms = truth.phantoms.map((p) => ({ name: p.name, density_g_cm3: p.density_g_cm3, gray: statsOf(disk(p.center.x, p.center.y, 0.7 * p.radius)).gray_p50 }));
+  const c = (size - 1) / 2;
+  const airGray = statsOf(disk(c - 0.39 * size * Math.SQRT1_2, c + 0.39 * size * Math.SQRT1_2, 5)).gray_p50; // between part and FOV edge, no rod
+  const fit = Cal.fitCalibration(Cal.calibrationPoints(phantoms, { airGray, includeAir: true }));
+  assert.equal(fit.ok, true);
+  assert.equal(fit.n, 3);
+  const matrix = Cal.applyCalibration(fit, statsOf(disk(c, c, 20)).gray_p50);
+  assert.ok(Math.abs(matrix.value - truth.matrix_density) < 0.01, `${matrix.value} vs ${truth.matrix_density}`);
+  assert.equal(matrix.extrapolated, false);
+});
