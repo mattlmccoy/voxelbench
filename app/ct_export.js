@@ -192,5 +192,19 @@
     return out.join('\n') + '\n';
   }
 
-  return { cadCsv, poreCsv, annotationCsv, regionCsv, npyHeader, maskParts, zipStream, poreChunks, patchCsv, zoneCsv };
+  /** The filler and fiber particles, one row each, with the thresholds and definitions as comments. */
+  function fillerCsv(particles, result, { sample, provenance }) {
+    const t = result.threshold, r5 = (v) => (Number.isFinite(v) ? Number(v.toFixed(5)) : null);
+    return [
+      `# Filler and fiber particles for ${sample.folder} (${describe(sample)})`,
+      ...provenanceRows(provenance),
+      `# Thresholds: detection ${r5(t.detection)} (matrix median ${r5(t.median)} + ${t.k} robust SD ${r5(t.sd)}), measurement ${r5(t.threshold)}${t.manual ? ' (set by hand)' : ` (halfway to the median particle peak ${r5(t.bright_gray)})`}. Particles: 26-connected voxels at or above measurement inside the sample mask, at least ${result.minVoxels} voxels.`,
+      '# Shape from second moments: aspect_ratio = sqrt(largest/smallest principal variance); length and diameter as for a rod; direction = main axis. fiber: aspect >= 3 and length >= 3 voxels. near_noise: peak within 1 robust SD of detection (may be matrix noise). clipped: touches the FOV edge or the volume faces.',
+      `# Summary: ${JSON.stringify(result.summary)} Dispersion: ${JSON.stringify(result.dispersion)}`,
+      row(['id', 'x_mm', 'y_mm', 'z_mm', 'voxels', 'volume_mm3', 'esd_mm', 'length_mm', 'diameter_mm', 'aspect_ratio', 'direction_x', 'direction_y', 'direction_z', 'peak_gray', 'fiber', 'near_noise', 'clipped']),
+      ...particles.map((p) => row([p.id, r5(p.x_mm), r5(p.y_mm), r5(p.z_mm), p.voxels, r5(p.volume_mm3), r5(p.esd_mm), r5(p.length_mm), r5(p.diameter_mm), r5(p.aspect), ...p.direction.map(r5), p.peak, p.fiber, p.near_noise, p.clipped])),
+    ].join('\n') + '\n';
+  }
+
+  return { fillerCsv, cadCsv, poreCsv, annotationCsv, regionCsv, npyHeader, maskParts, zipStream, poreChunks, patchCsv, zoneCsv };
 }));

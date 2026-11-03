@@ -227,5 +227,24 @@
       nn_mm: Float32Array.from(d.nn, (v) => v * voxelMm), maskVoxels, minVoxels };
   }
 
-  return { analyzeFiller, measurementThreshold, nearNoise, MIN_FOR_DISPERSION, MIN_FIBERS_FOR_TENSOR, robustThreshold, labelBright, particleShape, isFiber, dispersion, orientationTensor, summarize, FIBER_ASPECT, FIBER_MIN_LENGTH_VOX };
+  /** Particles whose centroid lies inside a drawn region: its outline on its plane and its slice range (region on the
+      loaded grid, as App.regionsOf gives it). */
+  function particlesInRegion(particles, region) {
+    const pts = region.points, n = pts.length;
+    const inside = (col, row) => {
+      let c = false;
+      for (let i = 0, j = n - 1; i < n; j = i++) {
+        const a = pts[i], b = pts[j];
+        if ((a.row > row) !== (b.row > row) && col < ((b.col - a.col) * (row - a.row)) / (b.row - a.row) + a.col) c = !c;
+      }
+      return c;
+    };
+    return particles.filter((p) => {
+      const [x, y, z] = p.centroid;
+      const [col, row, slice] = region.plane === 'XY' ? [x, y, z] : region.plane === 'XZ' ? [x, z, y] : [y, z, x];
+      return Math.round(slice) >= region.slice_from && Math.round(slice) <= region.slice_to && inside(col, row);
+    });
+  }
+
+  return { analyzeFiller, particlesInRegion, measurementThreshold, nearNoise, MIN_FOR_DISPERSION, MIN_FIBERS_FOR_TENSOR, robustThreshold, labelBright, particleShape, isFiber, dispersion, orientationTensor, summarize, FIBER_ASPECT, FIBER_MIN_LENGTH_VOX };
 }));

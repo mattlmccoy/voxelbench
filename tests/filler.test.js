@@ -119,3 +119,11 @@ test('candidates whose peak is within 1 SD of the detection threshold are near n
   const o = F.orientationTensor(fibers);
   assert.equal(o.count, 4); assert.equal(o.eigenvalues, null); assert.equal(o.too_few, true);
 });
+
+test('particlesInRegion keeps the particles whose centroid lies inside the outline and its slice range', () => {
+  const square = [{ col: 0, row: 0 }, { col: 10, row: 0 }, { col: 10, row: 10 }, { col: 0, row: 10 }];
+  const ps = [at([5, 5, 5]), at([15, 5, 5]), at([5, 5, 30]), at([5, 30, 5])];
+  assert.deepEqual(F.particlesInRegion(ps, { plane: 'XY', points: square, slice_from: 0, slice_to: 20 }).map((p) => p.centroid), [[5, 5, 5], [5, 30, 5]].slice(0, 1));
+  // XZ: col = x, row = z, slice = y
+  assert.deepEqual(F.particlesInRegion(ps, { plane: 'XZ', points: square, slice_from: 0, slice_to: 40 }).map((p) => p.centroid), [[5, 5, 5], [5, 30, 5]]);
+});

@@ -21,7 +21,10 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
   uniform scale reported as shrinkage) and measures the signed distance from each nominal point, along its outward
   normal, to the scanned surface (gray halfway between air and matrix). Color map on the 3D model, probe,
   statistics with a tolerance band, histogram and a CSV of every point.
-- Exports: pore, region, zone and CAD-deviation tables (CSV), a slice image (PNG) and a review sheet (PDF).
+- Filler and fibers: the bright phase inside the sample as 26-connected particles (detection at matrix + 4 robust SD,
+  measured halfway to the particles' own gray): count, volume fraction, size distribution, nearest-neighbor dispersion
+  (Clark–Evans ratio), and the orientation tensor of resolved fibers, for the whole part and per drawn region.
+- Exports: pore, region, zone, CAD-deviation and filler tables (CSV), a slice image (PNG) and a review sheet (PDF).
 
 Every reported number carries a provenance line: the voxel size it was computed at, any binning, the calibration
 status and the VoxelBench version.
@@ -29,12 +32,14 @@ status and the VoxelBench version.
 ## Start
 
 1. Open the page and press **Try a synthetic test scan** to see every step on a generated scan with 40 known pores,
-   **With phantom rods** to try the density calibration on two rods of known density, or **With a CAD model** to try
+   **With phantom rods** to try the density calibration on two rods of known density, **With filler** to try the
+   filler analysis on 50 bright spheres and 20 aligned fibers, or **With a CAD model** to try
    the CAD comparison on a generated L-shaped part (shrunk 3 %, its upright bent 0.12 mm) and its nominal STL.
 2. For a real scan, press **Open scan folder** and pick a folder of single-page, uncompressed 16-bit TIFF slices with
    the voxel size in the resolution tags.
 3. Crop out holders or packaging (step 1), segment pores (step 2), map zones (step 3), export (step 4), and
-   calibrate density from phantoms (step 5, optional), and compare to CAD (step 6, optional).
+   calibrate density from phantoms (step 5, optional), compare to CAD (step 6, optional), and analyze filler and
+   fibers (step 7, optional, after step 2).
 
 Scans larger than the memory budget (1.2 GB; 0.6 GB in Safari) load block-mean binned, and the page says so before
 reading. Add `?budget=<GB>` to the address to change the budget. The zoomed XY view of a binned scan shows the
@@ -64,6 +69,10 @@ a new name.
   limited to 0.5 to 1.5. A least-squares fit shares a local distortion (a bent wall) over the whole part. Pore walls
   inside the part are not its surface (only air joined to the outside counts), and statistics are weighted by surface
   area. A mesh with more triangles than the point budget is measured at triangle centroids.
+- Filler: a particle needs about 2 voxels across and a fiber about 3 voxels across to resolve (short glass fibers of
+  10 to 15 µm do not resolve at 40 µm voxels); volumes of particles under about 4 voxels across read low. Candidates
+  peaking within 1 SD of the detection threshold are flagged as possible noise; the Clark–Evans ratio needs 20
+  particles and the orientation tensor 5 fibers.
 - The open/closed split depends on the pore threshold and the resolution: a crack narrower than about one analysis
   voxel reads as closed, and a crop face counts as part surface.
 

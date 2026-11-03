@@ -338,6 +338,7 @@ window.CTApp = (function () {
 
   // Results describe the crop they ran with, so a new crop replaces them rather than leaving old voids over a new body.
   function cropChanged() {
+    if (state.filler && state.filler.result) { state.filler = { busy: false, result: null, refused: 'The crop changed: run Find filler again.' }; emit('fillerChanged'); }
     if (state.cad && state.cad.result) { state.cad.result = null; state.cad.stale = 'The crop changed: press Align or Refine fit again.'; emit('cadChanged'); }
     updateModel();
     if (state.porePhase === 'running') state.rerunAfterDetect = true;
@@ -434,6 +435,9 @@ window.CTApp = (function () {
       if (!data.refused) state.zoneThreshold = data.threshold;
       emit('statusText', data.refused ? 'Zone segmentation failed' : 'Zones segmented');
       emit('poresChanged');
+    } else if (data.type === 'filler') {
+      if (state.filler && data.id === state.fillerSeq) { state.filler = { busy: false, result: data.refused ? null : data, refused: data.refused || null }; }
+      emit('fillerChanged');
     } else if (data.type === 'cad') {
       const cad = state.cad;
       if (cad && data.id === state.cadSeq) {
@@ -480,6 +484,7 @@ window.CTApp = (function () {
     $('saveProject').addEventListener('click', saveProject);
     $('trySynthetic').addEventListener('click', () => openFiles(window.VBSynthetic.makeScan({}).files));
     $('trySyntheticPhantoms').addEventListener('click', () => openFiles(window.VBSynthetic.makeScan({ phantoms: true }).files));
+    $('trySyntheticFiller').addEventListener('click', () => openFiles(window.VBSynthetic.makeScan({ filler: true }).files));
     $('trySyntheticCad').addEventListener('click', () => {
       state.cadDemo = { name: 'synthetic_part.stl', buffer: window.VBSynthetic.partStl() };
       openFiles(window.VBSynthetic.makePart({ scale: 0.97, bendMm: 0.12 }).files);
@@ -500,5 +505,14 @@ window.CTApp = (function () {
     emit('cadChanged');
   }
 
-  return { requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
+  /** Runs the filler analysis in the worker on the smoothed slices pore segmentation left there. */
+  function requestFiller({ k, minVoxels, threshold }) {
+    if (!worker || (state.filler && state.filler.busy)) return;
+    state.fillerSeq = (state.fillerSeq || 0) + 1;
+    state.filler = { busy: true, result: null, refused: null };
+    worker.postMessage({ type: 'filler', id: state.fillerSeq, settings: state.settings, crops: cropOutlines(), k, minVoxels, threshold });
+    emit('fillerChanged');
+  }
+
+  return { requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
 }());

@@ -168,3 +168,14 @@ test('the CAD deviation CSV has scan-frame points, normals and deviations, edges
   assert.ok(lines.some((l) => l.startsWith('#') && /positive: material outside the nominal/i.test(l)));
   assert.ok(lines.some((l) => l.startsWith('#') && /shrinkage/i.test(l)));
 });
+
+test('the filler CSV has one row per particle with its shape, fiber and noise flags, and the thresholds and definitions as comments', () => {
+  const particles = [{ id: 1, x_mm: 0.1, y_mm: 0.2, z_mm: 0.3, voxels: 40, volume_mm3: 0.00256, esd_mm: 0.17, length_mm: 0.4, diameter_mm: 0.08, aspect: 5, direction: [1, 0, 0], peak: 2900, fiber: true, near_noise: false, clipped: false }];
+  const r = { threshold: { detection: 2040, median: 2000, sd: 10, bright_gray: 2850, threshold: 2425, manual: false, k: 4 }, summary: { count: 1 }, dispersion: { mean_nn_mm: null, clark_evans: null }, minVoxels: 8 };
+  const csv = E.fillerCsv(particles, r, { sample: { folder: 'S', name: 'S' }, provenance: 'VoxelBench test' });
+  const lines = csv.trim().split('\n'), data = lines.filter((l) => !l.startsWith('#'));
+  assert.equal(data[0], 'id,x_mm,y_mm,z_mm,voxels,volume_mm3,esd_mm,length_mm,diameter_mm,aspect_ratio,direction_x,direction_y,direction_z,peak_gray,fiber,near_noise,clipped');
+  assert.equal(data[1].split(',')[14], 'true');
+  assert.ok(lines.some((l) => l.startsWith('#') && /detection 2040/.test(l) && /measurement 2425/.test(l)));
+  assert.ok(lines.some((l) => l.startsWith('#') && /near_noise/.test(l)));
+});

@@ -146,7 +146,10 @@ sample.) Load the nominal STL, align (rough manual placement, then a rigid fit),
 extract the scan surface at the air-matrix midpoint, compute signed surface deviation, show a color map,
 histogram and probe, and export. Optionally report the best-fit uniform scale as a shrinkage estimate.
 
-**Phase 5: fiber and filler analysis.** Bright-phase segmentation with particle size distribution and
+**Phase 5: fiber and filler analysis.** (Built 2026-11-03; plan in `docs/plans/2026-11-03-phase-5-filler.md`.
+Builder's calls: two thresholds (noise-based detection, halfway-to-peak measurement); orientation from resolved
+fibers only, no structure-tensor texture orientation; particles drawn in the 3D view, not tinted on the slices.)
+Bright-phase segmentation with particle size distribution and
 nearest-neighbor dispersion; fiber orientation tensor per region from local structure. The tool states the
 resolution limit: fibers need several voxels across, so short glass fibers (about 10 to 15 µm) do not resolve
 at 40 µm voxels.
