@@ -8,6 +8,9 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
 
 - Slice views (XY, XZ, YZ) and a 3D view, in grayscale or a rainbow (turbo) color map.
 - Pore segmentation: porosity, pore count and size, pores elongated or cut by the field of view (FOV).
+- Open and closed porosity: a pore is open when it reaches the part surface or outside air reaches it through
+  gray below the pore threshold. Networks of touching pores, a through-path check along each axis, and each pore's
+  sphericity and distance to the surface.
 - Low-density regions: gray below 0.8 of the matrix but above the pore threshold, reported apart from porosity.
 - Gray-value zones relative to a baseline (the whole part, or the pore-free ends of the long axis).
 - Regions with your own labels, annotations and length measurements.
@@ -50,6 +53,8 @@ a new name.
   are assignments. A calibrated value is the equivalent density of the phantom material, not true density for
   doped or filled material, and has no beam-hardening correction.
 - Pores smaller than about 3 voxels across are at the noise limit.
+- The open/closed split depends on the pore threshold and the resolution: a crack narrower than about one analysis
+  voxel reads as closed, and a crop face counts as part surface.
 
 ## Development
 

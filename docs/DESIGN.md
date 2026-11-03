@@ -129,7 +129,11 @@ build) and artifact database (artifact build). Done when both builds open a scan
   differently per gram, so their values are not true density, and the label says so.
 - Scans without a calibration stay "uncalibrated" everywhere.
 
-**Phase 3: open vs. closed porosity.** Open pores connect to the outside air through below-threshold voxels;
+**Phase 3: open vs. closed porosity.** (Built 2026-11-03; plan in `docs/plans/2026-11-03-phase-3-connectivity.md`.
+Builder's calls: the through-path is checked along each axis between the mask's two ends rather than between two
+chosen faces; a pore within one binned voxel of the mask edge counts as open, as does one reached by an outside-air
+flood fill through gray below the pore threshold; each pore also gets Wadell sphericity and surface distance.)
+Open pores connect to the outside air through below-threshold voxels;
 closed pores do not. Report open, closed and total porosity; a through-path check between two chosen faces;
 state that the split depends on threshold and resolution (a crack below resolution reads as closed).
 
