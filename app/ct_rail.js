@@ -645,6 +645,9 @@
       reference_density_assumed: Number.isFinite(state.referenceDensity) ? state.referenceDensity : null,
       regions: rows.map((r) => ({ id: r.id, label: r.label, plane: r.plane, slice_from: r.slice_from, slice_to: r.slice_to, note: r.note, stats: r.stats, density: r.density })),
       patches: state.patches, solid_gray: state.solidGray ?? null, gray_calibrated: Boolean(App.calibration() && App.calibration().ok), calibration: (() => { const c = App.calibration(); return c ? { fit: c.ok ? { intercept: c.intercept, slope: c.slope, r2: c.r2, n: c.n, gray_range: c.gray_range, method: c.method } : null, reason: c.ok ? null : c.reason, points: c.points } : null; })(),
+      open_closed: state.connectivity ? { ...window.VBConnectivity.openClosed(state.pores, state.bodyMm3, state.rejected), through: state.connectivity.through } : null,
+      filler: state.filler && state.filler.result ? { summary: state.filler.result.summary, threshold: state.filler.result.threshold, dispersion: state.filler.result.dispersion } : null,
+      wall: state.wall && state.wall.result ? state.wall.result.stats : null,
       zones: state.zones ? { refused: state.zones.refused ?? null, threshold: state.zones.threshold ?? null, axis: state.zones.axis ?? null, stats: state.zones.stats ?? null, baseline: state.zones.baseline ?? null, method: state.zones.method ?? null, labels: state.zoneLabels, candidates_not_composition: true } : { labels: state.zoneLabels } };
     try {
       await state.store.putRun(state.folder, run, chunks);

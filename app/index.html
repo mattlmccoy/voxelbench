@@ -314,6 +314,9 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
           <p class="mono muted" id="exportStatus"></p>
           <ul class="log" id="log"></ul>
           <p class="hint" id="logEmpty">No annotations for this sample. Use Point, Measure or Outline in the toolbar.</p>
+          <div class="row"><label>Compare with <select id="compareWith"><option value="">another scan's saved run…</option></select></label></div>
+          <p class="mono" id="compareNote"></p>
+          <div class="tablewrap" id="compareWrap" hidden><table id="compareTable"></table></div>
           <div id="dimWrap" hidden>
             <p class="mono" id="dimSummary"></p>
             <div class="tablewrap"><table id="dimTable"></table></div>
@@ -468,6 +471,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 <script src="vb_fillerrail.js"></script>
 <script src="vb_dimrail.js"></script>
 <script src="vb_wallrail.js"></script>
+<script src="vb_comparerail.js"></script>
 <script src="ct_sheet.js"></script>
 <script src="ct_sheetpages.js"></script>
 <script src="ct_sheetexport.js"></script>

@@ -283,3 +283,14 @@ test('dimensionCheck: deviation from nominal, passing inside the asymmetric band
   assert.equal(CT.dimensionCheck(10.06, 10, 0.1, 0.05).pass, false);
   assert.deepEqual(CT.dimensionCheck(10, null, 0.1, 0.1), { deviation: null, pass: null });
 });
+
+test('compareRuns lists before, after and change; a metric an old run lacks is n/a, never 0', () => {
+  const after = { summary: { all_void_percent_of_body: 5.25, pore_count: 100, crack_like_count: 10, body_volume_mm3: 800 }, open_closed: { open_percent: 4.5, closed_percent: 0.75 }, filler: { summary: { volume_percent: 0.6 } }, wall: { min_mm: 0.28 } };
+  const before = { summary: { all_void_percent_of_body: 7.0, pore_count: 120, crack_like_count: 8, body_volume_mm3: 900 } };
+  const rows = CT.compareRuns(before, after);
+  const row = (k) => rows.find((r) => r.key === k);
+  assert.deepEqual([row('porosity').before, row('porosity').after], [7, 5.25]);
+  assert.ok(Math.abs(row('porosity').change + 1.75) < 1e-12);
+  assert.equal(row('open').before, null); assert.equal(row('open').change, null); assert.equal(row('open').after, 4.5);
+  assert.ok(rows.every((r) => typeof r.label === 'string' && r.label.length));
+});

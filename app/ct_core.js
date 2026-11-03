@@ -137,6 +137,24 @@
     return { folder, name: (s && s.name) || folder, material: (s && s.material) || '', process: (s && s.process) || '', notes: (s && s.notes) || '', calibration_air: !(s && s.calibration_air === false), cad: (s && s.cad) || null };
   }
 
+  // Metrics a saved run can carry, by path; runs saved before a feature existed read null (n/a) for it.
+  const RUN_METRICS = [
+    ['porosity', 'Porosity (% of mask)', ['summary', 'all_void_percent_of_body']], ['pores', 'Pores, AR ≤ cutoff', ['summary', 'pore_count']],
+    ['cracks', 'Pores, AR > cutoff', ['summary', 'crack_like_count']], ['body', 'Sample mask (mm³)', ['summary', 'body_volume_mm3']],
+    ['open', 'Open porosity (%)', ['open_closed', 'open_percent']], ['closed', 'Closed porosity (%)', ['open_closed', 'closed_percent']],
+    ['filler', 'Filler (% of mask)', ['filler', 'summary', 'volume_percent']], ['fillerCount', 'Filler particles', ['filler', 'summary', 'count']],
+    ['wallMin', 'Thinnest wall (mm)', ['wall', 'min_mm']], ['wallMedian', 'Median wall (mm)', ['wall', 'p50_mm']],
+  ];
+
+  /** Before/after rows for two saved runs: { key, label, before, after, change }, change = after − before. */
+  function compareRuns(before, after) {
+    const get = (run, path) => { const v = path.reduce((o, k) => (o == null ? undefined : o[k]), run); return Number.isFinite(v) ? v : null; };
+    return RUN_METRICS.map(([key, label, path]) => {
+      const b = get(before, path), a = get(after, path);
+      return { key, label, before: b, after: a, change: b === null || a === null ? null : a - b };
+    });
+  }
+
   /** A measured dimension against its nominal: deviation = measured − nominal, passing when −tolMinus ≤ deviation ≤
       tolPlus (edges included, to 1e-9 mm); both null without a nominal. */
   function dimensionCheck(measured, nominal, tolMinus, tolPlus) {
@@ -333,7 +351,7 @@
   }
 
   return {
-    FEATURE_TYPES, parseTiff, writeTiff, groupStacks, sampleInfo, sampleRecord, dimensionCheck, gridText, toGrid, provenanceLine, planeShape, voxelOf, planeOf,
+    FEATURE_TYPES, parseTiff, writeTiff, groupStacks, sampleInfo, sampleRecord, dimensionCheck, compareRuns, gridText, toGrid, provenanceLine, planeShape, voxelOf, planeOf,
     extractPlane, canvasToPlane, fitView, scaleForWidthMm, widthMmAtScale, centerOn, clampScale, zoomAt, autoWindow, grayToRgba, fitCircle, insideCircle, chordAt, makeAnnotation,
   };
 }));
