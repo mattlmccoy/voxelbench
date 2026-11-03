@@ -23,7 +23,8 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
   statistics with a tolerance band, histogram and a CSV of every point.
 - Filler and fibers: the bright phase inside the sample as 26-connected particles (detection at matrix + 4 robust SD,
   measured halfway to the particles' own gray): count, volume fraction, size distribution, nearest-neighbor dispersion
-  (Clark–Evans ratio), and the orientation tensor of resolved fibers, for the whole part and per drawn region.
+  (Clark–Evans ratio, from particles away from the sample surface), flakes apart from fibers, and the orientation
+  tensor of resolved fibers, for the whole part and per drawn region.
 - Exports: pore, region, zone, CAD-deviation and filler tables (CSV), a slice image (PNG) and a review sheet (PDF).
 
 Every reported number carries a provenance line: the voxel size it was computed at, any binning, the calibration
@@ -72,7 +73,8 @@ a new name.
 - Filler: a particle needs about 2 voxels across and a fiber about 3 voxels across to resolve (short glass fibers of
   10 to 15 µm do not resolve at 40 µm voxels); volumes of particles under about 4 voxels across read low. Candidates
   peaking within 1 SD of the detection threshold are flagged as possible noise; the Clark–Evans ratio needs 20
-  particles and the orientation tensor 5 fibers.
+  particles at least twice the random spacing inside the sample, and the orientation tensor 5 fibers.
+- Wall thickness: walls under about 3.5 analysis voxels are not resolved; the stack ends are not walls.
 - The open/closed split depends on the pore threshold and the resolution: a crack narrower than about one analysis
   voxel reads as closed, and a crop face counts as part surface.
 
