@@ -137,6 +137,11 @@
     return { folder, name: (s && s.name) || folder, material: (s && s.material) || '', process: (s && s.process) || '', notes: (s && s.notes) || '', calibration_air: !(s && s.calibration_air === false), cad: (s && s.cad) || null, bookmarks: (s && s.bookmarks) || [] };
   }
 
+  // The step each worker request belongs to, so an error releases that step only.
+  const REQUEST_STEP = { cad: 'cad', filler: 'filler', wall: 'wall', zones: 'zones', sheet: 'sheet', volume: 'pores', model: 'pores', detect: 'pores', slice: 'pores', slicesDone: 'pores', voidMeshes: 'pores' };
+  /** The step a failed worker request belongs to; null when unknown (then every waiting step is released). */
+  const errorStep = (requestType) => REQUEST_STEP[requestType] || null;
+
   // Metrics a saved run can carry, by path; runs saved before a feature existed read null (n/a) for it.
   const RUN_METRICS = [
     ['porosity', 'Porosity (% of mask)', ['summary', 'all_void_percent_of_body']], ['pores', 'Pores, AR ≤ cutoff', ['summary', 'pore_count']],
@@ -352,7 +357,7 @@
   }
 
   return {
-    FEATURE_TYPES, parseTiff, writeTiff, groupStacks, sampleInfo, sampleRecord, dimensionCheck, compareRuns, gridText, toGrid, provenanceLine, planeShape, voxelOf, planeOf,
+    FEATURE_TYPES, parseTiff, writeTiff, groupStacks, sampleInfo, sampleRecord, dimensionCheck, compareRuns, errorStep, gridText, toGrid, provenanceLine, planeShape, voxelOf, planeOf,
     extractPlane, canvasToPlane, fitView, scaleForWidthMm, widthMmAtScale, centerOn, clampScale, zoomAt, autoWindow, grayToRgba, fitCircle, insideCircle, chordAt, makeAnnotation,
   };
 }));

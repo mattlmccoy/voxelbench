@@ -200,6 +200,6 @@ onmessage = ({ data }) => {
       postMessage({ type: 'cad', id: data.id, ...out }, out.deviations ? [out.deviations.buffer] : []);
     }
   } catch (e) {
-    postMessage({ type: 'error', message: e.name === 'RangeError' ? 'The browser ran out of memory for this step.' : e.message });
+    postMessage({ type: 'error', for: data && data.type, message: e.name === 'RangeError' ? 'The browser ran out of memory for this step.' : e.message });
   }
 };

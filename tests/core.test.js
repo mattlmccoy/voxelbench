@@ -308,3 +308,13 @@ test('dimensionCheck treats a tolerance never entered as 0, the same on the page
   assert.equal(CT.dimensionCheck(3.76, 3.8, undefined, 0.05).pass, false);
   assert.equal(CT.dimensionCheck(3.8, 3.8, null, null).pass, true);
 });
+
+test('errorStep sends a worker error to the step whose request failed', () => {
+  assert.equal(CT.errorStep('cad'), 'cad');
+  assert.equal(CT.errorStep('filler'), 'filler');
+  assert.equal(CT.errorStep('wall'), 'wall');
+  for (const t of ['volume', 'model', 'detect', 'slice', 'slicesDone', 'voidMeshes']) assert.equal(CT.errorStep(t), 'pores', t);
+  assert.equal(CT.errorStep('zones'), 'zones');
+  assert.equal(CT.errorStep('sheet'), 'sheet');
+  assert.equal(CT.errorStep(undefined), null, 'unknown: every waiting step');
+});

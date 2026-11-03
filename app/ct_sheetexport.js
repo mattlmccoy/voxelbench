@@ -76,8 +76,14 @@
     if (!sheet) {
       const follow = (t) => { if (t.startsWith('Review sheet')) say(`${t}.`); };
       App.on('statusText', follow);
-      sheet = await App.requestSheet();
-      App.off('statusText', follow);
+      try {
+        sheet = await App.requestSheet();
+      } catch (e) {
+        say(`Review sheet: ${e.message}`);
+        return;
+      } finally {
+        App.off('statusText', follow);
+      }
       state.sheetCache = { pores: state.pores, key, data: sheet };
     }
     say('Review sheet: rendering 3D views.');

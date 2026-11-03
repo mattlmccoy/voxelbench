@@ -367,8 +367,8 @@ window.CTApp = (function () {
 
   // Data for the review sheet; resolves when the worker answers. Thresholds are swept there without touching results.
   function requestSheet() {
-    return new Promise((resolve) => {
-      state.onSheet = resolve;
+    return new Promise((resolve, reject) => {
+      state.onSheet = resolve; state.onSheetError = reject;
       worker.postMessage({ type: 'sheet', settings: state.settings, crops: cropOutlines(), rejected: [...state.rejected], zoneThreshold: state.zoneThreshold, zoneBaseline: state.zoneBaseline });
     });
   }
@@ -439,7 +439,7 @@ window.CTApp = (function () {
       emit('voidMeshesChanged');
       emit('statusText', `Segmentation finished in ${state.detectSeconds.toFixed(0)} s; 3D surfaces built`);
     } else if (data.type === 'sheet') {
-      if (state.onSheet) { state.onSheet(data); state.onSheet = null; }
+      if (state.onSheet) { state.onSheet(data); state.onSheet = null; state.onSheetError = null; }
     } else if (data.type === 'zones') {
       state.zones = data;
       if (!data.refused) state.zoneThreshold = data.threshold;
@@ -462,11 +462,15 @@ window.CTApp = (function () {
       }
       emit('cadChanged');
     } else if (data.type === 'error') {
-      // An error belongs to the step that was waiting on the worker; the pore step only when segmentation was running.
-      if (state.cad && state.cad.busy) { state.cad.busy = false; state.cad.refused = data.message; emit('cadChanged'); }
-      if (state.filler && state.filler.busy) { state.filler = { busy: false, result: null, refused: data.message }; emit('fillerChanged'); }
-      if (state.wall && state.wall.busy) { state.wall = null; emit('wallChanged'); emit('statusText', data.message); }
-      if (state.porePhase === 'running') { state.porePhase = 'error'; emit('statusText', data.message); emit('poresChanged'); }
+      // An error belongs to the step whose request failed (every waiting step when the request is unknown); the pore
+      // step only when segmentation was running.
+      const step = CT.errorStep(data.for), mine = (s) => step === null || step === s;
+      if (mine('cad') && state.cad && state.cad.busy) { state.cad.busy = false; state.cad.refused = data.message; emit('cadChanged'); }
+      if (mine('filler') && state.filler && state.filler.busy) { state.filler = { busy: false, result: null, refused: data.message }; emit('fillerChanged'); }
+      if (mine('wall') && state.wall && state.wall.busy) { state.wall = null; emit('wallChanged'); emit('statusText', data.message); }
+      if (mine('pores') && state.porePhase === 'running') { state.porePhase = 'error'; emit('statusText', data.message); emit('poresChanged'); }
+      if (mine('sheet') && state.onSheetError) { state.onSheetError(new Error(data.message)); state.onSheet = null; state.onSheetError = null; } // the export would wait forever
+      if (step === 'zones') emit('statusText', `Zones: ${data.message}`);
     }
   }
 

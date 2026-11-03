@@ -17,7 +17,7 @@
     const raw = rawAnnotation(id);
     if (!raw) return;
     const v = text.trim() === '' ? null : Number(text);
-    if (v !== null && !(Number.isFinite(v) && (field === 'nominal_mm' || v >= 0))) return;
+    if (v !== null && !(Number.isFinite(v) && (field === 'nominal_mm' || v >= 0))) { render(); return; } // not a number (or a negative tolerance): show the saved value again
     App.saveRecord('annotations', { ...raw, [field]: v });
   }
 
@@ -28,7 +28,7 @@
     table.textContent = '';
     if (!lines.length) return;
     const head = table.insertRow();
-    for (const h of ['Line', 'Nominal', '− / + tol', 'Measured, dev.']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
+    for (const h of ['Line', 'Nominal (mm)', '− / + tol (mm)']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
     let checked = 0, passed = 0;
     for (const a of lines) {
       const c = CT.dimensionCheck(a.length_mm, a.nominal_mm, a.tol_minus_mm ?? 0, a.tol_plus_mm ?? 0);
@@ -37,10 +37,10 @@
       const name = tr.insertCell();
       name.textContent = a.note || `${a.plane} ${a.slice}`;
       name.title = name.textContent;
-      Object.assign(name.style, { maxWidth: '64px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' });
+      Object.assign(name.style, { maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' });
       const field = (key, title, width) => {
         const input = document.createElement('input');
-        input.type = 'number'; input.step = '0.001'; input.style.width = width; input.title = title;
+        input.type = 'text'; input.inputMode = 'decimal'; input.style.width = width; input.title = title; // no spinner: the value stays readable in a narrow rail
         input.value = a[key] ?? '';
         input.addEventListener('change', () => save(a.id, key, input.value));
         return input;
@@ -49,9 +49,11 @@
       const tol = tr.insertCell();
       tol.style.whiteSpace = 'nowrap';
       tol.append(field('tol_minus_mm', 'Minus tolerance (mm)', '46px'), field('tol_plus_mm', 'Plus tolerance (mm)', '46px'));
-      const result = tr.insertCell();
-      result.style.whiteSpace = 'nowrap';
-      result.textContent = `${fmt(a.length_mm)}${c.deviation === null ? '' : `, ${c.deviation >= 0 ? '+' : ''}${fmt(c.deviation)} ${c.pass ? 'pass' : 'FAIL'}`}`;
+      // The result on its own line under the inputs, so the table fits the rail.
+      const result = table.insertRow().insertCell();
+      result.colSpan = 3;
+      result.style.textAlign = 'left';
+      result.textContent = `measured ${fmt(a.length_mm)} mm${c.deviation === null ? '' : `, deviation ${c.deviation >= 0 ? '+' : ''}${fmt(c.deviation)} mm: ${c.pass ? 'pass' : 'FAIL'}`}`;
       if (c.pass === false) result.className = 'error';
     }
     $('dimSummary').textContent = checked ? `Dimensions: ${passed} of ${checked} within tolerance` : 'Dimensions: enter a nominal to check a Measure line.';
