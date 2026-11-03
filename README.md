@@ -11,6 +11,8 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
 - Low-density regions: gray below 0.8 of the matrix but above the pore threshold, reported apart from porosity.
 - Gray-value zones relative to a baseline (the whole part, or the pore-free ends of the long axis).
 - Regions with your own labels, annotations and length measurements.
+- Density calibration from reference phantoms scanned with the sample: gray becomes equivalent density (g/cm³).
+  See [docs/PHANTOM_PROTOCOL.md](docs/PHANTOM_PROTOCOL.md).
 - Exports: pore, region and zone tables (CSV), a slice image (PNG) and a review sheet (PDF).
 
 Every reported number carries a provenance line: the voxel size it was computed at, any binning, the calibration
@@ -18,10 +20,12 @@ status and the VoxelBench version.
 
 ## Start
 
-1. Open the page and press **Try a synthetic test scan** to see every step on a generated scan with 40 known pores.
+1. Open the page and press **Try a synthetic test scan** to see every step on a generated scan with 40 known pores,
+   or **With phantom rods** to try the density calibration on two rods of known density.
 2. For a real scan, press **Open scan folder** and pick a folder of single-page, uncompressed 16-bit TIFF slices with
    the voxel size in the resolution tags.
-3. Crop out holders or packaging (step 1), segment pores (step 2), map zones (step 3), export (step 4).
+3. Crop out holders or packaging (step 1), segment pores (step 2), map zones (step 3), export (step 4), and
+   calibrate density from phantoms (step 5, optional).
 
 Scans larger than the memory budget (1.2 GB; 0.6 GB in Safari) load block-mean binned, and the page says so before
 reading. Add `?budget=<GB>` to the address to change the budget. The zoomed XY view of a binned scan shows the
@@ -42,7 +46,9 @@ a new name.
 
 ## Limits
 
-- Gray values are uncalibrated. Gray reflects bulk attenuation, not composition; region labels are assignments.
+- Without phantoms, gray values are uncalibrated. Gray reflects bulk attenuation, not composition; region labels
+  are assignments. A calibrated value is the equivalent density of the phantom material, not true density for
+  doped or filled material, and has no beam-hardening correction.
 - Pores smaller than about 3 voxels across are at the noise limit.
 
 ## Development

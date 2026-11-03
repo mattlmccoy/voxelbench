@@ -120,7 +120,7 @@ build) and artifact database (artifact build). Done when both builds open a scan
 - A start path for new users: open scan, check voxel size, crop, segment, export, in that order, with a
   built-in synthetic test volume so the steps can be tried without a real scan.
 
-**Phase 2: density calibration.**
+**Phase 2: density calibration.** (Built 2026-11-03; protocol in `docs/PHANTOM_PROTOCOL.md`.)
 - A phantom protocol document (scan setup, phantom set, density measurement) written alongside the software.
   The lab does not scan phantoms yet (Matt, 2026-11-03).
 - In the tool: outline each phantom on a slice, enter its measured density, fit gray to density (linear;
