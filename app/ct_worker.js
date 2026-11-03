@@ -1,6 +1,6 @@
 /* Runs pore detection off the page's main thread. The main thread sends the binned volume once, and sends full-
    resolution slices only when the smoothing changes; smoothed slices are kept here so threshold reruns are quick. */
-importScripts('ct_core.js', 'ct_pores.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js', 'vb_connectivity.js');
+importScripts('ct_core.js', 'ct_pores.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js', 'vb_connectivity.js', 'vb_align.js', 'vb_deviation.js', 'vb_cad.js');
 const P = self.CTPores, R = self.CTRegions, Z = self.CTZones, D = self.CTSheetData;
 const MODEL_DOWNSAMPLE = 2;
 const COARSE_STEP = 2; // binned voxels per coarse cell: 4 full voxels, about 0.16 mm at 40 um
@@ -180,6 +180,13 @@ onmessage = ({ data }) => {
       sendZones(data);
     } else if (data.type === 'sheet') {
       sendSheet(data);
+    } else if (data.type === 'cad') {
+      if (ensureBody(data.settings, data.crops)) sendModel();
+      say(data.pose ? 'Refining the CAD fit' : 'Aligning the CAD model');
+      const r = self.VBCad.compareToCad({ gray: vol.gray, filled: body.filled, dims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm, circle: vol.circle, airGray,
+        poreThreshold: data.settings.poreThreshold, points: data.points, normals: data.normals, pose: data.pose || null, ...data.options });
+      const { points, normals, ...out } = r;
+      postMessage({ type: 'cad', id: data.id, ...out }, out.deviations ? [out.deviations.buffer] : []);
     }
   } catch (e) {
     postMessage({ type: 'error', message: e.name === 'RangeError' ? 'The browser ran out of memory for this step.' : e.message });

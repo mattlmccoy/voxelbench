@@ -2,9 +2,9 @@
    inside a circular field of view (FOV) that reads exact 0 outside, as a real reconstruction does.
    New users can try every step on it without a real scan, and the tests check porosity against its truth. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./ct_core.js'));
-  else root.VBSynthetic = factory(root.CT);
-}(typeof self !== 'undefined' ? self : this, function (CT) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./ct_core.js'), require('./vb_stl.js'));
+  else root.VBSynthetic = factory(root.CT, root.VBStl);
+}(typeof self !== 'undefined' ? self : this, function (CT, St) {
   'use strict';
 
   const MATRIX_GRAY = 2000, AIR_GRAY = 700, NOISE_SD = 60, PORES = 40, RADIUS = [3, 8];
@@ -66,5 +66,65 @@
       ...(phantoms ? { phantoms: rods, matrix_density: (MATRIX_GRAY - AIR_GRAY) / GRAY_PER_DENSITY } : {}) } };
   }
 
-  return { makeScan };
+  // The L part for the CAD comparison, in part voxels (u, v, w): an L section in (u, w) extruded 40 voxels along v.
+  const L_SECTION = [[0, 0], [100, 0], [100, 40], [30, 40], [30, 100], [0, 100]];
+  const L_DEPTH = 40;
+  const inL = (u, v, w) => v >= 0 && v <= L_DEPTH && ((u >= 0 && u <= 100 && w >= 0 && w <= 40) || (u >= 0 && u <= 30 && w >= 40 && w <= 100));
+
+  /** Scan of the L part (no pores), scaled about its center and with its upright bent outward (toward -u) by up to
+      bendMm at the top, with partial-volume edges and noise. The part's corner sits at voxel (c-50, c-30, 30). */
+  function makePart({ size = 160, voxelMm = 0.04, seed = 7, scale = 1, bendMm = 0 } = {}) {
+    const rnd = random(seed);
+    const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+    const c = (size - 1) / 2, FOV = 0.47 * size, origin = [c - 50, c - 30, 30], mid = [50, 20, 50], bend = bendMm / voxelMm;
+    const sub = [-0.25, 0.25];
+    const slices = [];
+    for (let z = 0; z < size; z++) {
+      const s = new Uint16Array(size * size);
+      for (let y = 0, i = 0; y < size; y++) {
+        for (let x = 0; x < size; x++, i++) {
+          let inside = 0;
+          if (Math.abs(x - c) < 70 && Math.abs(y - c) < 45 && z > 20 && z < 145) {
+            for (const dx of sub) for (const dy of sub) for (const dz of sub) {
+              const q = [x + dx - origin[0], y + dy - origin[1], z + dz - origin[2]];
+              const p = q.map((v, k) => mid[k] + (v - mid[k]) / scale);
+              p[0] += (bend * Math.max(0, p[2] - 40)) / 60;
+              if (inL(...p)) inside++;
+            }
+          }
+          const gray = Math.max(1, Math.round(AIR_GRAY + ((MATRIX_GRAY - AIR_GRAY) * inside) / 8 + NOISE_SD * gauss()));
+          s[i] = Math.hypot(x - c, y - c) <= FOV ? gray : 0;
+        }
+      }
+      slices.push(s);
+    }
+    const files = slices.map((s, z) => {
+      const name = `part_${String(z + 1).padStart(3, '0')}.tif`;
+      return { name, webkitRelativePath: `synthetic_part/${name}`, arrayBuffer: async () => CT.writeTiff(size, size, s, voxelMm) };
+    });
+    // The nominal's CAD frame (see partStl) to scan mm: part voxel (u, v, w) = (X, -Z, Y) / voxelMm, then scaled.
+    const pose = { R: [1, 0, 0, 0, 0, -1, 0, 1, 0], t: [0, 1, 2].map((k) => voxelMm * (origin[k] + mid[k] * (1 - scale))), s: scale };
+    return { files, truth: { scale, bend_mm: bendMm, pose, matrix_gray: MATRIX_GRAY, air_gray: AIR_GRAY } };
+  }
+
+  /** The L part's nominal as binary STL in its own CAD frame (mm, y up): CAD (x, y, z) = (u, w, -v) x voxelMm. */
+  function partStl({ voxelMm = 0.04 } = {}) {
+    const cad = ([u, v, w]) => [u * voxelMm, w * voxelMm, -v * voxelMm];
+    const tri = [];
+    const add = (a, b, c) => tri.push(...cad(a), ...cad(b), ...cad(c));
+    const n = L_SECTION.length, reflex = 3; // the L is star-shaped from its inner corner (30, 40)
+    for (let k = 0; k < n; k++) {
+      const a = L_SECTION[k], b = L_SECTION[(k + 1) % n];
+      if (k !== reflex && (k + 1) % n !== reflex) {
+        const r = L_SECTION[reflex];
+        add([r[0], 0, r[1]], [a[0], 0, a[1]], [b[0], 0, b[1]]); // cap at v = 0, outward -v
+        add([r[0], L_DEPTH, r[1]], [b[0], L_DEPTH, b[1]], [a[0], L_DEPTH, a[1]]); // cap at v = depth, outward +v
+      }
+      add([a[0], 0, a[1]], [a[0], L_DEPTH, a[1]], [b[0], L_DEPTH, b[1]]); // side wall
+      add([a[0], 0, a[1]], [b[0], L_DEPTH, b[1]], [b[0], 0, b[1]]);
+    }
+    return St.writeStl(Float32Array.from(tri));
+  }
+
+  return { makeScan, makePart, partStl };
 }));

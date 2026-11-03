@@ -9,6 +9,8 @@ const P = require('../app/ct_pores.js');
 const R = require('../app/ct_regions.js');
 const Z = require('../app/ct_zones.js');
 const K = require('../app/vb_connectivity.js');
+const St = require('../app/vb_stl.js');
+const Cad = require('../app/vb_cad.js');
 
 const BIN = 2, COARSE_STEP = 2;
 const SWEEP = { poreThreshold: [1100, 1200, 1400, 1500], fineSigma: [0.75, 1.25], bodyThreshold: [1300, 1500] };
@@ -67,7 +69,7 @@ function analyze({ slices, voxelMm, dims }, run, { patches: withPatches = true, 
   const airGray = R.estimateAirGray(vol.gray, vol.outside, base.body.filled);
   log(`Base: ${summary.all_void_percent_of_body.toFixed(3)} % void, ${base.result.pores.length} regions`);
   const connectivity = K.annotatePores({ pores: base.result.pores, runs: base.result.runs, dims, filled: base.body.filled, binnedDims: vol.dims, bin: BIN, voxelMm, gray: vol.gray, poreThreshold: settings.poreThreshold, margin: settings.margin });
-  const out = { settings, crops, circle, vol, smoothed, base, rejected, summary, airGray, connectivity };
+  const out = { settings, crops, circle, vol, voxelMm, smoothed, base, rejected, summary, airGray, connectivity };
   if (!withPatches) return out;
 
   const coarse = Z.prepareCoarse({ runs: base.result.runs, pores: base.result.pores, gray: vol.gray, filled: base.body.filled, binnedDims: vol.dims, fullDims: dims, bin: BIN, step: COARSE_STEP, voxelMm, circle });
@@ -158,4 +160,12 @@ function main([folder, runPath, outDir]) {
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { analyze, detect, readStack, smoothAll, BIN, COARSE_STEP };
+/** The CAD comparison on an analysis: the nominal mesh refined into measurement points (spacingMm, default 2
+    analysis voxels; unitMm per file unit), then VBCad.compareToCad with the given options. */
+function compareCad(a, mesh, { spacingMm, unitMm = 1, ...options } = {}) {
+  const m = St.measurePoints(mesh, { spacing: spacingMm || 2 * BIN * a.voxelMm, unitMm });
+  return Cad.compareToCad({ gray: a.vol.gray, filled: a.base.body.filled, dims: a.vol.dims, bin: BIN, voxelMm: a.voxelMm, circle: a.circle, airGray: a.airGray,
+    poreThreshold: a.settings.poreThreshold, points: m.points, normals: m.normals, ...options });
+}
+
+module.exports = { analyze, compareCad, detect, readStack, smoothAll, BIN, COARSE_STEP };
