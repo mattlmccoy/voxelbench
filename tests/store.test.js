@@ -116,3 +116,17 @@ test('connect falls back to a project file when the database is absent, fails or
   assert.equal(ok.store.kind, 'artifact');
   assert.ok(ok.downloads);
 });
+
+test('presets are their own collection: kept, exported and imported; a project from before presets still imports', async () => {
+  const s = S.makeFileStore();
+  await s.put('presets', { id: 'p1', name: 'Nylon, 40 um', settings: { poreThreshold: 1250 }, created_at: 't' });
+  const p = await s.exportProject('0.1.0');
+  assert.equal(p.presets.length, 1);
+  const fresh = S.makeFileStore();
+  await fresh.importProject(p);
+  assert.equal((await fresh.exportProject('0.1.0')).presets[0].name, 'Nylon, 40 um');
+  const old = { schema: 'voxelbench-project', version: 1, samples: [sample('S9')], labels: [], regions: [], annotations: [], runs: {} };
+  const again = S.makeFileStore();
+  await again.importProject(old);
+  assert.deepEqual((await again.exportProject('0.1.0')).presets, []);
+});

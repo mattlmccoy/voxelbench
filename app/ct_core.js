@@ -134,7 +134,7 @@
   /** What the user recorded about a scan folder; a folder nobody described keeps its own name and blank fields. */
   function sampleInfo(folder, samples) {
     const s = samples && samples.get(folder);
-    return { folder, name: (s && s.name) || folder, material: (s && s.material) || '', process: (s && s.process) || '', notes: (s && s.notes) || '', calibration_air: !(s && s.calibration_air === false), cad: (s && s.cad) || null };
+    return { folder, name: (s && s.name) || folder, material: (s && s.material) || '', process: (s && s.process) || '', notes: (s && s.notes) || '', calibration_air: !(s && s.calibration_air === false), cad: (s && s.cad) || null, bookmarks: (s && s.bookmarks) || [] };
   }
 
   // Metrics a saved run can carry, by path; runs saved before a feature existed read null (n/a) for it.
@@ -167,8 +167,9 @@
       edit saved but not yet back from the store, merged before the changes. */
   function sampleRecord(folder, samples, changes, pending = null) {
     const { _collection, ...unsaved } = pending || {};
-    const base = pending ? new Map([...(samples || new Map()), [folder, { ...(samples && samples.get(folder)), ...unsaved }]]) : samples;
-    return { ...sampleInfo(folder, base), ...changes, id: folder, folder, updated_at: new Date().toISOString() };
+    const stored = { ...(samples && samples.get(folder)), ...unsaved }; // every field, including ones this version does not know
+    const base = new Map([...(samples || new Map()), [folder, stored]]);
+    return { ...stored, ...sampleInfo(folder, base), ...changes, id: folder, folder, updated_at: new Date().toISOString() };
   }
 
   function planeShape(plane, { nx, ny, nz }) {

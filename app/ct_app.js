@@ -25,7 +25,7 @@ window.CTApp = (function () {
   const state = {
     stacks: [], loadToken: 0, loading: null, folder: null, slices: null, dims: null, voxelMm: null, binFactor: 1, nativeVoxelMm: null, files: null, native: null, circle: null, sampleMax: 0, autoWindow: null, rainbowAuto: null, view: 'gray', viewWindows: {},
     cursor: { x: 0, y: 0, z: 0 }, window: { low: 0, high: 3000 }, tool: 'navigate', type: 'pore', regionLabel: 'region_a',
-    draft: null, annotations: new Map(), regions: new Map(), samples: new Map(), labels: new Map(), unsaved: new Map(), store: null, projectDirty: false, projectFile: null, dbState: 'connecting', deleting: null,
+    draft: null, annotations: new Map(), regions: new Map(), samples: new Map(), labels: new Map(), presets: new Map(), unsaved: new Map(), store: null, projectDirty: false, projectFile: null, dbState: 'connecting', deleting: null,
     settings: { ...P.DEFAULT_SETTINGS }, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, porePhase: 'idle',
     bodyMm3: null, airGray: null, regionStats: new Map(), referenceId: '', referenceDensity: NaN,
     main: 'XY', fill: 0.5, minVoidMm: 0, patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, zoneBaseline: 'auto',
@@ -73,6 +73,7 @@ window.CTApp = (function () {
     watch('regions', 'regions');
     watch('samples', 'samples');
     watch('labels', 'labels');
+    watch('presets', 'presets');
   }
 
   async function connectStore() {

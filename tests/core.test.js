@@ -75,12 +75,12 @@ test('groupStacks groups by folder, sorts by the number in the name, ignores oth
 });
 
 test('sampleInfo gives the folder name and blank fields for a sample nobody described', () => {
-  assert.deepEqual(CT.sampleInfo('S9', new Map()), { folder: 'S9', name: 'S9', material: '', process: '', notes: '', calibration_air: true, cad: null });
+  assert.deepEqual(CT.sampleInfo('S9', new Map()), { folder: 'S9', name: 'S9', material: '', process: '', notes: '', calibration_air: true, cad: null, bookmarks: [] });
 });
 
 test('sampleInfo returns the fields a user stored for the folder', () => {
   const m = new Map([['S2', { id: 'S2', folder: 'S2', name: 'Cube A', material: 'PA12', process: 'SLS', notes: 'first build', calibration_air: false, updated_at: 't' }]]);
-  assert.deepEqual(CT.sampleInfo('S2', m), { folder: 'S2', name: 'Cube A', material: 'PA12', process: 'SLS', notes: 'first build', calibration_air: false, cad: null });
+  assert.deepEqual(CT.sampleInfo('S2', m), { folder: 'S2', name: 'Cube A', material: 'PA12', process: 'SLS', notes: 'first build', calibration_air: false, cad: null, bookmarks: [] });
 });
 
 test('extractPlane returns the right voxels in every plane', () => {
@@ -293,4 +293,12 @@ test('compareRuns lists before, after and change; a metric an old run lacks is n
   assert.ok(Math.abs(row('porosity').change + 1.75) < 1e-12);
   assert.equal(row('open').before, null); assert.equal(row('open').change, null); assert.equal(row('open').after, 4.5);
   assert.ok(rows.every((r) => typeof r.label === 'string' && r.label.length));
+});
+
+test('sampleRecord keeps every stored field, bookmarks included, when another field is saved', () => {
+  const samples = new Map([['S1', { id: 'S1', folder: 'S1', name: 'Bar', bookmarks: [{ name: 'crack', main: 'XY', cursor: { x: 1, y: 2, z: 3 } }], future_field: 7 }]]);
+  const r = CT.sampleRecord('S1', samples, { notes: 'n' });
+  assert.equal(r.bookmarks.length, 1); assert.equal(r.future_field, 7); assert.equal(r.notes, 'n');
+  assert.deepEqual(CT.sampleInfo('S1', samples).bookmarks, samples.get('S1').bookmarks);
+  assert.deepEqual(CT.sampleInfo('S2', samples).bookmarks, []);
 });

@@ -257,6 +257,9 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
             <div>
               <div id="poreSettings" style="display:grid;gap:8px"></div>
               <div class="row"><button id="resetSettings">Default parameters</button></div>
+              <div class="row"><select id="presetSelect"><option value="">Presets…</option></select><button id="presetApply" disabled>Apply</button>
+                <input type="text" id="presetName" placeholder="preset name" style="width:110px" autocomplete="off"><button id="presetSave">Save as preset</button></div>
+              <p class="mono muted" id="presetNote"></p>
             </div>
           </details>
         </div>
@@ -314,6 +317,8 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
           <p class="mono muted" id="exportStatus"></p>
           <ul class="log" id="log"></ul>
           <p class="hint" id="logEmpty">No annotations for this sample. Use Point, Measure or Outline in the toolbar.</p>
+          <div class="row"><input type="text" id="bookmarkName" placeholder="view name" style="width:120px" autocomplete="off"><button id="bookmarkSave" disabled>Bookmark this view</button></div>
+          <ul class="log" id="bookmarkList"></ul>
           <div class="row"><label>Compare with <select id="compareWith"><option value="">another scan's saved run…</option></select></label></div>
           <p class="mono" id="compareNote"></p>
           <div class="tablewrap" id="compareWrap" hidden><table id="compareTable"></table></div>
@@ -472,6 +477,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 <script src="vb_dimrail.js"></script>
 <script src="vb_wallrail.js"></script>
 <script src="vb_comparerail.js"></script>
+<script src="vb_bookmarks.js"></script>
 <script src="ct_sheet.js"></script>
 <script src="ct_sheetpages.js"></script>
 <script src="ct_sheetexport.js"></script>

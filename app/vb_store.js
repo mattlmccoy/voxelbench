@@ -9,7 +9,7 @@
 
   const PROJECT_SCHEMA = 'voxelbench-project';
   const PROJECT_VERSION = 1;
-  const COLLECTIONS = ['samples', 'labels', 'regions', 'annotations'];
+  const COLLECTIONS = ['samples', 'labels', 'regions', 'annotations', 'presets'];
   const copy = (o) => JSON.parse(JSON.stringify(o));
 
   function checkProject(obj) {
