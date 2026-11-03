@@ -350,5 +350,6 @@
   on('modelChanged', withCtx((c) => { size(c); setMesh(c); }));
   on('cursorMoved', () => { if (three && state.model) setPlanes(three); });
   on('voidMeshesChanged', withCtx(setVoids));
+  on('loaded', () => { if (three) setVoids(three); }); // the previous scan's void surfaces must not stay in the new scan's view
   on('layersChanged', () => { if (three && state.model) setLayers(three); });
 }(window.CTApp));
