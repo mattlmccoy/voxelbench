@@ -25,7 +25,10 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
   measured halfway to the particles' own gray): count, volume fraction, size distribution, nearest-neighbor dispersion
   (Clark–Evans ratio, from particles away from the sample surface), flakes apart from fibers, and the orientation
   tensor of resolved fibers, for the whole part and per drawn region.
-- Exports: pore, region, zone, CAD-deviation and filler tables (CSV), a slice image (PNG) and a review sheet (PDF).
+- Wall thickness (step 8): distribution and the thinnest places of the part's walls, each a click from its slice.
+- Lab workflow: measured lengths checked against a nominal and tolerance band; a before/after table of two scans'
+  saved runs; batch runs over every scan in a folder with one summary CSV; view bookmarks; named setting presets.
+- Exports: pore, region, zone, CAD-deviation, filler, wall and batch tables (CSV), a slice image (PNG) and a review sheet (PDF).
 
 Every reported number carries a provenance line: the voxel size it was computed at, any binning, the calibration
 status and the VoxelBench version.

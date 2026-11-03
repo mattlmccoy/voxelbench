@@ -154,8 +154,9 @@ nearest-neighbor dispersion; fiber orientation tensor per region from local stru
 resolution limit: fibers need several voxels across, so short glass fibers (about 10 to 15 µm) do not resolve
 at 40 µm voxels.
 
-**Phase 6 (later): wall thickness, dimensions with tolerances, batch runs across samples, before/after
-comparison of two scans of one part.**
+**Phase 6: wall thickness, dimensions with tolerances, batch runs across samples, before/after
+comparison of two scans of one part.** (Built 2026-11-03 with view bookmarks and setting presets; plan in
+`docs/plans/2026-11-03-phase-6-lab-workflow.md`.)
 
 ## Decided by Matt
 
