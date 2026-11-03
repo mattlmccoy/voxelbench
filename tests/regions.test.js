@@ -113,3 +113,14 @@ test('deleting a label that was never stored saves the list without it; a stored
   assert.deepEqual(R.labelDelete(list, 'region_b', false), { save: list.filter((l) => l.id !== 'region_b'), remove: null });
   assert.deepEqual(R.labelDelete(list, 'region_b', true), { save: null, remove: 'region_b' });
 });
+
+test('a phantom region carries its name and measured density, and is a measurement', () => {
+  const args = { id: 'p', now: 't', sample: {}, plane: 'XY', sliceFrom: 0, sliceTo: 2, points: SQUARE, note: '', voxelMm: 0.04, dims: DIMS, label: 'phantom' };
+  const p = R.makeRegion({ ...args, phantom: { name: 'PA12 rod', density_g_cm3: 1.01 } }, R.DEFAULT_LABELS);
+  assert.deepEqual(p.phantom, { name: 'PA12 rod', density_g_cm3: 1.01 });
+  assert.equal(p.belief_not_measurement, false);
+  assert.deepEqual(R.labelOf('phantom', R.DEFAULT_LABELS), R.PHANTOM);
+  for (const bad of [{ name: '', density_g_cm3: 1 }, { name: 'x', density_g_cm3: 0 }, { name: 'x', density_g_cm3: NaN }, undefined]) {
+    assert.throws(() => R.makeRegion({ ...args, phantom: bad }, R.DEFAULT_LABELS), /phantom needs a name and a measured density/);
+  }
+});

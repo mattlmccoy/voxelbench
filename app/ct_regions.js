@@ -13,10 +13,14 @@
     { id: 'other_region', label: 'Other', color: '#c9d64f' },
   ];
   const CROP = { id: 'crop', label: 'Crop', color: '#ffb454' };
+  // A reference of known density scanned with the sample, for the density calibration (vb_calibration.js).
+  const PHANTOM = { id: 'phantom', label: 'Phantom', color: '#f5f7fa' };
+  const BUILT_IN = [CROP.id, PHANTOM.id];
 
   /** The label for an id; a label deleted after regions used it still draws, under a neutral name. */
   function labelOf(id, labels) {
     if (id === CROP.id) return CROP;
+    if (id === PHANTOM.id) return PHANTOM;
     return labels.find((l) => l.id === id) || { id, label: '(deleted label)', color: '#8b97a5' };
   }
 
@@ -31,14 +35,17 @@
     return out;
   }
 
-  function makeRegion({ id, now, sample, plane, sliceFrom, sliceTo, points, label, note, voxelMm, dims, binFactor = 1 }, labels = DEFAULT_LABELS) {
-    if (label !== CROP.id && !labels.some((l) => l.id === label)) throw new Error(`Unknown region label: ${label}`);
+  function makeRegion({ id, now, sample, plane, sliceFrom, sliceTo, points, label, note, voxelMm, dims, binFactor = 1, phantom }, labels = DEFAULT_LABELS) {
+    if (!BUILT_IN.includes(label) && !labels.some((l) => l.id === label)) throw new Error(`Unknown region label: ${label}`);
+    if (label === PHANTOM.id && !(phantom && String(phantom.name || '').trim() && Number.isFinite(phantom.density_g_cm3) && phantom.density_g_cm3 > 0)) {
+      throw new Error('A phantom needs a name and a measured density above 0 g/cm³.');
+    }
     if (points.length < 3) throw new Error('An outline needs at least 3 points.');
     const depth = CT.planeShape(plane, dims).depth;
     const from = Math.max(0, Math.min(sliceFrom, sliceTo));
     const to = Math.min(depth - 1, Math.max(sliceFrom, sliceTo));
     return { schema: 1, id, created_at: now, sample, plane, slice_from: from, slice_to: to, points, label, note, voxel_mm: voxelMm, stack_shape: dims, bin_factor: binFactor,
-      belief_not_measurement: label !== CROP.id };
+      belief_not_measurement: !BUILT_IN.includes(label), ...(label === PHANTOM.id ? { phantom: { name: String(phantom.name).trim(), density_g_cm3: phantom.density_g_cm3 } } : {}) };
   }
 
   function percentile(counts, total, q) {
@@ -104,5 +111,5 @@
     return stored ? { save: null, remove: id } : { save: list.filter((l) => l.id !== id), remove: null };
   }
 
-  return { DEFAULT_LABELS, CROP, labelOf, labelDelete, simplifyFreehand, makeRegion, regionStats, estimateAirGray, densityEstimate };
+  return { DEFAULT_LABELS, CROP, PHANTOM, labelOf, labelDelete, simplifyFreehand, makeRegion, regionStats, estimateAirGray, densityEstimate };
 }));

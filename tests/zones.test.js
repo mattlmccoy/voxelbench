@@ -293,3 +293,10 @@ test('zoneName names gray zones and drawn zones by label', () => {
   assert.equal(Z.zoneName(5, labels), 'drawn_region_b');
   assert.equal(Z.zoneName(7, labels), 'drawn_deleted_label');
 });
+
+test('paintZones never paints phantom regions', () => {
+  const coarse = { nx: 4, ny: 4, nz: 2 };
+  const zones = new Uint8Array(32).fill(Z.ZONE.BASE);
+  const phantom = { label: 'phantom', plane: 'XY', slice_from: 0, slice_to: 7, points: [{ col: 0, row: 0 }, { col: 15, row: 0 }, { col: 15, row: 15 }, { col: 0, row: 15 }] };
+  assert.deepEqual([...Z.paintZones(zones, coarse, 4, [phantom], ['region_a', 'region_b'])], [...zones]);
+});
