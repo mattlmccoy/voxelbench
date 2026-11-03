@@ -9,6 +9,7 @@
 
   const CLIP_ITERATIONS = 4;
   const FIBER_ASPECT = 3, FIBER_MIN_LENGTH_VOX = 3;
+  const MIN_FOR_DISPERSION = 20, MIN_FIBERS_FOR_TENSOR = 5; // fewer give no Clark–Evans ratio or orientation tensor
 
   const medianOf = (sorted) => (sorted.length % 2 ? sorted[sorted.length >> 1] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2);
 
@@ -149,12 +150,12 @@
     const nn = nearestOther(c);
     if (particles.length < 2) return { nn, mean_nn: null, clark_evans: null };
     const mean = nn.reduce((s, d) => s + d, 0) / nn.length, rho = particles.length / maskVoxels;
-    return { nn, mean_nn: mean, clark_evans: mean / (0.554 * rho ** (-1 / 3)) };
+    return { nn, mean_nn: mean, clark_evans: particles.length >= MIN_FOR_DISPERSION ? mean / (0.554 * rho ** (-1 / 3)) : null };
   }
 
   /** Second-order orientation tensor a2 = Σ w p pᵀ / Σ w of the fibers' main directions, weighted by voxel count. */
   function orientationTensor(fibers) {
-    if (!fibers.length) return { a2: null, eigenvalues: null, direction: null, count: 0 };
+    if (fibers.length < MIN_FIBERS_FOR_TENSOR) return { a2: null, eigenvalues: null, direction: null, count: fibers.length, too_few: true };
     const a2 = new Array(9).fill(0);
     let w = 0;
     for (const f of fibers) {
@@ -163,7 +164,7 @@
     }
     for (let k = 0; k < 9; k++) a2[k] /= w;
     const { values, vectors } = A.eigenSymmetric(a2, 3);
-    return { a2, eigenvalues: values, direction: vectors[0], count: fibers.length };
+    return { a2, eigenvalues: values, direction: vectors[0], count: fibers.length, too_few: false };
   }
 
   function quantile(sorted, q) {
@@ -182,6 +183,9 @@
   }
 
   const MAX_THRESHOLD_SAMPLES = 2e6;
+
+  /** A candidate whose peak gray is within one robust SD of the detection threshold may be matrix noise. */
+  const nearNoise = (peak, { sd, detection }) => peak < detection + sd;
 
   /** The measurement threshold: halfway between the matrix median and the bright phase's own gray, the median peak
       gray of the particles found at the detection threshold, so volumes are not inflated by the blur around small
@@ -217,11 +221,11 @@
     const t = { detection: noise.threshold, median: noise.median, sd: noise.sd, k, bright_gray: m.bright_gray, threshold: threshold !== null ? threshold : m.threshold, manual: threshold !== null };
     const { particles, dropped } = t.threshold === noise.threshold ? found : label(t.threshold);
     const mm = particles.map((p) => ({ ...p, volume_mm3: p.voxels * voxelMm ** 3, esd_mm: p.esd_vox * voxelMm, length_mm: p.length_vox * voxelMm, diameter_mm: p.diameter_vox * voxelMm,
-      x_mm: p.centroid[0] * voxelMm, y_mm: p.centroid[1] * voxelMm, z_mm: p.centroid[2] * voxelMm, fiber: isFiber(p) }));
+      x_mm: p.centroid[0] * voxelMm, y_mm: p.centroid[1] * voxelMm, z_mm: p.centroid[2] * voxelMm, fiber: isFiber(p), near_noise: nearNoise(p.peak, t) }));
     const d = dispersion(particles, maskVoxels);
-    return { threshold: t, particles: mm, dropped, summary: summarize(particles, { maskVoxels, voxelMm }), dispersion: { mean_nn_mm: d.mean_nn === null ? null : d.mean_nn * voxelMm, clark_evans: d.clark_evans },
+    return { threshold: t, particles: mm, dropped, summary: { ...summarize(particles, { maskVoxels, voxelMm }), near_noise: mm.filter((p) => p.near_noise).length }, dispersion: { mean_nn_mm: d.mean_nn === null ? null : d.mean_nn * voxelMm, clark_evans: d.clark_evans },
       nn_mm: Float32Array.from(d.nn, (v) => v * voxelMm), maskVoxels, minVoxels };
   }
 
-  return { analyzeFiller, measurementThreshold, robustThreshold, labelBright, particleShape, isFiber, dispersion, orientationTensor, summarize, FIBER_ASPECT, FIBER_MIN_LENGTH_VOX };
+  return { analyzeFiller, measurementThreshold, nearNoise, MIN_FOR_DISPERSION, MIN_FIBERS_FOR_TENSOR, robustThreshold, labelBright, particleShape, isFiber, dispersion, orientationTensor, summarize, FIBER_ASPECT, FIBER_MIN_LENGTH_VOX };
 }));

@@ -94,7 +94,7 @@ test('summarize gives the count, volume fraction, ESD percentiles in mm and the 
   assert.equal(s.count, 3); assert.equal(s.clipped, 1); assert.equal(s.fibers, 1);
   assert.ok(Math.abs(s.volume_percent - 6) < 1e-9);
   assert.ok(Math.abs(s.esd_p50_mm - 0.04 * 6) < 1e-9, `${s.esd_p50_mm}`); // median of the unclipped 5 and 7
-  assert.ok(Math.abs(Math.abs(s.orientation.direction[1]) - 1) < 1e-9);
+  assert.equal(s.orientation.too_few, true, 'one fiber gives no tensor');
 });
 
 test('each particle keeps its peak gray, and the measurement threshold is halfway to the median peak', () => {
@@ -106,4 +106,16 @@ test('each particle keeps its peak gray, and the measurement threshold is halfwa
   assert.equal(t.bright_gray, 3100);
   assert.equal(t.threshold, 2050);
   assert.equal(F.measurementThreshold({ median: 1000, detection: 1200 }, []).threshold, 1200, 'no particles: detection');
+});
+
+test('candidates whose peak is within 1 SD of the detection threshold are near noise; too few for a ratio or a tensor give none', () => {
+  const t = { median: 2000, sd: 250, detection: 3000 };
+  assert.equal(F.nearNoise(3200, t), true);
+  assert.equal(F.nearNoise(3300, t), false);
+  const few = Array.from({ length: 19 }, (_, i) => at([10 * i, 0, 0]));
+  assert.equal(F.dispersion(few, 1e6).clark_evans, null);
+  assert.ok(F.dispersion(few, 1e6).mean_nn > 0);
+  const fibers = Array.from({ length: 4 }, () => at([0, 0, 0], { direction: [0, 0, 1], aspect: 5, length_vox: 9 }));
+  const o = F.orientationTensor(fibers);
+  assert.equal(o.count, 4); assert.equal(o.eigenvalues, null); assert.equal(o.too_few, true);
 });
