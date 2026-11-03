@@ -151,5 +151,5 @@ test('the pore CSV carries open/closed, surface distance, network and sphericity
   for (const c of ['open', 'surface_distance_mm', 'network', 'sphericity']) assert.ok(head.includes(c), c);
   assert.equal(cell(1, 'open'), 'true'); assert.equal(cell(1, 'surface_distance_mm'), '0.08'); assert.equal(cell(1, 'sphericity'), '0.91');
   assert.equal(cell(2, 'sphericity'), '', 'too small for a shape');
-  assert.ok(lines.some((l) => l.startsWith('#') && /open: touches the sample mask surface/i.test(l)));
+  assert.ok(lines.some((l) => l.startsWith('#') && /open: outside air reaches the pore/i.test(l)));
 });

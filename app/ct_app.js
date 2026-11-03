@@ -397,6 +397,7 @@ window.CTApp = (function () {
     else if (data.type === 'pores') {
       state.pores = data.pores;
       state.connectivity = data.connectivity;
+      state.poreRunSettings = data.settings;
       state.runs = data.runs;
       state.byId = new Map(data.pores.map((p) => [p.id, p]));
       state.rejected = P.rejectedAfterRerun(state.rejectedVoxels, data.runs, state.dims);

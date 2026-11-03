@@ -29,7 +29,7 @@
       `# Settings: ${JSON.stringify(settings)}`,
       `# Summary: ${JSON.stringify(summary)}`,
       '# Smallest size kept is the minVolumeMm3 setting. Clipped pores touch the reconstruction edge.',
-      '# open: touches the sample mask surface (within 1 binned voxel) at this resolution; a crack narrower than about a voxel reads as closed, and a crop face counts as surface. network: pores whose voxels touch share a number. sphericity: Wadell, from the surface mesh; empty below 27 voxels.',
+      '# open: outside air reaches the pore through binned gray below the pore threshold, starting at the sample surface or a crop face; a crack narrower than about a binned voxel reads as closed; empty when the pore touches the first or last slice and air does not reach it (unknown). surface_distance_mm: depth inside the sample mask, the stack ends not counted as surface. network: pores whose voxels touch share a number. sphericity: Wadell, from the area and volume of the surface mesh; empty below 100 voxels.',
       ...calibrationRows(calibration),
       `# Voxel indices are 0-based on ${gridNote(binFactor)}.`,
       row(PORE_COLUMNS),

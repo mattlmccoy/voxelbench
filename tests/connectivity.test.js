@@ -50,9 +50,10 @@ function part(spec) {
 }
 
 test('a pore at the top face is open, an interior one closed, and they add up to the total', () => {
-  const { runs, pores } = part([[1, 10, 13, 10, 13, 4, 7], [2, 13, 16, 13, 16, 13, 16]]);
+  const spec = [[1, 10, 13, 10, 13, 4, 7], [2, 13, 16, 13, 16, 13, 16]];
+  const { runs, pores } = part(spec);
   pores[1].clipped = true;
-  const out = K.annotatePores({ pores, runs, dims, filled, binnedDims, bin, voxelMm });
+  const out = K.annotatePores({ pores, runs, dims, filled, binnedDims, bin, voxelMm, gray: grayFor(filled, spec), poreThreshold: 1300 });
   const byId = new Map(out.pores.map((p) => [p.id, p]));
   assert.equal(byId.get(1).open, true);
   assert.equal(byId.get(2).open, false);
@@ -64,8 +65,9 @@ test('a pore at the top face is open, an interior one closed, and they add up to
 });
 
 test('two touching pores from the top face to the bottom face form one network, through along z', () => {
-  const { runs, pores } = part([[3, 20, 21, 20, 21, 4, 14], [4, 20, 21, 20, 21, 15, 25], [5, 8, 9, 8, 9, 12, 14]]);
-  const out = K.annotatePores({ pores, runs, dims, filled, binnedDims, bin, voxelMm });
+  const spec = [[3, 20, 21, 20, 21, 4, 14], [4, 20, 21, 20, 21, 15, 25], [5, 8, 9, 8, 9, 12, 14]];
+  const { runs, pores } = part(spec);
+  const out = K.annotatePores({ pores, runs, dims, filled, binnedDims, bin, voxelMm, gray: grayFor(filled, spec), poreThreshold: 1300 });
   const byId = new Map(out.pores.map((p) => [p.id, p]));
   assert.equal(byId.get(3).network, byId.get(4).network);
   assert.notEqual(byId.get(5).network, byId.get(3).network);
@@ -76,7 +78,7 @@ test('two touching pores from the top face to the bottom face form one network, 
 test('a part with no pores gives zeros and no networks', () => {
   const { runs } = part([]);
   const out = K.annotatePores({ pores: [], runs, dims, filled, binnedDims, bin, voxelMm });
-  assert.deepEqual(out.summary, { open_mm3: 0, closed_mm3: 0, open_percent: 0, closed_percent: 0, networks: 0, through: { x: false, y: false, z: false } });
+  assert.deepEqual(out.summary, { open_mm3: 0, closed_mm3: 0, unknown_mm3: 0, open_percent: 0, closed_percent: 0, unknown_percent: 0, networks: 0, through: { x: false, y: false, z: false } });
 });
 
 test('a pore joined to outside air by a crack that the mask closed over is open', () => {
@@ -94,4 +96,63 @@ test('a pore joined to outside air by a crack that the mask closed over is open'
   const byId = new Map(out.pores.map((p) => [p.id, p]));
   assert.equal(byId.get(7).open, true, 'reached through the crack');
   assert.equal(byId.get(8).open, false, 'pore 8 has solid all round');
+});
+
+/** Binned gray: air and pore voxels at 700, matrix at 2000, plus any extra low voxels. */
+function grayFor(mask, spec, extraLow = () => false) {
+  const g = new Uint16Array(binnedDims.nx * binnedDims.ny * binnedDims.nz);
+  for (let z = 0, i = 0; z < binnedDims.nz; z++) for (let y = 0; y < binnedDims.ny; y++) for (let x = 0; x < binnedDims.nx; x++, i++) {
+    const inPore = spec.some(([, x0, x1, y0, y1, z0, z1]) => x * bin + 1 >= x0 && x * bin <= x1 && y * bin + 1 >= y0 && y * bin <= y1 && z * bin + 1 >= z0 && z * bin <= z1);
+    g[i] = !mask[i] || inPore || extraLow(x, y, z) ? 700 : 2000;
+  }
+  return g;
+}
+
+test('a pore cut by the first or last slice is unknown, not open, and its surface distance ignores the stack end', () => {
+  const through = box(binnedDims, (x, y) => (x >= 2 && x <= 12 && y >= 2 && y <= 12 ? 1 : 0)); // the part runs past both stack ends
+  const spec = [[1, 13, 16, 13, 16, 0, 5], [2, 13, 16, 13, 16, 12, 15]];
+  const { runs, pores } = part(spec);
+  const out = K.annotatePores({ pores, runs, dims, filled: through, binnedDims, bin, voxelMm, gray: grayFor(through, spec), poreThreshold: 1300 });
+  const byId = new Map(out.pores.map((p) => [p.id, p]));
+  assert.equal(byId.get(1).open, null);
+  assert.equal(byId.get(1).at_scan_end, true);
+  assert.ok(byId.get(1).surface_distance_mm > 0.5, `${byId.get(1).surface_distance_mm}`);
+  assert.equal(byId.get(2).open, false);
+  assert.ok(Math.abs(out.summary.unknown_mm3 - pores[0].volume_mm3) < 1e-12);
+  assert.equal(out.summary.open_mm3, 0);
+});
+
+test('openClosed leaves out rejected pores, as total porosity does', () => {
+  const ps = [{ id: 1, volume_mm3: 2, open: true }, { id: 2, volume_mm3: 3, open: false }, { id: 3, volume_mm3: 5, open: true }, { id: 4, volume_mm3: 7, open: null }];
+  const s = K.openClosed(ps, 100, new Set([3]));
+  assert.deepEqual(s, { open_mm3: 2, closed_mm3: 3, unknown_mm3: 7, open_percent: 2, closed_percent: 3, unknown_percent: 7 });
+});
+
+test('a through-path is found when the pores reach as close to the ends as the segmentation margin allows', () => {
+  // Margin 3 binned: pores lie in full z 10..19 inside a mask of full z 4..25; a low-gray column joins them to both faces.
+  const spec = [[3, 20, 21, 20, 21, 10, 14], [4, 20, 21, 20, 21, 15, 19]];
+  const { runs, pores } = part(spec);
+  const gray = grayFor(filled, spec, (x, y) => x === 10 && y === 10);
+  const out = K.annotatePores({ pores, runs, dims, filled, binnedDims, bin, voxelMm, gray, poreThreshold: 1300, margin: 3 });
+  assert.deepEqual(out.summary.through, { x: false, y: false, z: true });
+});
+
+test('sphericity uses the mesh volume, so it never exceeds 1, and small pores get none', () => {
+  const d = { nx: 21, ny: 21, nz: 21 };
+  const sphere = (r) => box(d, (x, y, z) => ((x - 10) ** 2 + (y - 10) ** 2 + (z - 10) ** 2 <= r * r ? 1 : 0));
+  const count = (m) => m.reduce((s, v) => s + v, 0);
+  for (const r of [4, 5, 8]) {
+    const s = K.sphericity(sphere(r), d, count(sphere(r)));
+    assert.ok(s > 0.85 && s <= 1, `r ${r}: ${s}`);
+  }
+  assert.equal(K.sphericity(sphere(2), d, count(sphere(2))), null);
+});
+
+test('a pore larger than the shape budget is measured on a coarser copy, close to the full value', () => {
+  const spec = [[9, 2, 25, 12, 17, 12, 17]];
+  const { runs, pores } = part(spec);
+  const full = K.annotatePores({ pores, runs, dims, filled, binnedDims, bin, voxelMm }).pores[0].sphericity;
+  const c = K.annotatePores({ pores, runs, dims, filled, binnedDims, bin, voxelMm, maxShapeCells: 600 }).pores[0];
+  assert.ok(c.shape_bin > 1, `shape_bin ${c.shape_bin}`);
+  assert.ok(full > 0 && Math.abs(c.sphericity - full) < 0.08, `full ${full}, coarse ${c.sphericity}`);
 });

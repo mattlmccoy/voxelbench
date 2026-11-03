@@ -55,23 +55,24 @@
   }
 
   /** Euclidean distance in voxels from each set voxel to the nearest unset voxel; past the stack edge counts as unset. */
-  function distanceInside(mask, dims) {
+  function distanceInside(mask, dims, { endsInside = false } = {}) {
     const { nx, ny, nz } = dims;
     const big = nx * nx + ny * ny + nz * nz;
     const out = new Float32Array(mask.length);
-    // One padding voxel at each end of a line stands for the outside of the stack.
+    // One padding voxel at each end of a line stands for the outside of the stack; with endsInside, the part
+    // continues past the first and last slice, so the padding along z is inside.
     const size = Math.max(nx, ny, nz) + 2;
     const f = new Float64Array(size), d = new Float64Array(size), v = new Int32Array(size), z = new Float64Array(size + 1);
     for (let i = 0; i < mask.length; i++) out[i] = mask[i] ? big : 0;
-    const sweep = (start, stride, len) => {
-      f[0] = 0; f[len + 1] = 0;
+    const sweep = (start, stride, len, pad = 0) => {
+      f[0] = pad; f[len + 1] = pad;
       for (let i = 0; i < len; i++) f[i + 1] = out[start + i * stride];
       edtLine(f, d, v, z, len + 2);
       for (let i = 0; i < len; i++) out[start + i * stride] = d[i + 1];
     };
     for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) sweep((k * ny + j) * nx, 1, nx);
     for (let k = 0; k < nz; k++) for (let i = 0; i < nx; i++) sweep(k * ny * nx + i, nx, ny);
-    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) sweep(j * nx + i, nx * ny, nz);
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) sweep(j * nx + i, nx * ny, nz, endsInside ? big : 0);
     for (let i = 0; i < out.length; i++) out[i] = Math.sqrt(out[i]);
     return out;
   }

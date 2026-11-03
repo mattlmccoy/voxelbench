@@ -36,12 +36,12 @@ function finishDetect({ settings }) {
   say('Fine segmentation on the loaded grid');
   const result = P.fineDetect({ dims: vol.full, bin: vol.bin, settings, voxelMm: vol.voxelMm, coarse, binnedDims: vol.dims, getSmoothed: (z) => smoothed[z] });
   say('Open and closed pores, networks, sphericity');
-  const conn = self.VBConnectivity.annotatePores({ pores: result.pores, runs: result.runs, dims: vol.full, filled: body.filled, binnedDims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm, gray: vol.gray, poreThreshold: settings.poreThreshold });
+  const conn = self.VBConnectivity.annotatePores({ pores: result.pores, runs: result.runs, dims: vol.full, filled: body.filled, binnedDims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm, gray: vol.gray, poreThreshold: settings.poreThreshold, margin: settings.margin });
   result.pores = conn.pores;
   pores = result;
   pores.settings = settings;
   const { offsets, start, end, id, rows } = result.runs;
-  postMessage({ type: 'pores', pores: result.pores, connectivity: conn.summary, runs: { offsets, start: start.slice(), end: end.slice(), id: id.slice(), rows } });
+  postMessage({ type: 'pores', pores: result.pores, connectivity: conn.summary, settings, runs: { offsets, start: start.slice(), end: end.slice(), id: id.slice(), rows } });
   sendPatches();
 }
 

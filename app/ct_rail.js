@@ -325,12 +325,15 @@
       ['ESD < 0.16 mm', `${small}`], ['Rejected', `${s.rejected_count}`], ['Low-density regions (excluded)', state.patches ? `${state.patches.length}, ${patchVolume.toFixed(1)} mm³` : 'segmenting']];
     const k = state.connectivity;
     if (k) {
+      const split = window.VBConnectivity.openClosed(state.pores, s.body_volume_mm3, state.rejected);
       const axes = ['x', 'y', 'z'].filter((a) => k.through[a]);
-      rows.push(['Open porosity', `${k.open_percent.toFixed(2)} %, ${k.open_mm3.toFixed(1)} mm³`], ['Closed porosity', `${k.closed_percent.toFixed(2)} %, ${k.closed_mm3.toFixed(1)} mm³`],
-        ['Through-path', axes.length ? `along ${axes.join(', ')}` : 'none']);
+      rows.push(['Open porosity', `${split.open_percent.toFixed(2)} %, ${split.open_mm3.toFixed(1)} mm³`], ['Closed porosity', `${split.closed_percent.toFixed(2)} %, ${split.closed_mm3.toFixed(1)} mm³`]);
+      if (split.unknown_mm3 > 0) rows.push(['Open or closed unknown (scan end)', `${split.unknown_percent.toFixed(2)} %, ${split.unknown_mm3.toFixed(1)} mm³`]);
+      rows.push(['Through-path', axes.length ? `along ${axes.join(', ')}` : 'none']);
     }
     $('poreOpenNote').hidden = !k;
-    if (k) $('poreOpenNote').textContent = `Open: reaches the sample surface, or is reached by outside air through gray below the pore threshold (${state.settings.poreThreshold}), at ${CT.gridText(state.binFactor * 2)} resolution; a crack narrower than that reads as closed, and a crop face counts as surface. Through-path: a network of touching pores reaching both ends of the part along an axis.`;
+    const runThreshold = state.poreRunSettings ? state.poreRunSettings.poreThreshold : state.settings.poreThreshold;
+    if (k) $('poreOpenNote').textContent = `Open: outside air reaches the pore through gray below the pore threshold (${runThreshold}), starting at the sample surface or a crop face, at ${CT.gridText(state.binFactor * 2)} resolution; a crack narrower than that reads as closed. A pore cut by the first or last slice is unknown unless air reaches it. Through-path: a network of open pores reaching both ends of the part's bounding box along an axis.`;
     const fit = App.calibration();
     if (fit && fit.ok && state.solidGray != null) rows.push(['Matrix eq. density', `${App.densityText(fit, state.solidGray)} g/cm³`]);
     $('poreCalNote').hidden = !(fit && fit.ok);
@@ -380,7 +383,7 @@
     for (const p of list.slice(0, TABLE_ROWS)) {
       const tr = table.insertRow();
       tr.className = `pick${p.id === state.selected ? ' selected' : ''}${state.rejected.has(p.id) ? ' rejected' : ''}`;
-      const cls = `${p.clipped ? 'FOV edge' : p.crack_like ? 'AR > cutoff' : 'AR ≤ cutoff'}${p.open ? ', open' : p.open === false ? ', closed' : ''}`;
+      const cls = `${p.clipped ? 'FOV edge' : p.crack_like ? 'AR > cutoff' : 'AR ≤ cutoff'}${p.open ? ', open' : p.open === false ? ', closed' : p.at_scan_end ? ', scan end' : ''}`;
       for (const c of [p.id, p.diameter_mm.toFixed(3), p.volume_mm3.toFixed(4), p.elongation.toFixed(1), p.sphericity == null ? '–' : p.sphericity.toFixed(2), p.surface_distance_mm == null ? '–' : p.surface_distance_mm.toFixed(2), cls]) tr.insertCell().textContent = c;
       const cell = tr.insertCell();
       const reject = document.createElement('button');
