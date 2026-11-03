@@ -138,7 +138,11 @@ Open pores connect to the outside air through below-threshold voxels;
 closed pores do not. Report open, closed and total porosity; a through-path check between two chosen faces;
 state that the split depends on threshold and resolution (a crack below resolution reads as closed).
 
-**Phase 4: comparison to CAD.** Load the nominal STL, align (rough manual placement, then a rigid fit),
+**Phase 4: comparison to CAD.** (Built 2026-11-03; plan in `docs/plans/2026-11-03-phase-4-cad-comparison.md`.
+Builder's calls: deviation measured from nominal points along their normals, a crossing accepted only where the
+scanned surface faces within 60° of the normal, points on sharp CAD edges skipped, a scale fit freed only after a
+rigid fit and bounded to 0.5 to 1.5, rotate-90° buttons for the rough placement, the pose and statistics saved with the
+sample.) Load the nominal STL, align (rough manual placement, then a rigid fit),
 extract the scan surface at the air-matrix midpoint, compute signed surface deviation, show a color map,
 histogram and probe, and export. Optionally report the best-fit uniform scale as a shrinkage estimate.
 

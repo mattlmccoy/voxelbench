@@ -17,7 +17,11 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
 - Regions with your own labels, annotations and length measurements.
 - Density calibration from reference phantoms scanned with the sample: gray becomes equivalent density (g/cm³).
   See [docs/PHANTOM_PROTOCOL.md](docs/PHANTOM_PROTOCOL.md).
-- Exports: pore, region and zone tables (CSV), a slice image (PNG) and a review sheet (PDF).
+- Comparison to CAD: open the nominal STL; VoxelBench aligns it to the scanned surface (rigid, optionally with one
+  uniform scale reported as shrinkage) and measures the signed distance from each nominal point, along its outward
+  normal, to the scanned surface (gray halfway between air and matrix). Color map on the 3D model, probe,
+  statistics with a tolerance band, histogram and a CSV of every point.
+- Exports: pore, region, zone and CAD-deviation tables (CSV), a slice image (PNG) and a review sheet (PDF).
 
 Every reported number carries a provenance line: the voxel size it was computed at, any binning, the calibration
 status and the VoxelBench version.
@@ -25,11 +29,12 @@ status and the VoxelBench version.
 ## Start
 
 1. Open the page and press **Try a synthetic test scan** to see every step on a generated scan with 40 known pores,
-   or **With phantom rods** to try the density calibration on two rods of known density.
+   **With phantom rods** to try the density calibration on two rods of known density, or **With a CAD model** to try
+   the CAD comparison on a generated L-shaped part (shrunk 3 %, its upright bent 0.12 mm) and its nominal STL.
 2. For a real scan, press **Open scan folder** and pick a folder of single-page, uncompressed 16-bit TIFF slices with
    the voxel size in the resolution tags.
 3. Crop out holders or packaging (step 1), segment pores (step 2), map zones (step 3), export (step 4), and
-   calibrate density from phantoms (step 5, optional).
+   calibrate density from phantoms (step 5, optional), and compare to CAD (step 6, optional).
 
 Scans larger than the memory budget (1.2 GB; 0.6 GB in Safari) load block-mean binned, and the page says so before
 reading. Add `?budget=<GB>` to the address to change the budget. The zoomed XY view of a binned scan shows the
@@ -54,6 +59,9 @@ a new name.
   are assignments. A calibrated value is the equivalent density of the phantom material, not true density for
   doped or filled material, and has no beam-hardening correction.
 - Pores smaller than about 3 voxels across are at the noise limit.
+- CAD comparison: points on sharp CAD edges are skipped (the scanned edge is rounded over about one analysis voxel),
+  and a point counts as measured only where the scanned surface faces within 60° of its normal. The fitted scale is
+  limited to 0.5 to 1.5. A least-squares fit shares a local distortion (a bent wall) over the whole part.
 - The open/closed split depends on the pore threshold and the resolution: a crack narrower than about one analysis
   voxel reads as closed, and a crop face counts as part surface.
 
