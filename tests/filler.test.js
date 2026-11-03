@@ -60,3 +60,39 @@ test('the robust threshold is the median plus k robust SDs of the matrix, unmove
   assert.ok(Math.abs(t.sd - 50) / 50 < 0.05, `sd ${t.sd}`);
   assert.ok(Math.abs(t.threshold - 1200) / 1200 < 0.05, `threshold ${t.threshold}`);
 });
+
+const at = (centroid, extra = {}) => ({ voxels: 10, clipped: false, centroid, aspect: 1, length_vox: 3, diameter_vox: 3, esd_vox: 2.7, direction: [1, 0, 0], ...extra });
+
+test('Clark–Evans R reads a lattice as regular and close pairs as clustered', () => {
+  const lattice = [], pairs = [];
+  for (let x = 5; x < 100; x += 10) for (let y = 5; y < 100; y += 10) for (let z = 5; z < 100; z += 10) {
+    lattice.push(at([x, y, z]));
+    pairs.push(at([x, y, z]), at([x + 1, y, z]));
+  }
+  const reg = F.dispersion(lattice, 1e6), clu = F.dispersion(pairs, 1e6);
+  assert.ok(Math.abs(reg.mean_nn - 10) < 1e-9, `${reg.mean_nn}`);
+  assert.ok(reg.clark_evans > 1.5, `regular ${reg.clark_evans}`);
+  assert.ok(clu.clark_evans < 0.6, `clustered ${clu.clark_evans}`);
+  assert.equal(F.dispersion([at([1, 1, 1])], 1e6).clark_evans, null, 'one particle has no neighbor');
+});
+
+test('the orientation tensor of fibers along z is diag(0, 0, 1); of evenly spread fibers about 1/3 each', () => {
+  const along = Array.from({ length: 20 }, () => at([0, 0, 0], { direction: [0, 0, 1] }));
+  const t = F.orientationTensor(along);
+  assert.ok(Math.abs(t.eigenvalues[0] - 1) < 1e-9 && Math.abs(Math.abs(t.direction[2]) - 1) < 1e-9);
+  const spread = Array.from({ length: 500 }, (_, k) => {
+    const zc = 1 - (2 * (k + 0.5)) / 500, r = Math.sqrt(1 - zc * zc), phi = k * Math.PI * (3 - Math.sqrt(5));
+    return at([0, 0, 0], { direction: [r * Math.cos(phi), r * Math.sin(phi), zc] });
+  });
+  for (const e of F.orientationTensor(spread).eigenvalues) assert.ok(Math.abs(e - 1 / 3) < 0.02, `${e}`);
+  assert.equal(F.orientationTensor([]).count, 0);
+});
+
+test('summarize gives the count, volume fraction, ESD percentiles in mm and the fiber count', () => {
+  const ps = [at([0, 0, 0], { voxels: 100, esd_vox: 5 }), at([9, 9, 9], { voxels: 300, esd_vox: 8, clipped: true }), at([5, 5, 5], { voxels: 200, esd_vox: 7, aspect: 6, length_vox: 12, direction: [0, 1, 0] })];
+  const s = F.summarize(ps, { maskVoxels: 10000, voxelMm: 0.04 });
+  assert.equal(s.count, 3); assert.equal(s.clipped, 1); assert.equal(s.fibers, 1);
+  assert.ok(Math.abs(s.volume_percent - 6) < 1e-9);
+  assert.ok(Math.abs(s.esd_p50_mm - 0.04 * 6) < 1e-9, `${s.esd_p50_mm}`); // median of the unclipped 5 and 7
+  assert.ok(Math.abs(Math.abs(s.orientation.direction[1]) - 1) < 1e-9);
+});

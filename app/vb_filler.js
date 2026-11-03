@@ -109,5 +109,75 @@
 
   const isFiber = (p) => p.aspect >= FIBER_ASPECT && p.length_vox >= FIBER_MIN_LENGTH_VOX;
 
-  return { robustThreshold, labelBright, particleShape, isFiber, FIBER_ASPECT, FIBER_MIN_LENGTH_VOX };
+  /** Nearest-neighbor distance of every centroid to another (voxels), by a uniform grid. */
+  function nearestOther(c) {
+    const n = c.length / 3, out = new Float64Array(n);
+    if (n < 2) return out.fill(NaN);
+    const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < c.length; i++) { min[i % 3] = Math.min(min[i % 3], c[i]); max[i % 3] = Math.max(max[i % 3], c[i]); }
+    const cell = Math.max(1e-6, Math.cbrt(((max[0] - min[0] + 1) * (max[1] - min[1] + 1) * (max[2] - min[2] + 1)) / n));
+    const g = [0, 1, 2].map((k) => Math.max(1, Math.ceil((max[k] - min[k]) / cell) + 1));
+    const cellOf = (v, k) => Math.min(g[k] - 1, Math.max(0, Math.floor((v - min[k]) / cell)));
+    const buckets = new Map();
+    for (let i = 0; i < n; i++) { const key = (cellOf(c[3 * i + 2], 2) * g[1] + cellOf(c[3 * i + 1], 1)) * g[0] + cellOf(c[3 * i], 0); (buckets.get(key) || buckets.set(key, []).get(key)).push(i); }
+    for (let i = 0; i < n; i++) {
+      const q = [cellOf(c[3 * i], 0), cellOf(c[3 * i + 1], 1), cellOf(c[3 * i + 2], 2)];
+      let best = Infinity;
+      for (let r = 0; r <= Math.max(...g); r++) {
+        if (((r - 1) * cell) ** 2 > best) break;
+        for (let z = q[2] - r; z <= q[2] + r; z++) for (let y = q[1] - r; y <= q[1] + r; y++) for (let x = q[0] - r; x <= q[0] + r; x++) {
+          if (Math.max(Math.abs(x - q[0]), Math.abs(y - q[1]), Math.abs(z - q[2])) !== r || x < 0 || y < 0 || z < 0 || x >= g[0] || y >= g[1] || z >= g[2]) continue;
+          for (const j of buckets.get((z * g[1] + y) * g[0] + x) || []) {
+            if (j === i) continue;
+            const d = (c[3 * i] - c[3 * j]) ** 2 + (c[3 * i + 1] - c[3 * j + 1]) ** 2 + (c[3 * i + 2] - c[3 * j + 2]) ** 2;
+            if (d < best) best = d;
+          }
+        }
+      }
+      out[i] = Math.sqrt(best);
+    }
+    return out;
+  }
+
+  /** Nearest-neighbor distances (voxels) and the Clark–Evans ratio: mean NN over 0.554 ρ^(−1/3), the mean NN of a
+      random (Poisson) arrangement at the same number density; 1 random, below 1 clustered, above 1 regular. */
+  function dispersion(particles, maskVoxels) {
+    const c = new Float64Array(3 * particles.length);
+    particles.forEach((p, i) => c.set(p.centroid, 3 * i));
+    const nn = nearestOther(c);
+    if (particles.length < 2) return { nn, mean_nn: null, clark_evans: null };
+    const mean = nn.reduce((s, d) => s + d, 0) / nn.length, rho = particles.length / maskVoxels;
+    return { nn, mean_nn: mean, clark_evans: mean / (0.554 * rho ** (-1 / 3)) };
+  }
+
+  /** Second-order orientation tensor a2 = Σ w p pᵀ / Σ w of the fibers' main directions, weighted by voxel count. */
+  function orientationTensor(fibers) {
+    if (!fibers.length) return { a2: null, eigenvalues: null, direction: null, count: 0 };
+    const a2 = new Array(9).fill(0);
+    let w = 0;
+    for (const f of fibers) {
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) a2[3 * r + c] += f.voxels * f.direction[r] * f.direction[c];
+      w += f.voxels;
+    }
+    for (let k = 0; k < 9; k++) a2[k] /= w;
+    const { values, vectors } = A.eigenSymmetric(a2, 3);
+    return { a2, eigenvalues: values, direction: vectors[0], count: fibers.length };
+  }
+
+  function quantile(sorted, q) {
+    if (!sorted.length) return null;
+    const pos = q * (sorted.length - 1), lo = Math.floor(pos), hi = Math.min(sorted.length - 1, lo + 1);
+    return sorted[lo] + (pos - lo) * (sorted[hi] - sorted[lo]);
+  }
+
+  /** Counts, bright volume fraction of the mask (clipped particles included), ESD percentiles of the unclipped
+      particles (mm) and the fibers' orientation tensor. */
+  function summarize(particles, { maskVoxels, voxelMm }) {
+    const whole = particles.filter((p) => !p.clipped), esd = whole.map((p) => p.esd_vox * voxelMm).sort((a, b) => a - b);
+    const fibers = particles.filter(isFiber), voxels = particles.reduce((s, p) => s + p.voxels, 0);
+    return { count: particles.length, clipped: particles.length - whole.length, fibers: fibers.length, volume_percent: maskVoxels ? (100 * voxels) / maskVoxels : null,
+      esd_p10_mm: quantile(esd, 0.1), esd_p50_mm: quantile(esd, 0.5), esd_p90_mm: quantile(esd, 0.9), orientation: orientationTensor(fibers) };
+  }
+
+  return { robustThreshold, labelBright, particleShape, isFiber, dispersion, orientationTensor, summarize, FIBER_ASPECT, FIBER_MIN_LENGTH_VOX };
 }));
