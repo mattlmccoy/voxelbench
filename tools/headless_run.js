@@ -11,6 +11,7 @@ const Z = require('../app/ct_zones.js');
 const K = require('../app/vb_connectivity.js');
 const St = require('../app/vb_stl.js');
 const Cad = require('../app/vb_cad.js');
+const Fi = require('../app/vb_filler.js');
 
 const BIN = 2, COARSE_STEP = 2;
 const SWEEP = { poreThreshold: [1100, 1200, 1400, 1500], fineSigma: [0.75, 1.25], bodyThreshold: [1300, 1500] };
@@ -69,7 +70,7 @@ function analyze({ slices, voxelMm, dims }, run, { patches: withPatches = true, 
   const airGray = R.estimateAirGray(vol.gray, vol.outside, base.body.filled);
   log(`Base: ${summary.all_void_percent_of_body.toFixed(3)} % void, ${base.result.pores.length} regions`);
   const connectivity = K.annotatePores({ pores: base.result.pores, runs: base.result.runs, dims, filled: base.body.filled, binnedDims: vol.dims, bin: BIN, voxelMm, gray: vol.gray, poreThreshold: settings.poreThreshold, margin: settings.margin });
-  const out = { settings, crops, circle, vol, voxelMm, smoothed, base, rejected, summary, airGray, connectivity };
+  const out = { settings, crops, circle, vol, voxelMm, dims, smoothed, base, rejected, summary, airGray, connectivity };
   if (!withPatches) return out;
 
   const coarse = Z.prepareCoarse({ runs: base.result.runs, pores: base.result.pores, gray: vol.gray, filled: base.body.filled, binnedDims: vol.dims, fullDims: dims, bin: BIN, step: COARSE_STEP, voxelMm, circle });
@@ -168,4 +169,10 @@ function compareCad(a, mesh, { spacingMm, unitMm = 1, ...options } = {}) {
     poreThreshold: a.settings.poreThreshold, points: m.points, normals: m.normals, edge: m.edge, ...options });
 }
 
-module.exports = { analyze, compareCad, detect, readStack, smoothAll, BIN, COARSE_STEP };
+/** Filler and fiber analysis on an analysis (its smoothed full-resolution slices and sample mask). */
+function analyzeFiller(a, options = {}) {
+  return Fi.analyzeFiller({ getSlice: (z) => a.smoothed[z], dims: a.dims, filled: a.base.body.filled, binnedDims: a.vol.dims, bin: BIN, voxelMm: a.voxelMm, circle: a.circle,
+    poreThreshold: a.settings.poreThreshold, ...options });
+}
+
+module.exports = { analyze, compareCad, analyzeFiller, detect, readStack, smoothAll, BIN, COARSE_STEP };

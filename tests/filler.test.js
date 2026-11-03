@@ -96,3 +96,14 @@ test('summarize gives the count, volume fraction, ESD percentiles in mm and the 
   assert.ok(Math.abs(s.esd_p50_mm - 0.04 * 6) < 1e-9, `${s.esd_p50_mm}`); // median of the unclipped 5 and 7
   assert.ok(Math.abs(Math.abs(s.orientation.direction[1]) - 1) < 1e-9);
 });
+
+test('each particle keeps its peak gray, and the measurement threshold is halfway to the median peak', () => {
+  const slices = volume((x, y, z) => x >= 5 && x < 9 && y >= 5 && y < 9 && z >= 5 && z < 9);
+  slices[6][6 * 40 + 6] = 3500;
+  const { particles } = run(slices);
+  assert.equal(particles[0].peak, 3500);
+  const t = F.measurementThreshold({ median: 1000, detection: 1200 }, [2800, 3000, 3200, 9000]);
+  assert.equal(t.bright_gray, 3100);
+  assert.equal(t.threshold, 2050);
+  assert.equal(F.measurementThreshold({ median: 1000, detection: 1200 }, []).threshold, 1200, 'no particles: detection');
+});

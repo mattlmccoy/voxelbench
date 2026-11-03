@@ -8,6 +8,8 @@
   'use strict';
 
   const MATRIX_GRAY = 2000, AIR_GRAY = 700, NOISE_SD = 60, PORES = 40, RADIUS = [3, 8];
+  // With filler: bright spheres and short fibers lying within 8° of x, from their own seed so pores and noise stay put.
+  const FILLER_GRAY = 3000, FILLER_SPHERES = 50, SPHERE_RADIUS = [2, 3.5], FIBERS = 20, FIBER_HALF = 9, FIBER_RADIUS = 1.6, FIBER_SPREAD = (8 * Math.PI) / 180;
   // With phantoms: gray = AIR_GRAY + GRAY_PER_DENSITY x density, so the matrix is (2000 - 700) / 1290 g/cm³.
   const GRAY_PER_DENSITY = 1290;
   const RODS = [{ name: 'Rod A (0.50 g/cm³)', density_g_cm3: 0.5, angle: Math.PI / 4 }, { name: 'Rod B (1.40 g/cm³)', density_g_cm3: 1.4, angle: (5 * Math.PI) / 4 }];
@@ -24,8 +26,8 @@
   }
 
   /** Scan of size^3 voxels: cylinder along z of radius 0.3 size, pores of radius 3 to 8 voxels inside it, FOV radius
-      0.47 size. */
-  function makeScan({ size = 160, voxelMm = 0.04, seed = 1, phantoms = false } = {}) {
+      0.47 size. With filler, bright spheres and fibers fill part of the matrix (truth.filler). */
+  function makeScan({ size = 160, voxelMm = 0.04, seed = 1, phantoms = false, filler = false } = {}) {
     const rnd = random(seed);
     const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
     const c = (size - 1) / 2, R = 0.3 * size, FOV = 0.47 * size;
@@ -40,18 +42,22 @@
       if (pores.some((q) => Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) < p.r + q.r + 3)) continue;
       pores.push(p);
     }
-    let body = 0, open = 0;
+    const items = filler ? placeFiller(random(seed + 1000), { c, R, size }, pores) : [];
+    let body = 0, open = 0, bright = 0;
     const slices = [];
     for (let z = 0; z < size; z++) {
       const s = new Uint16Array(size * size);
       const near = pores.filter((p) => Math.abs(z - p.z) <= p.r);
+      const nearItems = items.filter((f) => Math.abs(z - f.z) <= f.reach);
       for (let y = 0, i = 0; y < size; y++) {
         for (let x = 0; x < size; x++, i++) {
           const inside = Math.hypot(x - c, y - c) <= R;
           const pore = inside && near.some((p) => (x - p.x) ** 2 + (y - p.y) ** 2 + (z - p.z) ** 2 <= p.r * p.r);
           if (inside) { body++; if (pore) open++; }
           const rod = rods.find((r) => Math.hypot(x - r.center.x, y - r.center.y) <= r.radius);
-          const mean = inside && !pore ? MATRIX_GRAY : rod ? AIR_GRAY + GRAY_PER_DENSITY * rod.density_g_cm3 : AIR_GRAY;
+          const filled = inside && !pore && nearItems.some((f) => f.contains(x, y, z));
+          if (filled) bright++;
+          const mean = filled ? FILLER_GRAY : inside && !pore ? MATRIX_GRAY : rod ? AIR_GRAY + GRAY_PER_DENSITY * rod.density_g_cm3 : AIR_GRAY;
           const gray = Math.max(1, Math.round(mean + NOISE_SD * gauss()));
           s[i] = Math.hypot(x - c, y - c) <= FOV ? gray : 0;
         }
@@ -63,7 +69,32 @@
       return { name, webkitRelativePath: `synthetic_scan/${name}`, arrayBuffer: async () => CT.writeTiff(size, size, s, voxelMm) };
     });
     return { files, truth: { porosity_percent: (100 * open) / body, pore_count: pores.length, pores: pores.map((p) => ({ ...p })), matrix_gray: MATRIX_GRAY, air_gray: AIR_GRAY,
-      ...(phantoms ? { phantoms: rods, matrix_density: (MATRIX_GRAY - AIR_GRAY) / GRAY_PER_DENSITY } : {}) } };
+      ...(phantoms ? { phantoms: rods, matrix_density: (MATRIX_GRAY - AIR_GRAY) / GRAY_PER_DENSITY } : {}),
+      ...(filler ? { filler: { spheres: items.filter((f) => f.kind === 'sphere').length, fibers: items.filter((f) => f.kind === 'fiber').length, volume_percent: (100 * bright) / body, gray: FILLER_GRAY } } : {}) } };
+  }
+
+  /** Spheres and fibers inside the cylinder, clear of the pores and of each other (by bounding spheres). */
+  function placeFiller(rnd, { c, R, size }, pores) {
+    const items = [];
+    const clear = (x, y, z, reach) => Math.hypot(x - c, y - c) <= R - reach - 3 && z >= reach + 3 && z <= size - reach - 4
+      && !pores.some((p) => Math.hypot(x - p.x, y - p.y, z - p.z) < reach + p.r + 2) && !items.some((f) => Math.hypot(x - f.x, y - f.y, z - f.z) < reach + f.reach + 2);
+    for (let tries = 0, n = 0; n < FIBERS && tries < 20000; tries++) {
+      const x = c + (rnd() * 2 - 1) * R, y = c + (rnd() * 2 - 1) * R, z = rnd() * size, reach = FIBER_HALF + FIBER_RADIUS;
+      if (!clear(x, y, z, reach)) continue;
+      const tilt = rnd() * FIBER_SPREAD, turn = rnd() * 2 * Math.PI, u = [Math.cos(tilt), Math.sin(tilt) * Math.cos(turn), Math.sin(tilt) * Math.sin(turn)];
+      items.push({ kind: 'fiber', x, y, z, reach, contains: (px, py, pz) => {
+        const t = Math.max(-FIBER_HALF, Math.min(FIBER_HALF, (px - x) * u[0] + (py - y) * u[1] + (pz - z) * u[2]));
+        return (px - x - t * u[0]) ** 2 + (py - y - t * u[1]) ** 2 + (pz - z - t * u[2]) ** 2 <= FIBER_RADIUS ** 2;
+      } });
+      n++;
+    }
+    for (let tries = 0, n = 0; n < FILLER_SPHERES && tries < 20000; tries++) {
+      const r = SPHERE_RADIUS[0] + rnd() * (SPHERE_RADIUS[1] - SPHERE_RADIUS[0]), x = c + (rnd() * 2 - 1) * R, y = c + (rnd() * 2 - 1) * R, z = rnd() * size;
+      if (!clear(x, y, z, r)) continue;
+      items.push({ kind: 'sphere', x, y, z, reach: r, contains: (px, py, pz) => (px - x) ** 2 + (py - y) ** 2 + (pz - z) ** 2 <= r * r });
+      n++;
+    }
+    return items;
   }
 
   // The L part for the CAD comparison, in part voxels (u, v, w): an L section in (u, w) extruded 40 voxels along v.

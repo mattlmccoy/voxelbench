@@ -26,8 +26,8 @@
     return { median, sd, threshold: median + k * sd, k };
   }
 
-  // Accumulator layout per label: n, sx, sy, sz, sxx, syy, szz, sxy, sxz, syz, clipped.
-  const N_ACC = 11;
+  // Accumulator layout per label: n, sx, sy, sz, sxx, syy, szz, sxy, sxz, syz (summed), clipped, peak gray (maxed).
+  const N_ACC = 12, SUMMED = 10;
 
   /** 26-connected bright components over full-grid slices (getSlice(z) → Uint16/Float array of nx*ny). keep(x, y, z)
       is the sample-mask test; circle (full grid) marks particles touching the FOV edge as clipped, as are those on the
@@ -41,8 +41,8 @@
       if (a === b) return;
       if (a > b) [a, b] = [b, a];
       parent[b] = a;
-      for (let k = 0; k < N_ACC - 1; k++) acc[N_ACC * a + k] += acc[N_ACC * b + k];
-      acc[N_ACC * a + 10] = Math.max(acc[N_ACC * a + 10], acc[N_ACC * b + 10]);
+      for (let k = 0; k < SUMMED; k++) acc[N_ACC * a + k] += acc[N_ACC * b + k];
+      for (let k = SUMMED; k < N_ACC; k++) acc[N_ACC * a + k] = Math.max(acc[N_ACC * a + k], acc[N_ACC * b + k]);
     };
     const fresh = () => {
       if (used === parent.length) {
@@ -60,11 +60,12 @@
       const s = getSlice(z), cur = new Array(ny);
       for (let y = 0; y < ny; y++) {
         const runs = [];
-        let x0 = -1;
+        let x0 = -1, peak = 0;
         for (let x = 0; x <= nx; x++) {
           const bright = x < nx && s[y * nx + x] >= threshold && !outsideCircle(x, y) && keep(x, y, z);
-          if (bright && x0 < 0) x0 = x;
-          if (!bright && x0 >= 0) { runs.push({ x0, x1: x - 1, label: -1 }); x0 = -1; }
+          if (bright && x0 < 0) { x0 = x; peak = 0; }
+          if (bright) peak = Math.max(peak, s[y * nx + x]);
+          if (!bright && x0 >= 0) { runs.push({ x0, x1: x - 1, peak, label: -1 }); x0 = -1; }
         }
         for (const r of runs) {
           const l = fresh(), o = N_ACC * l, n = r.x1 - r.x0 + 1;
@@ -74,6 +75,7 @@
           const edge = z === 0 || z === nz - 1 || y === 0 || y === ny - 1 || r.x0 === 0 || r.x1 === nx - 1
             || (circle && ((r.x0 - circle.cx) ** 2 + (y - circle.cy) ** 2 > rEdge || (r.x1 - circle.cx) ** 2 + (y - circle.cy) ** 2 > rEdge));
           acc[o + 10] = edge ? 1 : 0;
+          acc[o + 11] = r.peak;
           r.label = l;
           const join = (rows) => { if (rows) for (const q of rows) if (overlaps(q, r)) union(q.label, l); };
           if (y > 0) join(cur[y - 1]);
@@ -89,7 +91,7 @@
       if (parent[l] !== l) continue;
       const o = N_ACC * l;
       if (acc[o] < minVoxels) { dropped++; continue; }
-      particles.push({ id: particles.length + 1, voxels: acc[o], clipped: acc[o + 10] > 0, ...particleShape(acc.subarray(o, o + 10)) });
+      particles.push({ id: particles.length + 1, voxels: acc[o], clipped: acc[o + 10] > 0, peak: acc[o + 11], ...particleShape(acc.subarray(o, o + 10)) });
     }
     return { particles, dropped };
   }
@@ -179,5 +181,47 @@
       esd_p10_mm: quantile(esd, 0.1), esd_p50_mm: quantile(esd, 0.5), esd_p90_mm: quantile(esd, 0.9), orientation: orientationTensor(fibers) };
   }
 
-  return { robustThreshold, labelBright, particleShape, isFiber, dispersion, orientationTensor, summarize, FIBER_ASPECT, FIBER_MIN_LENGTH_VOX };
+  const MAX_THRESHOLD_SAMPLES = 2e6;
+
+  /** The measurement threshold: halfway between the matrix median and the bright phase's own gray, the median peak
+      gray of the particles found at the detection threshold, so volumes are not inflated by the blur around small
+      particles; never below detection, and detection itself when there are no particles. */
+  function measurementThreshold({ median, detection }, peaks) {
+    if (!peaks.length) return { bright_gray: null, threshold: detection };
+    const brightGray = medianOf(Float64Array.from(peaks).sort());
+    return { bright_gray: brightGray, threshold: Math.max(detection, (median + brightGray) / 2) };
+  }
+
+  /** The whole analysis on one scan: full-grid smoothed slices (getSlice), the binned sample mask (filled), the FOV
+      circle on the full grid. Particles are found at the detection threshold (median + k robust SD of the sampled
+      matrix gray), then labeled again at the measurement threshold, or at the given one. Lengths in the result are mm. */
+  function analyzeFiller({ getSlice, dims, filled, binnedDims, bin, voxelMm, circle = null, poreThreshold, k = 4, minVoxels = 8, threshold = null }) {
+    const b = binnedDims;
+    const keep = (x, y, z) => {
+      const bx = Math.floor(x / bin), by = Math.floor(y / bin), bz = Math.floor(z / bin);
+      return bx < b.nx && by < b.ny && bz < b.nz && filled[(bz * b.ny + by) * b.nx + bx] === 1;
+    };
+    let maskVoxels = 0;
+    for (let i = 0; i < filled.length; i++) maskVoxels += filled[i];
+    maskVoxels *= bin ** 3;
+    const stride = Math.max(1, Math.round(Math.cbrt(maskVoxels / MAX_THRESHOLD_SAMPLES)));
+    const values = [];
+    for (let z = 0; z < dims.nz; z += stride) {
+      const s = getSlice(z);
+      for (let y = 0; y < dims.ny; y += stride) for (let x = 0; x < dims.nx; x += stride) { const v = s[y * dims.nx + x]; if (v >= poreThreshold && keep(x, y, z)) values.push(v); }
+    }
+    const noise = robustThreshold(values, k);
+    const label = (level) => labelBright({ getSlice, dims, keep, threshold: level, minVoxels, circle });
+    const found = label(noise.threshold);
+    const m = measurementThreshold({ median: noise.median, detection: noise.threshold }, found.particles.filter((p) => !p.clipped).map((p) => p.peak));
+    const t = { detection: noise.threshold, median: noise.median, sd: noise.sd, k, bright_gray: m.bright_gray, threshold: threshold !== null ? threshold : m.threshold, manual: threshold !== null };
+    const { particles, dropped } = t.threshold === noise.threshold ? found : label(t.threshold);
+    const mm = particles.map((p) => ({ ...p, volume_mm3: p.voxels * voxelMm ** 3, esd_mm: p.esd_vox * voxelMm, length_mm: p.length_vox * voxelMm, diameter_mm: p.diameter_vox * voxelMm,
+      x_mm: p.centroid[0] * voxelMm, y_mm: p.centroid[1] * voxelMm, z_mm: p.centroid[2] * voxelMm, fiber: isFiber(p) }));
+    const d = dispersion(particles, maskVoxels);
+    return { threshold: t, particles: mm, dropped, summary: summarize(particles, { maskVoxels, voxelMm }), dispersion: { mean_nn_mm: d.mean_nn === null ? null : d.mean_nn * voxelMm, clark_evans: d.clark_evans },
+      nn_mm: Float32Array.from(d.nn, (v) => v * voxelMm), maskVoxels, minVoxels };
+  }
+
+  return { analyzeFiller, measurementThreshold, robustThreshold, labelBright, particleShape, isFiber, dispersion, orientationTensor, summarize, FIBER_ASPECT, FIBER_MIN_LENGTH_VOX };
 }));

@@ -1,6 +1,6 @@
 /* Runs pore detection off the page's main thread. The main thread sends the binned volume once, and sends full-
    resolution slices only when the smoothing changes; smoothed slices are kept here so threshold reruns are quick. */
-importScripts('ct_core.js', 'ct_pores.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js', 'vb_connectivity.js', 'vb_align.js', 'vb_deviation.js', 'vb_cad.js');
+importScripts('ct_core.js', 'ct_pores.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js', 'vb_connectivity.js', 'vb_align.js', 'vb_deviation.js', 'vb_cad.js', 'vb_filler.js');
 const P = self.CTPores, R = self.CTRegions, Z = self.CTZones, D = self.CTSheetData;
 const MODEL_DOWNSAMPLE = 2;
 const COARSE_STEP = 2; // binned voxels per coarse cell: 4 full voxels, about 0.16 mm at 40 um
@@ -180,6 +180,15 @@ onmessage = ({ data }) => {
       sendZones(data);
     } else if (data.type === 'sheet') {
       sendSheet(data);
+    } else if (data.type === 'filler') {
+      if (ensureBody(data.settings, data.crops)) sendModel();
+      if (!smoothed || smoothedSigma !== data.settings.fineSigma || smoothed.length !== vol.full.nz || !smoothed[vol.full.nz - 1]) {
+        postMessage({ type: 'filler', id: data.id, refused: 'Segment pores first: the filler analysis reads the smoothed slices that step makes.' });
+        return;
+      }
+      const r = self.VBFiller.analyzeFiller({ getSlice: (z) => smoothed[z], dims: vol.full, filled: body.filled, binnedDims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm, circle: vol.circle,
+        poreThreshold: data.settings.poreThreshold, k: data.k, minVoxels: data.minVoxels, threshold: data.threshold });
+      postMessage({ type: 'filler', id: data.id, ...r }, [r.nn_mm.buffer]);
     } else if (data.type === 'cad') {
       if (ensureBody(data.settings, data.crops)) sendModel();
       const r = self.VBCad.compareToCad({ gray: vol.gray, filled: body.filled, dims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm, circle: vol.circle, airGray,
