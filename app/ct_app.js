@@ -160,7 +160,7 @@ window.CTApp = (function () {
     return state.native;
   }
 
-  const provenance = () => CT.provenanceLine({ voxelMm: state.voxelMm, binFactor: state.binFactor, calibrated: false, toolVersion: window.VB_VERSION });
+  const provenance = () => CT.provenanceLine({ voxelMm: state.voxelMm, binFactor: state.binFactor, calibration: null, toolVersion: window.VB_VERSION });
 
   const unsavedOf = (collection) => [...state.unsaved.values()].filter((r) => r._collection === collection);
   // Records are kept on the grid they were drawn on and shown on the grid now loaded (CT.toGrid).

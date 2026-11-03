@@ -42,9 +42,9 @@ test('budgetBytes reads the URL override and lowers the budget on Safari', () =>
 });
 
 test('provenanceLine states resolution, binning, calibration and version', () => {
-  assert.equal(CT.provenanceLine({ voxelMm: 0.08, binFactor: 2, calibrated: false, toolVersion: '0.1.0' }),
+  assert.equal(CT.provenanceLine({ voxelMm: 0.08, binFactor: 2, calibration: null, toolVersion: '0.1.0' }),
     'Computed at 80 µm voxels (2× binned from 40 µm); smallest resolved pore ESD 0.24 mm; gray uncalibrated; VoxelBench 0.1.0');
-  assert.equal(CT.provenanceLine({ voxelMm: 0.04, binFactor: 1, calibrated: false, toolVersion: '0.1.0' }),
+  assert.equal(CT.provenanceLine({ voxelMm: 0.04, binFactor: 1, calibration: null, toolVersion: '0.1.0' }),
     'Computed at 40 µm voxels (full resolution); smallest resolved pore ESD 0.12 mm; gray uncalibrated; VoxelBench 0.1.0');
 });
 
@@ -108,4 +108,11 @@ test('new records note the grid they were drawn on', () => {
   assert.equal(a.tiff_file_number, 15, 'binned slice 7 starts at file 15');
   const r = R.makeRegion({ id: 'r', now: 't', sample: {}, plane: 'XY', sliceFrom: 0, sliceTo: 3, points: [{ col: 0, row: 0 }, { col: 5, row: 0 }, { col: 5, row: 5 }], label: 'crop', note: '', voxelMm: 0.08, dims, binFactor: 2 });
   assert.equal(r.bin_factor, 2);
+});
+
+test('provenanceLine names a calibration by its point count', () => {
+  const fit = { ok: true, method: 'linear', n: 3 };
+  assert.equal(CT.provenanceLine({ voxelMm: 0.04, binFactor: 1, calibration: fit, toolVersion: '0.1.0' }),
+    'Computed at 40 µm voxels (full resolution); smallest resolved pore ESD 0.12 mm; gray calibrated to equivalent density (3 points, linear); VoxelBench 0.1.0');
+  assert.match(CT.provenanceLine({ voxelMm: 0.04, binFactor: 1, calibration: { ok: false }, toolVersion: '0.1.0' }), /gray uncalibrated/);
 });

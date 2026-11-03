@@ -99,9 +99,9 @@ test('zoneCsv states that zones are not composition and carries the assigned lab
   assert.ok(lines.some((l) => l.startsWith('#') && /not composition/i.test(l)));
   assert.ok(lines.some((l) => l.startsWith('#') && l.includes('0.075')));
   const rows = lines.filter((l) => !l.startsWith('#'));
-  assert.equal(rows[0], 'zone,assigned_label,volume_mm3,porosity_percent,matrix_gray_mean,median_gray_offset');
-  assert.equal(rows[1], 'high_gray,Region B,3477,2.26,2155,0.117');
-  assert.equal(rows[2], 'drawn_region_b,unassigned,10,1,2000,0');
+  assert.equal(rows[0], 'zone,assigned_label,volume_mm3,porosity_percent,matrix_gray_mean,median_gray_offset,matrix_equivalent_density_g_cm3,matrix_equivalent_density_extrapolated');
+  assert.equal(rows[1], 'high_gray,Region B,3477,2.26,2155,0.117,,');
+  assert.equal(rows[2], 'drawn_region_b,unassigned,10,1,2000,0,,');
 });
 
 test('CSV headers carry the provenance line', () => {
@@ -110,4 +110,24 @@ test('CSV headers carry the provenance line', () => {
   for (const csv of [E.poreCsv([], new Set(), ctx), E.patchCsv([], ctx), E.zoneCsv({ threshold: 0.04, axis: 'x', stats: [] }, {}, ctx)]) {
     assert.ok(csv.split('\n').includes(`# ${provenance}`), csv.slice(0, 200));
   }
+});
+
+test('region and zone CSVs carry equivalent density only when calibrated', () => {
+  const C = require('../app/vb_calibration.js');
+  const fit = C.fitCalibration([{ name: 'Air', gray: 700, density: 0.0012 }, { name: 'rod', gray: 2000, density: 1.01 }]);
+  const region = { id: 'r1', label: 'region_a', plane: 'XY', slice_from: 1, slice_to: 5, note: '', stats: { voxels: 10, volume_mm3: 1, gray_mean: 1990, gray_sd: 30, matrix_gray_mean: 2000, pore_fraction: 0.01, pore_count: 1 }, density: null };
+  const air = { ...region, id: 'r2', stats: { ...region.stats, matrix_gray_mean: 300 } };
+  const rows = E.regionCsv([region, air], { calibration: fit }).trim().split('\n');
+  const data = rows.filter((l) => !l.startsWith('#'));
+  const head = data[0].split(',');
+  const at = (line, col) => line.split(',')[head.indexOf(col)];
+  assert.ok(Math.abs(Number(at(data[1], 'equivalent_density_g_cm3')) - 1.01) < 1e-9);
+  assert.equal(at(data[1], 'equivalent_density_extrapolated'), 'false');
+  assert.equal(at(data[2], 'equivalent_density_extrapolated'), 'true');
+  assert.ok(rows.some((l) => l.startsWith('#') && /equivalent density of the reference/i.test(l)));
+  const plain = E.regionCsv([region], {}).trim().split('\n').filter((l) => !l.startsWith('#'));
+  assert.equal(plain[1].split(',')[plain[0].split(',').indexOf('equivalent_density_g_cm3')], '');
+  const zone = E.zoneCsv({ threshold: 0.04, axis: 'x', stats: [{ zone: 2, volume_mm3: 1, void_percent: 1, solid_gray_mean: 2000, excess_median: 0.1 }] }, {}, { sample: { folder: 'S', name: 'S' }, calibration: fit }).trim().split('\n').filter((l) => !l.startsWith('#'));
+  const zh = zone[0].split(',');
+  assert.ok(Math.abs(Number(zone[1].split(',')[zh.indexOf('matrix_equivalent_density_g_cm3')]) - 1.01) < 1e-9);
 });

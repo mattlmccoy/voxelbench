@@ -124,10 +124,11 @@
     return out;
   }
 
-  function provenanceLine({ voxelMm, binFactor, calibrated, toolVersion }) {
+  function provenanceLine({ voxelMm, binFactor, calibration, toolVersion }) {
+    const cal = calibration && calibration.ok ? `calibrated to equivalent density (${calibration.n} points, ${calibration.method})` : 'uncalibrated';
     const um = (mm) => `${Math.round(1000 * mm)} µm`;
     const res = binFactor > 1 ? `${gridText(binFactor)} from ${um(voxelMm / binFactor)}` : gridText(1);
-    return `Computed at ${um(voxelMm)} voxels (${res}); smallest resolved pore ESD ${(3 * voxelMm).toFixed(2)} mm; gray ${calibrated ? 'calibrated' : 'uncalibrated'}; VoxelBench ${toolVersion}`;
+    return `Computed at ${um(voxelMm)} voxels (${res}); smallest resolved pore ESD ${(3 * voxelMm).toFixed(2)} mm; gray ${cal}; VoxelBench ${toolVersion}`;
   }
 
   /** What the user recorded about a scan folder; a folder nobody described keeps its own name and blank fields. */
