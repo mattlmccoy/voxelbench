@@ -1,0 +1,381 @@
+<title>VoxelBench</title>
+<meta name="description" content="Review and measure X-ray CT scans of polymer parts in the browser; scans never leave the computer.">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap">
+<style>
+/* Layout and tokens follow the FLIR Research Interface: top bar, tool strip, center views, right rail, status bar. */
+:root {
+  color-scheme: dark;
+  --bg: #101418; --bg-deep: #0b0e12; --panel: #141920; --line: #232a33; --line-strong: #2f3843; --line-control: #4a5561;
+  --fg: #d7dde5; --fg-strong: #f5f7fa; --muted: #8b97a5; --accent: #ffb454; --accent-ink: #101418;
+  --live: #5cff8a; --warn-bg: rgba(255, 180, 84, .10); --err: #ff5f56; --err-bg: rgba(255, 95, 86, .12);
+  --plane-xy: #ffb454; --plane-xz: #6ec3ff; --plane-yz: #ff8ad8;
+  --image-bg: #000; --scrim: rgba(11, 14, 18, .85); --radius: 3px;
+  --font-ui: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "Space Mono", "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 13px/1.4 var(--font-ui); overflow: hidden; }
+button, select, input { font: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 11px; }
+.muted { color: var(--muted); }
+.bad { color: var(--err); }
+
+.studio { height: 100%; display: grid; grid-template: 40px 34px minmax(0, 1fr) 28px / minmax(0, 1fr) 380px; grid-template-areas: "top top" "strip rail" "center rail" "status status"; }
+.topbar { grid-area: top; display: flex; align-items: center; gap: 14px; padding: 0 max(14px, env(safe-area-inset-right, 0px)) 0 max(14px, env(safe-area-inset-left, 0px)); background: var(--bg-deep); border-bottom: 1px solid var(--line); min-width: 0; }
+.wordmark { font-family: var(--font-mono); font-weight: 700; letter-spacing: .12em; color: var(--fg-strong); white-space: nowrap; }
+.crumb { color: var(--fg-strong); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.conn { margin-left: auto; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); flex: none; }
+.dot.live { background: var(--live); box-shadow: 0 0 8px rgba(92, 255, 138, .7); }
+.dot.warn { background: var(--accent); }
+.dot.err { background: var(--err); }
+button { background: transparent; color: var(--fg); border: 1px solid var(--line-control); padding: 4px 10px; border-radius: var(--radius); cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary, .filebtn { background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); font-weight: 600; }
+.filebtn { padding: 4px 10px; border-radius: var(--radius); cursor: pointer; white-space: nowrap; }
+.topbar button { white-space: nowrap; }
+.projectnote { font-size: 11px; max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filebtn input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.filebtn:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--warn-bg); }
+select, input[type=number], input[type=text] { background: var(--bg-deep); color: var(--fg); border: 1px solid var(--line-control); border-radius: var(--radius); padding: 3px 6px; min-width: 0; max-width: 100%; }
+input[type=number] { width: 78px; }
+input[type=range] { accent-color: var(--accent); }
+
+.strip { grid-area: strip; background: var(--bg-deep); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 6px; padding: 0 8px; min-width: 0; }
+.strip button { height: 24px; padding: 0 9px; white-space: nowrap; }
+.strip .toolhint { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+.center { grid-area: center; display: grid; grid-template: minmax(0, 1fr) 190px / repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); min-width: 0; min-height: 0; position: relative; }
+.pane { position: relative; display: grid; grid-template-rows: 24px minmax(0, 1fr) auto; background: var(--image-bg); min-width: 0; min-height: 0; }
+.pane.main { grid-column: 1 / -1; grid-row: 1; }
+.pane:not(.main) canvas { cursor: pointer; }
+.pane:not(.main) .panehead { cursor: pointer; }
+.pane.with-vertical { grid-template-columns: 22px minmax(0, 1fr); grid-template-rows: 24px minmax(0, 1fr); }
+.pane.with-vertical .panehead { grid-column: 1 / -1; }
+.panehead { display: flex; align-items: center; gap: 8px; padding: 0 8px; background: var(--bg-deep); white-space: nowrap; overflow: hidden; border-top: 2px solid var(--plane, var(--line-strong)); }
+.panehead b { font-family: var(--font-mono); color: var(--fg-strong); }
+.panehead .mono { margin-left: auto; color: var(--muted); }
+.canvasbox { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.canvasbox canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; cursor: crosshair; }
+.pane.dragging .canvasbox canvas { cursor: grabbing; }
+.slicebar { height: 18px; width: 100%; margin: 0; background: var(--bg-deep); display: block; }
+.slicebar.vertical { writing-mode: vertical-lr; direction: ltr; width: 22px; height: 100%; }
+.canvasnote { position: absolute; left: 8px; top: 8px; background: var(--scrim); border-left: 2px solid var(--accent); padding: 4px 8px; pointer-events: none; }
+.empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; color: var(--muted); }
+.startup { grid-column: 1 / -1; grid-row: 1 / -1; background: var(--bg); display: grid; place-content: center; gap: 12px; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px; max-width: 640px; margin: 0 auto; z-index: 2; }
+.startup h1 { font: 700 18px var(--font-mono); letter-spacing: .08em; color: var(--fg-strong); margin: 0; text-wrap: balance; }
+.startup p { margin: 0; }
+.progress { height: 3px; background: var(--line-strong); }
+.progress div { height: 100%; width: 0; background: var(--accent); }
+
+.rail { grid-area: rail; background: var(--panel); border-left: 1px solid var(--line); display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.steps { overflow-y: auto; overflow-x: hidden; min-height: 0; }
+.rail details { border-bottom: 1px solid var(--line); }
+.rail summary { padding: 9px 12px; cursor: pointer; user-select: none; font: 700 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-strong); display: flex; gap: 8px; align-items: center; }
+.rail summary .tag { margin-left: auto; color: var(--muted); letter-spacing: 0; text-transform: none; font-weight: 400; }
+.rail .step > summary .num { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-control); color: var(--muted); font-weight: 700; letter-spacing: 0; }
+.rail .step[open] > summary .num { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.rail .body { padding: 2px 12px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.rail .sub { border: 1px solid var(--line); border-radius: var(--radius); }
+.rail .sub > summary { font: 500 12px var(--font-ui); letter-spacing: 0; text-transform: none; padding: 6px 8px; color: var(--fg); }
+.rail .sub > div { padding: 2px 8px 8px; display: grid; gap: 8px; }
+.draftpanel { padding: 10px 12px; border-bottom: 1px solid var(--accent); background: var(--warn-bg); display: flex; flex-direction: column; gap: 8px; }
+.headline { font: 700 18px var(--font-mono); color: var(--fg-strong); }
+.headline small { font: 400 12px var(--font-ui); color: var(--muted); display: block; }
+.legend { border-top: 1px solid var(--line-strong); background: var(--bg-deep); max-height: 40vh; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.legendhead { display: flex; align-items: center; padding: 6px 12px; gap: 8px; font: 700 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-strong); }
+.legendhead button { margin-left: auto; padding: 0 8px; font: 400 11px var(--font-mono); letter-spacing: 0; text-transform: none; }
+.legendbody { overflow-y: auto; padding: 0 12px 10px; display: grid; gap: 3px; min-height: 0; }
+.layer { all: unset; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 0 8px; cursor: pointer; padding: 3px 0; align-items: start; position: relative; }
+.layer[aria-pressed] { background: none; border: 0; color: inherit; }
+.layer:focus-visible { outline: 2px solid var(--accent); }
+.layer .chip { width: 12px; height: 12px; border-radius: 3px; margin-top: 2px; border: 1px solid transparent; }
+.layer[aria-pressed="false"] .chip { background: transparent !important; border-color: var(--line-control) !important; }
+.layer[aria-pressed="false"] .lname { color: var(--muted); }
+.layer .lname { font-weight: 500; color: var(--fg); }
+.layer .lname .count { font: 11px var(--font-mono); color: var(--muted); margin-left: 6px; }
+.layer .ldesc { grid-column: 2; font-size: 11px; color: var(--muted); line-height: 1.3; }
+.legendgroup { font: 11px var(--font-mono); color: var(--muted); margin-top: 6px; }
+.legendcontrols { display: grid; gap: 4px; margin-top: 6px; }
+.legendcontrols label { display: grid; grid-template-columns: 74px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.legendcontrols input[type=range] { width: 100%; margin: 0; }
+.viewtoggle { display: grid; grid-template-columns: 74px 1fr 1fr; gap: 0; align-items: center; }
+.viewtoggle button { border-radius: 0; }
+.viewtoggle button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.legend.collapsed .legendbody { display: flex; flex-wrap: wrap; gap: 10px; overflow: visible; padding-bottom: 8px; position: relative; }
+.legend.collapsed .lname, .legend.collapsed .ldesc, .legend.collapsed .legendgroup, .legend.collapsed .legendcontrols { display: none; }
+.legend.collapsed .layer { display: block; padding: 2px; position: static; }
+.legend.collapsed .layer .chip { display: block; width: 16px; height: 16px; margin: 0; }
+.legend.collapsed .layer:hover::after, .legend.collapsed .layer:focus-visible::after { content: attr(data-tip); position: absolute; left: 12px; right: 12px; bottom: calc(100% + 34px); background: var(--bg-deep); color: var(--fg); border: 1px solid var(--line-control); border-radius: var(--radius); padding: 6px 9px; font: 12px/1.35 var(--font-ui); z-index: 60; pointer-events: none; white-space: normal; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.row > label { display: inline-flex; gap: 5px; align-items: center; }
+.setting { display: grid; grid-template-columns: minmax(0, 1fr) 90px; gap: 2px 8px; align-items: center; }
+.setting input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0; }
+.setting .v { text-align: right; color: var(--accent); }
+.hint { margin: 0; color: var(--muted); font-size: 12px; }
+.pickrow { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; align-items: center; margin: 4px 0; }
+.sampleform { display: grid; gap: 4px; margin-bottom: 8px; }
+.sampleform label { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; align-items: center; }
+.kv { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 2px 12px; }
+.kv .v { text-align: right; color: var(--accent); overflow-wrap: anywhere; }
+.swatch { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+.tablewrap { overflow: auto; max-height: 240px; border: 1px solid var(--line); }
+table { border-collapse: collapse; width: 100%; font-size: 11px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+th { position: sticky; top: 0; background: var(--bg-deep); color: var(--muted); text-align: right; font-weight: 400; }
+th, td { padding: 3px 6px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+td select { width: 106px; padding: 1px 3px; font: 11px var(--font-ui); }
+tr.pick { cursor: pointer; }
+tr.pick:hover td { background: var(--warn-bg); }
+tr.selected td { background: var(--warn-bg); color: var(--accent); }
+tr.rejected td { color: var(--muted); text-decoration: line-through; }
+td .link { all: unset; cursor: pointer; color: var(--accent); }
+td .link:focus-visible { outline: 2px solid var(--accent); }
+.log { list-style: none; margin: 0; padding: 0; display: grid; max-height: 220px; overflow-y: auto; }
+.log li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 6px 0; border-top: 1px solid var(--line); align-items: start; }
+.log li:first-child { border-top: 0; }
+.log .jump { all: unset; cursor: pointer; display: grid; gap: 1px; min-width: 0; overflow-wrap: anywhere; }
+.log .jump:focus-visible { outline: 2px solid var(--accent); }
+.log .jump:hover .title { color: var(--accent); }
+.title { font-weight: 500; }
+.notice { background: var(--warn-bg); color: var(--accent); padding: 6px 8px; border-radius: var(--radius); }
+.error { background: var(--err-bg); color: var(--err); padding: 6px 8px; border-radius: var(--radius); }
+
+.statusbar { grid-area: status; display: flex; align-items: center; gap: 14px; padding: 0 max(14px, env(safe-area-inset-right, 0px)) 0 max(14px, env(safe-area-inset-left, 0px)); background: var(--bg-deep); border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+.statusbar button { padding: 0 8px; height: 22px; line-height: 20px; }
+.statusbar input { height: 22px; width: 62px; padding: 0 4px; }
+.statusbar .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.statusbar #readout { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  html, body { height: auto; }
+  .studio { height: auto; grid-template: auto auto auto auto auto / minmax(0, 1fr); grid-template-areas: "top" "strip" "center" "rail" "status"; }
+  .pane.main { grid-column: auto; grid-row: auto; order: -1; }
+  .steps { overflow: visible; }
+  .legend { max-height: none; }
+  .topbar { height: auto; min-height: 40px; flex-wrap: wrap; padding-block: 6px; }
+  .conn { margin-left: 0; white-space: normal; }
+  .strip { flex-wrap: wrap; padding-block: 5px; }
+  .center { grid-template: 380px repeat(3, 240px) / minmax(0, 1fr); }
+  .startup { grid-row: 1 / -1; }
+  .rail { border-left: 0; display: block; }
+  .statusbar { flex-wrap: wrap; white-space: normal; padding-block: 4px; }
+  .statusbar .right { margin-left: 0; flex-wrap: wrap; }
+}
+</style>
+
+<div class="studio">
+  <header class="topbar">
+    <span class="wordmark">VOXELBENCH</span>
+    <span class="crumb" id="crumb">X-ray computed tomography (CT) of polymer parts</span>
+    <select id="sampleSelect" aria-label="Scan" hidden></select>
+    <label class="filebtn">Open scan folder<input type="file" id="folder" webkitdirectory multiple></label>
+    <label class="filebtn">Open project<input type="file" id="projectFile" accept=".json,application/json"></label>
+    <button id="saveProject" hidden title="Save regions, annotations and runs to a file kept next to the scan">Save project</button>
+    <span class="mono muted projectnote" id="projectNote" role="status"></span>
+    <span class="conn mono" role="status"><span class="dot" id="dbDot"></span><span id="saveState"></span></span>
+  </header>
+
+  <nav class="strip" id="strip" aria-label="Tools"></nav>
+
+  <main class="center" id="center">
+    <div class="startup" id="startup">
+      <h1>Open a scan folder to begin</h1>
+      <p>Select a folder of scan folders, or one scan folder. Slices are read in this browser; no image data leaves this computer (the browser may label this an upload). Regions, annotations and results are kept in a project file you save, or in the shared database when this page runs on claude.ai.</p>
+      <div class="row"><button id="trySynthetic" title="A generated 160-voxel cube with 40 known pores; nothing to download">Try a synthetic test scan</button></div>
+      <div class="progress" id="progressBar" hidden><div></div></div>
+      <p class="mono muted" id="openerText"></p>
+      <p class="error" id="loadError" hidden></p>
+      <div class="tablewrap" style="max-height:none"><table id="startSamples"></table></div>
+    </div>
+    <section class="pane with-vertical main" id="paneXY" style="--plane: var(--plane-xy)"></section>
+    <section class="pane" id="pane3D" style="--plane: var(--line-control)">
+      <div class="panehead"><b>3D</b><span class="mono" id="modelState"></span></div>
+      <div class="canvasbox" id="modelBox"><div class="empty" id="modelEmpty">The part model appears after a scan loads.</div></div>
+    </section>
+    <section class="pane" id="paneXZ" style="--plane: var(--plane-xz)"></section>
+    <section class="pane" id="paneYZ" style="--plane: var(--plane-yz)"></section>
+  </main>
+
+  <aside class="rail" id="rail">
+    <div class="steps">
+      <div class="draftpanel" id="draftPanel" hidden>
+        <p class="hint" id="toolHintLong"></p>
+        <div class="row" id="types" role="group" aria-label="Feature type"></div>
+        <div class="row" id="regionLabels" role="group" aria-label="Region label" hidden></div>
+        <div class="row" id="rangeBar" hidden>
+          <label>Slices <input type="number" id="rangeFrom" min="0"></label>
+          <label>to <input type="number" id="rangeTo" min="0"></label>
+        </div>
+        <div class="row" id="draftBar" hidden>
+          <input type="text" id="note" placeholder="Note (optional)" autocomplete="off" style="flex:1 1 140px">
+          <button id="saveDraft" class="primary">Save</button>
+          <button id="finishPolygon">Close outline</button>
+          <button id="discardDraft">Discard</button>
+        </div>
+        <div class="row"><button id="doneTool">Done drawing</button></div>
+      </div>
+
+      <details class="step" name="steps" id="step1">
+        <summary><span class="num">1</span>Crop <span class="tag" id="cropTag">optional</span></summary>
+        <div class="body">
+          <p class="hint">Exclude voxels that are not sample. The polygon is extruded through the full depth of the view it is drawn on. To remove the holder below the sample, draw on XZ or YZ.</p>
+          <div class="row"><button class="primary" id="drawCrop" disabled>Draw crop polygon</button></div>
+          <div class="tablewrap" id="cropWrap" hidden><table id="cropTable"></table></div>
+        </div>
+      </details>
+
+      <details class="step" name="steps" id="step2" open>
+        <summary><span class="num">2</span>Pore segmentation <span class="tag" id="poreTag">not run</span></summary>
+        <div class="body">
+          <div class="row">
+            <button class="primary" id="runPores" disabled>Segment pores</button>
+            <button id="reviewVoids" disabled aria-pressed="false">Reject pores by click</button>
+          </div>
+          <p class="mono muted" id="poreStatus">Open a scan first.</p>
+          <div class="headline" id="voidHeadline" hidden></div>
+          <div class="kv mono" id="poreSummary"></div>
+          <label class="setting" id="minVoidRow" hidden><span>Minimum ESD in 3D view</span><span class="v mono" id="minVoidValue"></span><input type="range" id="minVoid" min="0" max="1" step="0.05" value="0"></label>
+          <details class="sub">
+            <summary>Pore and low-density region list</summary>
+            <div>
+              <div class="row" id="poreFilter" role="group" aria-label="List filter"></div>
+              <div class="tablewrap"><table id="poreTable"></table></div>
+              <p class="hint" id="poreTableNote"></p>
+            </div>
+          </details>
+          <details class="sub">
+            <summary>Segmentation parameters</summary>
+            <div>
+              <div id="poreSettings" style="display:grid;gap:8px"></div>
+              <div class="row"><button id="resetSettings">Default parameters</button></div>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details class="step" name="steps" id="step3">
+        <summary><span class="num">3</span>Gray-value zones <span class="tag" id="zoneTag"></span></summary>
+        <div class="body">
+          <p class="hint">Segments zones by gray offset: local matrix gray relative to the pore-free ends of the long axis at equal depth below the surface. Gray value reflects bulk attenuation, not composition.</p>
+          <div class="row">
+            <button class="primary" id="draftZones" disabled>Segment zones</button>
+            <button id="drawRegion" disabled>Draw region</button>
+          </div>
+          <details class="sub">
+            <summary>Region labels</summary>
+            <div>
+              <div id="labelList"></div>
+              <div class="row"><button id="addLabel">Add label</button><span class="mono muted" id="labelNote"></span></div>
+              <p class="hint">Labels are your assignments, not measurements. Deleting a label keeps regions drawn with it; they show as (deleted label).</p>
+            </div>
+          </details>
+          <p class="hint" id="zoneNote"></p>
+          <label class="pickrow">Baseline <select id="zoneBaseline"><option value="whole" selected>Whole part (median)</option><option value="ends">Pore-free ends of the long axis</option></select></label>
+          <label class="setting" id="zoneThresholdRow" hidden><span>High-gray threshold (gray offset)</span><span class="v mono" id="zoneThresholdValue"></span><input type="range" id="zoneThreshold" min="0.01" max="0.2" step="0.005"></label>
+          <div class="tablewrap" id="zoneWrap" hidden><table id="zoneTable"></table></div>
+          <div class="tablewrap" id="regionWrap" hidden><table id="regionTable"></table></div>
+          <details class="sub">
+            <summary>Relative density from a reference region</summary>
+            <div>
+              <div class="row">
+                <label>Reference <select id="referenceRegion"></select></label>
+                <label>Reference g/cm³ <input type="number" id="referenceDensity" step="0.01" min="0" placeholder="optional"></label>
+              </div>
+              <p class="hint mono" id="airNote"></p>
+              <p class="hint">Relative density: air 0, reference region 1. g/cm³ scales by the reference density entered; assumes equal mass attenuation for all phases and no beam-hardening correction.</p>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details class="step" name="steps" id="step4">
+        <summary><span class="num">4</span>Annotations and export <span class="tag" id="logTag"></span></summary>
+        <div class="body">
+          <div class="row">
+            <button id="exportSheet" class="primary" disabled>Review sheet (PDF)</button>
+            <button id="savePoreRun" disabled>Save run</button>
+            <button id="exportPores" disabled>Pore table (CSV)</button>
+            <button id="exportPatches" disabled>Low-density regions (CSV)</button>
+            <button id="exportZones" disabled>Zone table (CSV)</button>
+            <button id="exportRegions" disabled>Region table (CSV)</button>
+            <button id="exportNotes">Annotations (CSV)</button>
+            <button id="exportMask" disabled>Pore label volume (NumPy, zipped)</button>
+          </div>
+          <p class="mono muted" id="exportStatus"></p>
+          <ul class="log" id="log"></ul>
+          <p class="hint" id="logEmpty">No annotations for this sample. Use Point, Measure or Outline in the toolbar.</p>
+        </div>
+      </details>
+
+      <details id="secScan">
+        <summary>Scan information <span class="tag" id="scanTag"></span></summary>
+        <div class="body">
+          <div class="sampleform" id="sampleForm">
+            <label>Name <input type="text" id="sampleName" autocomplete="off"></label>
+            <label>Material <input type="text" id="sampleMaterial" placeholder="e.g. PA12" autocomplete="off"></label>
+            <label>Process <input type="text" id="sampleProcess" placeholder="e.g. SLS, as printed" autocomplete="off"></label>
+            <label>Notes <input type="text" id="sampleNotes" autocomplete="off"></label>
+            <div class="row"><button id="saveSample" disabled>Save sample details</button><span class="mono muted" id="sampleState"></span></div>
+          </div>
+          <div class="kv mono" id="facts"></div>
+          <p class="hint">Gray values are uncalibrated (no reference phantoms). Navy: outside the reconstructed field of view (FOV); dashed cyan line: FOV edge. Holders, packaging and reconstruction artifacts are not sample; crop them out in step 1.</p>
+          <div class="tablewrap"><table id="railSamples"></table></div>
+        </div>
+      </details>
+    </div>
+
+    <section class="legend" id="legend" aria-label="What is shown">
+      <div class="legendhead">Layers <button id="legendToggle">Collapse</button></div>
+      <div class="legendbody">
+        <div id="layerToggles" style="display:contents"></div>
+        <div class="legendcontrols">
+          <div class="viewtoggle" role="group" aria-label="Slice color map"><span>View</span><button id="viewGray" aria-pressed="true">Grayscale</button><button id="viewRainbow" aria-pressed="false" title="Turbo color map, air black, smoothed σ = 1.5 voxels for display only">Rainbow</button></div>
+          <label>Fill <input type="range" id="fill" min="0.1" max="1" step="0.05" value="0.5"><span class="mono" id="fillValue"></span></label>
+          <label>Window low <input type="range" id="lowRange" min="0" aria-label="Darkest gray shown"><input type="number" id="low" min="0" step="50" aria-label="Darkest gray shown, value"></label>
+          <label>Window high <input type="range" id="highRange" min="1" aria-label="Brightest gray shown"><input type="number" id="high" min="1" step="50" aria-label="Brightest gray shown, value"></label>
+          <div class="row"><button id="autoWindow" title="0 to the 99.9th percentile">Auto window</button><button id="saveSlice" title="The main slice as shown, at the loaded resolution">Save slice (PNG)</button></div>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <footer class="statusbar mono">
+    <span id="readout">Move over a slice to read its voxel.</span>
+    <span class="right">
+      <button id="zoomOut" aria-label="Zoom out">−</button>
+      <button id="zoomIn" aria-label="Zoom in">+</button>
+      <button id="zoomFit">Fit</button>
+      <label>Main view <input type="number" id="widthMm" min="1" step="1" aria-label="Width of the main view in millimeters"> mm wide</label>
+      <span id="scaleNote"></span>
+    </span>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="version.js"></script>
+<script src="ct_core.js"></script>
+<script src="vb_synthetic.js"></script>
+<script src="vb_store.js"></script>
+<script src="vb_volume.js"></script>
+<script src="ct_display.js"></script>
+<script src="ct_pores.js"></script>
+<script src="ct_regions.js"></script>
+<script src="ct_zones.js"></script>
+<script src="ct_export.js"></script>
+<script src="ct_sheetdata.js"></script>
+<script src="ct_plot.js"></script>
+<script src="ct_app.js"></script>
+<script src="ct_views.js"></script>
+<script src="ct_model.js"></script>
+<script src="ct_rail.js"></script>
+<script src="ct_sheet.js"></script>
+<script src="ct_sheetpages.js"></script>
+<script src="ct_sheetexport.js"></script>
+<script>CTApp.start();</script>

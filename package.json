@@ -1,0 +1,11 @@
+{
+  "name": "voxelbench",
+  "version": "0.1.0",
+  "description": "Browser tool for reviewing and measuring X-ray CT scans of polymer parts",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:local": "NODE_OPTIONS=--max-old-space-size=12000 node --test tests/local/*.test.js"
+  }
+}
