@@ -22,7 +22,7 @@ test('annotationCsv quotes notes with commas and quotes, and flattens the points
   const a = { id: 'a1', created_at: 't', sample: { folder: 'S2', name: 'Cube A', material: 'PA12', process: 'SLS' }, plane: 'XY', slice: 5, kind: 'caliper', type: 'crack',
     note: 'long, "wide" crack', length_mm: 2, voxels: [{ x: 1, y: 2, z: 5 }, { x: 3, y: 4, z: 5 }], mm: [{ x: 0.04, y: 0.08, z: 0.2 }, { x: 0.12, y: 0.16, z: 0.2 }], window: { low: 0, high: 3000 } };
   const lines = E.annotationCsv([a]).trim().split('\n');
-  assert.equal(lines[0], 'id,created_at,folder,name,material,process,plane,slice,kind,type,length_mm,area_mm2,window_low,window_high,note,voxels_xyz,mm_xyz');
+  assert.equal(lines[0], 'id,created_at,folder,name,material,process,plane,slice,kind,type,length_mm,area_mm2,window_low,window_high,note,voxels_xyz,mm_xyz,nominal_mm,tol_minus_mm,tol_plus_mm,deviation_mm,pass');
   assert.ok(lines[1].includes('"long, ""wide"" crack"'));
   assert.ok(lines[1].includes('1 2 5;3 4 5'));
   assert.ok(lines[1].includes(',2,,0,3000,'));
@@ -178,4 +178,14 @@ test('the filler CSV has one row per particle with its shape, fiber and noise fl
   assert.equal(data[1].split(',')[14], 'true');
   assert.ok(lines.some((l) => l.startsWith('#') && /detection 2040/.test(l) && /measurement 2425/.test(l)));
   assert.ok(lines.some((l) => l.startsWith('#') && /near_noise/.test(l)));
+});
+
+test('the annotation CSV carries the nominal, tolerances, deviation and pass of a toleranced measurement', () => {
+  const base = { id: 'a1', created_at: 't', sample: { folder: 'S', name: 'S', material: '', process: '' }, plane: 'XY', slice: 3, kind: 'measure', type: 'length', window: { low: 0, high: 1 }, note: '', voxels: [], mm: [] };
+  const csv = E.annotationCsv([{ ...base, length_mm: 10.03, nominal_mm: 10, tol_minus_mm: 0.05, tol_plus_mm: 0.02 }, { ...base, id: 'a2', length_mm: 4 }]);
+  const lines = csv.trim().split('\n'), head = lines[0].split(',');
+  for (const c of ['nominal_mm', 'tol_minus_mm', 'tol_plus_mm', 'deviation_mm', 'pass']) assert.ok(head.includes(c), c);
+  const cell = (r, c) => lines[r].split(',')[head.indexOf(c)];
+  assert.equal(cell(1, 'pass'), 'false'); assert.equal(cell(1, 'deviation_mm'), '0.03');
+  assert.equal(cell(2, 'pass'), ''); assert.equal(cell(2, 'nominal_mm'), '');
 });

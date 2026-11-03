@@ -1,8 +1,8 @@
 /* Files for analysis outside the page: pore and annotation tables, region reports, and a NumPy label volume. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_calibration.js'));
-  else root.CTExport = factory(root.VBCalibration);
-}(typeof self !== 'undefined' ? self : this, function (C) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_calibration.js'), require('./ct_core.js'));
+  else root.CTExport = factory(root.VBCalibration, root.CT);
+}(typeof self !== 'undefined' ? self : this, function (C, C2) {
   'use strict';
 
   const CHUNK_ROWS = 1500;
@@ -68,10 +68,15 @@
   }
 
   function annotationCsv(annotations) {
-    const header = ['id', 'created_at', 'folder', 'name', 'material', 'process', 'plane', 'slice', 'kind', 'type', 'length_mm', 'area_mm2', 'window_low', 'window_high', 'note', 'voxels_xyz', 'mm_xyz'];
+    const header = ['id', 'created_at', 'folder', 'name', 'material', 'process', 'plane', 'slice', 'kind', 'type', 'length_mm', 'area_mm2', 'window_low', 'window_high', 'note', 'voxels_xyz', 'mm_xyz',
+      'nominal_mm', 'tol_minus_mm', 'tol_plus_mm', 'deviation_mm', 'pass'];
     const xyz = (list) => list.map((p) => `${p.x} ${p.y} ${p.z}`).join(';');
-    return [row(header), ...annotations.map((a) => row([a.id, a.created_at, a.sample.folder, a.sample.name, a.sample.material, a.sample.process, a.plane, a.slice, a.kind, a.type,
-      a.length_mm, a.area_mm2, a.window.low, a.window.high, a.note, xyz(a.voxels), xyz(a.mm)]))].join('\n') + '\n';
+    const r5 = (v) => (Number.isFinite(v) ? Number(v.toFixed(5)) : null);
+    return [row(header), ...annotations.map((a) => {
+      const check = C2.dimensionCheck(a.length_mm, a.nominal_mm, a.tol_minus_mm, a.tol_plus_mm);
+      return row([a.id, a.created_at, a.sample.folder, a.sample.name, a.sample.material, a.sample.process, a.plane, a.slice, a.kind, a.type,
+        a.length_mm, a.area_mm2, a.window.low, a.window.high, a.note, xyz(a.voxels), xyz(a.mm), a.nominal_mm ?? null, a.tol_minus_mm ?? null, a.tol_plus_mm ?? null, r5(check.deviation), check.pass]);
+    })].join('\n') + '\n';
   }
 
   // Calibration comment line, shared by the region and zone tables.

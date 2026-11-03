@@ -314,6 +314,11 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
           <p class="mono muted" id="exportStatus"></p>
           <ul class="log" id="log"></ul>
           <p class="hint" id="logEmpty">No annotations for this sample. Use Point, Measure or Outline in the toolbar.</p>
+          <div id="dimWrap" hidden>
+            <p class="mono" id="dimSummary"></p>
+            <div class="tablewrap"><table id="dimTable"></table></div>
+            <p class="hint">Dimensions: each Measure line with a nominal passes when nominal − tol ≤ measured ≤ nominal + tol. The measured length is between the clicked points on the slice, at the loaded voxel size.</p>
+          </div>
         </div>
       </details>
 
@@ -449,6 +454,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 <script src="vb_cadrail.js"></script>
 <script src="vb_cad3d.js"></script>
 <script src="vb_fillerrail.js"></script>
+<script src="vb_dimrail.js"></script>
 <script src="ct_sheet.js"></script>
 <script src="ct_sheetpages.js"></script>
 <script src="ct_sheetexport.js"></script>

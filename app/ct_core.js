@@ -137,6 +137,14 @@
     return { folder, name: (s && s.name) || folder, material: (s && s.material) || '', process: (s && s.process) || '', notes: (s && s.notes) || '', calibration_air: !(s && s.calibration_air === false), cad: (s && s.cad) || null };
   }
 
+  /** A measured dimension against its nominal: deviation = measured − nominal, passing when −tolMinus ≤ deviation ≤
+      tolPlus (edges included, to 1e-9 mm); both null without a nominal. */
+  function dimensionCheck(measured, nominal, tolMinus, tolPlus) {
+    if (!Number.isFinite(measured) || !Number.isFinite(nominal)) return { deviation: null, pass: null };
+    const deviation = measured - nominal;
+    return { deviation, pass: deviation >= -tolMinus - 1e-9 && deviation <= tolPlus + 1e-9 };
+  }
+
   /** The sample's full record with changes merged in, so a step that saves one field keeps the others; pending is an
       edit saved but not yet back from the store, merged before the changes. */
   function sampleRecord(folder, samples, changes, pending = null) {
@@ -325,7 +333,7 @@
   }
 
   return {
-    FEATURE_TYPES, parseTiff, writeTiff, groupStacks, sampleInfo, sampleRecord, gridText, toGrid, provenanceLine, planeShape, voxelOf, planeOf,
+    FEATURE_TYPES, parseTiff, writeTiff, groupStacks, sampleInfo, sampleRecord, dimensionCheck, gridText, toGrid, provenanceLine, planeShape, voxelOf, planeOf,
     extractPlane, canvasToPlane, fitView, scaleForWidthMm, widthMmAtScale, centerOn, clampScale, zoomAt, autoWindow, grayToRgba, fitCircle, insideCircle, chordAt, makeAnnotation,
   };
 }));

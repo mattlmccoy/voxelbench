@@ -275,3 +275,11 @@ test('sampleRecord merges a pending (not yet stored) edit before the new changes
   assert.equal(r.name, 'New'); assert.equal(r.notes, 'new notes'); assert.equal(r.cad.file, 'p.stl');
   assert.equal(r._collection, undefined);
 });
+
+test('dimensionCheck: deviation from nominal, passing inside the asymmetric band and on its edges', () => {
+  assert.deepEqual(CT.dimensionCheck(10.05, 10, 0.1, 0.05), { deviation: 0.05000000000000071, pass: true });
+  assert.equal(CT.dimensionCheck(9.9, 10, 0.1, 0.05).pass, true);
+  assert.equal(CT.dimensionCheck(9.89, 10, 0.1, 0.05).pass, false);
+  assert.equal(CT.dimensionCheck(10.06, 10, 0.1, 0.05).pass, false);
+  assert.deepEqual(CT.dimensionCheck(10, null, 0.1, 0.1), { deviation: null, pass: null });
+});
