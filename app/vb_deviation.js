@@ -25,6 +25,24 @@
     return values[(values.length - 1) >> 1];
   }
 
+  /** Analysis voxels of air joined to the outside: below the level and 6-connected to the volume's faces or, when
+      filled is given, to below-level voxels outside the sample mask. Pores inside the part are not reached, so their
+      walls are not the part's surface; dents and open cracks are. */
+  function exteriorAir(gray, dims, level, filled = null) {
+    const { nx, ny, nz } = dims, n = gray.length, air = new Uint8Array(n), stack = [];
+    const seed = (i) => { if (!air[i] && gray[i] < level) { air[i] = 1; stack.push(i); } };
+    for (let z = 0, i = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++, i++) {
+      if (x === 0 || y === 0 || z === 0 || x === nx - 1 || y === ny - 1 || z === nz - 1 || (filled && !filled[i])) seed(i);
+    }
+    while (stack.length) {
+      const i = stack.pop(), x = i % nx, y = Math.floor(i / nx) % ny, z = Math.floor(i / (nx * ny));
+      if (x > 0) seed(i - 1); if (x < nx - 1) seed(i + 1);
+      if (y > 0) seed(i - nx); if (y < ny - 1) seed(i + nx);
+      if (z > 0) seed(i - nx * ny); if (z < nz - 1) seed(i + nx * ny);
+    }
+    return air;
+  }
+
   /** A sampler on the binned grid: gray at a scan-mm position by trilinear interpolation, or NaN outside the volume
       or the FOV circle (full-grid { cx, cy, r }). */
   function sampler({ gray, dims, bin, voxelMm, circle = null }) {
@@ -44,7 +62,7 @@
 
   /** Points on the scanned surface: for each pair of neighboring analysis voxels across the level (the upper one in
       the FOV and, when given, in `near`), the interpolated crossing between their centers. Thinned to maxPoints. */
-  function surfacePoints({ gray, dims, bin, voxelMm, level, circle = null, near = null, maxPoints = 60000 }) {
+  function surfacePoints({ gray, dims, bin, voxelMm, level, circle = null, near = null, air = null, maxPoints = 60000 }) {
     const { nx, ny, nz } = dims, out = [];
     const full = (b) => b * bin + (bin - 1) / 2;
     const steps = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
@@ -54,8 +72,8 @@
       for (const [dx, dy, dz] of steps) {
         const X = x + dx, Y = y + dy, Zb = z + dz;
         if (X < 0 || Y < 0 || Zb < 0 || X >= nx || Y >= ny || Zb >= nz) continue;
-        const g = gray[(Zb * ny + Y) * nx + X];
-        if (g >= level) continue;
+        const j = (Zb * ny + Y) * nx + X, g = gray[j];
+        if (g >= level || (air && !air[j])) continue;
         const t = (gray[i] - level) / (gray[i] - g);
         out.push((full(x) + t * dx * bin) * voxelMm, (full(y) + t * dy * bin) * voxelMm, (full(z) + t * dz * bin) * voxelMm);
       }
@@ -76,8 +94,18 @@
 
   /** Signed deviation (mm) of every nominal point: the nearest crossing within ±rangeMm inside the volume where the
       scanned surface faces within 60° of the normal; NaN where there is none. */
-  function deviations({ gray, dims, bin, voxelMm, level, circle = null, points, normals, edge = null, transform, rangeMm = 2 }) {
+  function deviations({ gray, dims, bin, voxelMm, level, circle = null, points, normals, edge = null, air = null, transform, rangeMm = 2 }) {
     const at = sampler({ gray, dims, bin, voxelMm, circle });
+    const { nx, ny, nz } = dims, half = (bin - 1) / 2;
+    const outside = (x, y, z) => { // any of the 8 analysis voxels around a scan-mm point is outside air
+      if (!air) return true;
+      const b = [x, y, z].map((v) => (v / voxelMm - half) / bin), lo = b.map(Math.floor);
+      for (let k = 0; k < 8; k++) {
+        const X = lo[0] + (k & 1), Y = lo[1] + ((k >> 1) & 1), Z = lo[2] + ((k >> 2) & 1);
+        if (X >= 0 && Y >= 0 && Z >= 0 && X < nx && Y < ny && Z < nz && air[(Z * ny + Y) * nx + X]) return true;
+      }
+      return false;
+    };
     const { R, t, s } = transform, step = STEP_VOXELS * bin * voxelMm, n = Math.ceil(rangeMm / step);
     const out = new Float32Array(points.length / 3);
     for (let k = 0; k < out.length; k++) {
@@ -90,7 +118,8 @@
         const g = at(c[0] + j * step * d[0], c[1] + j * step * d[1], c[2] + j * step * d[2]);
         if (prev >= level && g < level) { // NaN on either side fails both comparisons
           const sCross = (j - 1 + (prev - level) / (prev - g)) * step;
-          if (!(Math.abs(sCross) >= Math.abs(best)) && facing(at, c[0] + sCross * d[0], c[1] + sCross * d[1], c[2] + sCross * d[2], d, bin * voxelMm) >= MIN_FACING) best = sCross;
+          const ahead = [0, 1, 2].map((r) => c[r] + j * step * d[r]);
+          if (!(Math.abs(sCross) >= Math.abs(best)) && outside(...ahead) && facing(at, c[0] + sCross * d[0], c[1] + sCross * d[1], c[2] + sCross * d[2], d, bin * voxelMm) >= MIN_FACING) best = sCross;
         }
         prev = g;
       }
@@ -107,16 +136,27 @@
   }
 
   /** Statistics of the measured points; points on sharp edges (edge mask) are counted as on_edge, the rest that found
-      no surface as unmeasured. */
-  function deviationStats(dev, toleranceMm, edge = null) {
-    const v = Array.from(dev).filter(Number.isFinite).sort((a, b) => a - b), n = v.length;
+      no surface as unmeasured. With weights (area per point), mean, SD, percentiles and the share within tolerance
+      follow area; counts stay counts. */
+  function deviationStats(dev, toleranceMm, edge = null, weight = null) {
     let onEdge = 0;
     if (edge) for (let k = 0; k < dev.length; k++) if (edge[k]) onEdge++;
+    const idx = [];
+    for (let k = 0; k < dev.length; k++) if (Number.isFinite(dev[k])) idx.push(k);
+    const n = idx.length;
     if (!n) return { measured: 0, unmeasured: dev.length - onEdge, on_edge: onEdge, mean: null, sd: null, min: null, p05: null, p50: null, p95: null, max: null, within_percent: null };
-    const mean = v.reduce((a, b) => a + b, 0) / n;
-    const sd = Math.sqrt(v.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, n - 1));
-    const within = v.filter((d) => Math.abs(d) <= toleranceMm + EPS).length;
-    return { measured: n, unmeasured: dev.length - n - onEdge, on_edge: onEdge, mean, sd, min: v[0], p05: quantile(v, 0.05), p50: quantile(v, 0.5), p95: quantile(v, 0.95), max: v[n - 1], within_percent: (100 * within) / n };
+    idx.sort((a, b) => dev[a] - dev[b]);
+    const v = idx.map((k) => dev[k]), w = idx.map((k) => (weight ? weight[k] : 1)), W = w.reduce((a, b) => a + b, 0);
+    const mean = v.reduce((s, x, i) => s + w[i] * x, 0) / W;
+    const sd = Math.sqrt(v.reduce((s, x, i) => s + w[i] * (x - mean) ** 2, 0) / (weight ? W : Math.max(1, n - 1)));
+    const within = v.reduce((s, x, i) => s + (Math.abs(x) <= toleranceMm + EPS ? w[i] : 0), 0);
+    const q = (f) => {
+      if (!weight) return quantile(v, f);
+      let c = 0;
+      for (let i = 0; i < n; i++) { c += w[i]; if (c >= f * W - EPS) return v[i]; }
+      return v[n - 1];
+    };
+    return { measured: n, unmeasured: dev.length - n - onEdge, on_edge: onEdge, mean, sd, min: v[0], p05: q(0.05), p50: q(0.5), p95: q(0.95), max: v[n - 1], within_percent: (100 * within) / W };
   }
 
   function histogram(dev, { bins = 40, range }) {
@@ -147,5 +187,5 @@
       unmeasured_percent: total ? (100 * stats.unmeasured) / total : null, stats, saved_at: new Date().toISOString() };
   }
 
-  return { isoLevel, matrixGray, sampler, surfacePoints, deviations, deviationStats, histogram, deviationColor, cadSummary };
+  return { exteriorAir, isoLevel, matrixGray, sampler, surfacePoints, deviations, deviationStats, histogram, deviationColor, cadSummary };
 }));

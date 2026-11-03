@@ -104,7 +104,7 @@
     const ray = new ctx.T.Raycaster();
     ray.setFromCamera(new ctx.T.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), ctx.camera);
     const cadHit = ctx.cad && ctx.cad.visible ? ray.intersectObject(ctx.cad)[0] : null;
-    if (cadHit) emit('cadProbe', { vertex: cadHit.face.a });
+    if (cadHit) emit('cadPick', { face: cadHit.face, faceIndex: cadHit.faceIndex, point: cadHit.point });
     const hit = cadHit || (ctx.mesh ? ray.intersectObject(ctx.mesh)[0] : null);
     if (!hit) return;
     const { nx, ny, nz } = state.dims;

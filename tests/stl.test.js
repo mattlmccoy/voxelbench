@@ -83,3 +83,23 @@ test('points on sharp edges (a crease over 30°) are flagged; the diagonal insid
     assert.equal(m.edge[i], onBoundary ? 1 : 0, `point ${p} edge ${m.edge[i]}`);
   }
 });
+
+test('a mesh with more triangles than the point budget is measured at triangle centroids, weighted by area, and returns', () => {
+  const tri = [];
+  for (let k = 0; k < 3000; k++) tri.push(k, 0, 0, k + 1, 0, 0, k, 1, 0); // 3000 small triangles in z = 0
+  const m = St.measurePoints(St.parseStl(St.writeStl(Float32Array.from(tri))), { spacing: 0.01, maxPoints: 2000 });
+  assert.equal(m.display, 'triangles');
+  assert.ok(m.points.length / 3 <= 2000, `${m.points.length / 3}`);
+  assert.ok(Math.abs(m.weight.reduce((s, w) => s + w, 0) - 1500) < 1e-3, "weights sum to the area");
+});
+
+test('grid points carry area weights; zero-area triangles are skipped; trailing bytes after a binary STL are allowed', () => {
+  const tri = [0, 0, 0, 10, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const mesh = St.parseStl(St.writeStl(Float32Array.from(tri)));
+  const m = St.measurePoints(mesh, { spacing: 2 });
+  assert.ok(Math.abs(m.weight.reduce((s, w) => s + w, 0) - 50) < 1e-4); // Float32 weights
+  assert.ok(m.tri.every((t) => t === 0), 'nothing from the zero-area triangle');
+  const buf = St.writeStl(Float32Array.from(tri.slice(0, 9)));
+  const padded = new Uint8Array(buf.byteLength + 7); padded.set(new Uint8Array(buf));
+  assert.equal(St.parseStl(padded.buffer).triangles, 1);
+});

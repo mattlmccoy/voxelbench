@@ -11,23 +11,36 @@
 
   /** gray, filled, dims, bin: the binned analysis grid; circle: FOV on the full grid; points, normals: the nominal's
       measurement points (CAD mm). With pose, ICP starts there; otherwise from pre-alignment. */
-  function compareToCad({ gray, filled, dims, bin, voxelMm, circle, airGray, poreThreshold, points, normals, edge = null, pose = null, ...options }) {
+  function compareToCad({ gray, filled, dims, bin, voxelMm, circle, airGray, poreThreshold, points, normals, edge = null, weight = null, pose = null, ...options }) {
     const o = { ...DEFAULTS, ...options };
     const matrix = D.matrixGray(gray, filled, poreThreshold);
     if (matrix === null || !Number.isFinite(airGray)) return { refused: 'No matrix or air gray: segment the scan first.' };
     const level = D.isoLevel(airGray, matrix);
     const fov = circle ? { ...circle, r: circle.r - o.fovInsetVoxels * bin } : null;
-    const near = P.boxDilate(filled, dims, o.nearVoxels);
-    const scan = D.surfacePoints({ gray, dims, bin, voxelMm, level, circle: fov, near });
+    const near = P.boxDilate(filled, dims, o.nearVoxels), air = D.exteriorAir(gray, dims, level, filled);
+    const scan = D.surfacePoints({ gray, dims, bin, voxelMm, level, circle: fov, near, air });
     if (scan.length < 3 * 100) return { refused: 'Too few scan surface points near the sample to align to.' };
-    const stride = Math.max(1, Math.ceil(points.length / 3 / o.maxAlignPoints));
-    const few = new Float64Array(3 * Math.floor(points.length / 3 / stride));
-    for (let k = 0; k < few.length / 3; k++) for (let a = 0; a < 3; a++) few[3 * k + a] = points[3 * k * stride + a];
+    const few = areaSample(points, weight, edge, o.maxAlignPoints);
     const fit = pose ? A.icp(few, scan, { init: pose, scale: o.scale }) : A.preAlign(few, scan, { scale: o.scale });
     const transform = { R: fit.R, t: fit.t, s: o.scale ? fit.s : 1 };
-    const deviations = D.deviations({ gray, dims, bin, voxelMm, level, circle: fov, points, normals, edge, transform, rangeMm: o.rangeMm });
-    return { transform, rms: fit.rms, level, matrixGray: matrix, airGray, scanPoints: scan.length / 3, deviations, points, normals, edge, stats: D.deviationStats(deviations, o.toleranceMm, edge), options: o };
+    const deviations = D.deviations({ gray, dims, bin, voxelMm, level, circle: fov, points, normals, edge, air, transform, rangeMm: o.rangeMm });
+    return { transform, rms: fit.rms, level, matrixGray: matrix, airGray, scanPoints: scan.length / 3, deviations, points, normals, edge, weight, stats: D.deviationStats(deviations, o.toleranceMm, edge, weight), options: o };
   }
 
-  return { DEFAULTS, compareToCad };
+  /** Up to max points for the alignment, spaced evenly in cumulative area (weight) so finely tessellated features do
+      not dominate the fit; points on sharp edges are left out. */
+  function areaSample(points, weight, edge, max) {
+    const n = points.length / 3, w = (k) => (edge && edge[k] ? 0 : weight ? weight[k] : 1);
+    let total = 0;
+    for (let k = 0; k < n; k++) total += w(k);
+    const m = Math.min(max, n), out = new Float64Array(3 * m), step = total / m;
+    let next = step / 2, c = 0, j = 0;
+    for (let k = 0; k < n && j < m; k++) {
+      c += w(k);
+      while (c >= next && j < m) { out.set(points.subarray(3 * k, 3 * k + 3), 3 * j); j++; next += step; }
+    }
+    return out.subarray(0, 3 * j);
+  }
+
+  return { DEFAULTS, compareToCad, areaSample };
 }));

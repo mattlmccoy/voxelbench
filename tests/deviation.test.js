@@ -124,3 +124,24 @@ test('points on sharp edges are skipped and counted apart from points that found
   const out = D.deviations({ gray: boxGray(), dims, bin, voxelMm, level, points: Float32Array.from([2, 2, 2.75, 2, 2, 2.75]), normals: Float32Array.from([0, 0, 1, 0, 0, 1]), edge: Uint8Array.from([1, 0]), transform: identity, rangeMm: 1 });
   assert.ok(Number.isNaN(out[0]) && Number.isFinite(out[1]));
 });
+
+test('pore walls are not the scanned surface: only crossings into air joined to the outside count', () => {
+  // A pore (air) inside the box, just under the top face.
+  const g = boxGray();
+  for (let z = 0, i = 0; z < dims.nz; z++) for (let y = 0; y < dims.ny; y++) for (let x = 0; x < dims.nx; x++, i++) if (x >= 9 && x <= 11 && y >= 9 && y <= 11 && z >= 11 && z <= 12) g[i] = AIR;
+  const air = D.exteriorAir(g, dims, level);
+  const pts = D.surfacePoints({ gray: g, dims, bin, voxelMm, level, air });
+  for (let i = 0; i < pts.length; i += 3) {
+    const off = Math.min(...[0, 1, 2].map((k) => Math.min(Math.abs(pts[i + k] - 0.95), Math.abs(pts[i + k] - 3.05))));
+    assert.ok(off < 0.02, `point ${pts.slice(i, i + 3)} is on a pore wall`);
+  }
+  // A nominal point 0.33 mm inside the top face, above the pore: the deviation is to the outer surface.
+  const dev = D.deviations({ gray: g, dims, bin, voxelMm, level, air, points: Float32Array.from([2.0, 2.0, 2.72]), normals: Float32Array.from([0, 0, 1]), transform: identity, rangeMm: 1 });
+  assert.ok(Math.abs(dev[0] - 0.33) < 0.05, `${dev[0]}`);
+});
+
+test('statistics weight points by area when weights are given', () => {
+  const dev = Float32Array.from([0, 1]), w = Float32Array.from([3, 1]);
+  const s = D.deviationStats(dev, 0.5, null, w);
+  assert.ok(Math.abs(s.mean - 0.25) < 1e-9); assert.ok(Math.abs(s.within_percent - 75) < 1e-9); assert.equal(s.p50, 0);
+});

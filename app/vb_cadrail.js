@@ -11,7 +11,8 @@
   function measure(cad) {
     const spacing = 2 * App.BIN * state.voxelMm;
     cad.measure = St.measurePoints(cad.mesh, { spacing, unitMm: cad.unitMm });
-    cad.result = null;
+    cad.result = null; cad.busy = false;
+    state.cadSeq = (state.cadSeq || 0) + 1; // a run still in the worker belongs to the old points: its result is dropped
   }
 
   function openStl(name, buffer) {
@@ -62,8 +63,9 @@
 
   function render() {
     const cad = state.cad, ready = Boolean(state.folder && state.dims);
-    $('cadOpen').disabled = !ready;
     const can = Boolean(cad && cad.measure && !cad.busy);
+    $('cadOpen').disabled = !ready || Boolean(cad && cad.busy);
+    $('cadUnit').disabled = Boolean(cad && cad.busy);
     for (const id of ['cadAlign', 'cadRefine', 'cadRotX', 'cadRotY', 'cadRotZ']) $(id).disabled = !can;
     $('cadExport').disabled = !(cad && cad.result && !cad.busy);
     $('cadRefine').disabled = !can || !(cad.result || cad.pose);
@@ -74,12 +76,13 @@
     $('cadWarn').hidden = true;
     if (!cad) { $('cadFit').textContent = ''; $('cadNote').textContent = ''; $('cadProbe').textContent = ''; return; }
     if (cad.refused) { $('cadFit').textContent = cad.refused; return; }
-    const pts = cad.measure ? (cad.measure.points.length / 3).toLocaleString('en-US') : 0;
-    if (cad.busy) $('cadFit').textContent = `${cad.file}: ${pts} points at ${(cad.measure.spacing).toFixed(3)} mm spacing. Aligning…`;
-    else if (!r) $('cadFit').textContent = `${cad.file}: ${pts} points at ${(cad.measure.spacing).toFixed(3)} mm spacing.${cad.reused ? ' A saved alignment for this file was found; Align refines from it.' : ' Press Align.'}`;
+    const m = cad.measure, pts = m ? (m.points.length / 3).toLocaleString('en-US') : 0;
+    const where = m && m.display === 'triangles' ? `at triangle centroids${m.sampled ? ` (every ${(m.sampled.of / (m.points.length / 3)).toFixed(1)}th of ${m.sampled.of.toLocaleString('en-US')} triangles)` : ''}` : m ? `at ${m.spacing.toFixed(3)} mm spacing` : '';
+    if (cad.busy) $('cadFit').textContent = `${cad.file}: ${pts} points ${where}. Aligning…`;
+    else if (!r) $('cadFit').textContent = `${cad.file}: ${pts} points ${where}.${cad.stale ? ` ${cad.stale}` : cad.reused ? ' A saved alignment for this file was found: Refine fit starts from it, Align searches anew.' : ' Press Align.'}`;
     else {
-      const s = r.transform.s;
-      $('cadFit').textContent = `RMS of fit ${r.rms.toFixed(4)} mm over ${r.scanPoints.toLocaleString('en-US')} scan surface points${cad.scale ? ` · scale ${s.toFixed(4)} (shrinkage ${((1 - s) * 100).toFixed(2)} %)` : ''}`;
+      const s = r.transform.s, scaled = Boolean(r.options.scale), limit = scaled && (s <= 0.5 + 1e-9 || s >= 1.5 - 1e-9);
+      $('cadFit').textContent = `RMS of fit ${r.rms.toFixed(4)} mm over ${r.scanPoints.toLocaleString('en-US')} scan surface points${scaled ? ` · scale ${s.toFixed(4)} (shrinkage ${((1 - s) * 100).toFixed(2)} %)${limit ? ' AT THE FIT LIMIT (0.5 to 1.5): check the units and the pose' : ''}` : ' · rigid'}`;
       const st = r.stats, total = st.measured + st.unmeasured, unmeasured = (100 * st.unmeasured) / total;
       const rows = [['Points measured', `${st.measured.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`], ['Not measured (no surface found)', `${unmeasured.toFixed(1)} %`], ['On sharp edges (skipped)', st.on_edge.toLocaleString('en-US')],
         ['Mean ± SD', `${mm(st.mean)} ± ${st.sd === null ? 'n/a' : st.sd.toFixed(3)} mm`], ['Median', `${mm(st.p50)} mm`], ['5th to 95th percentile', `${mm(st.p05)} to ${mm(st.p95)} mm`],
@@ -93,7 +96,7 @@
       drawHistogram(cad);
     }
     $('cadNote').textContent = r
-      ? `Scanned surface: gray ${r.level.toFixed(0)}, halfway between air (${r.airGray.toFixed(0)}) and matrix (${r.matrixGray.toFixed(0)}), on ${CT.gridText(state.binFactor * App.BIN)}. Colors: blue = material missing, red = extra, clipped at ±${(3 * cad.toleranceMm).toFixed(2)} mm; gray = not measured: no scanned surface within ±${cad.rangeMm} mm along the normal that faces within 60° of it, or a point on a sharp CAD edge, where a deviation along one face's normal is not defined (the scanned edge is rounded over about one analysis voxel). Alignment: ${cad.scale ? 'rigid plus one uniform scale' : 'rigid'}, trimmed ICP${cad.reused ? ' from the saved pose' : ''}. Click the CAD model in the 3D view to read a point.`
+      ? `Scanned surface: gray ${r.level.toFixed(0)}, halfway between air (${r.airGray.toFixed(0)}) and matrix (${r.matrixGray.toFixed(0)}), on ${CT.gridText(state.binFactor * App.BIN)}. Colors: blue = material missing, red = extra, clipped at ±${(3 * cad.toleranceMm).toFixed(2)} mm; gray = not measured: no scanned surface within ±${cad.rangeMm} mm along the normal that faces within 60° of it, or a point on a sharp CAD edge, where a deviation along one face's normal is not defined (the scanned edge is rounded over about one analysis voxel). Pore walls inside the part are not its surface: a crossing counts only into air joined to the outside. Statistics are weighted by surface area. Alignment: ${r.options.scale ? 'rigid, then one uniform scale (0.5 to 1.5)' : 'rigid'}, trimmed ICP. Click the CAD model in the 3D view to read a point.`
       : '';
   }
 
@@ -101,7 +104,7 @@
     const cad = state.cad;
     if (!cad || !cad.result || !state.folder) return;
     const summary = D.cadSummary(cad.result, { file: cad.file, unitMm: cad.unitMm, spacingMm: cad.measure.spacing, points: cad.measure.points.length / 3 });
-    App.saveRecord('samples', CT.sampleRecord(state.folder, state.samples, { cad: summary }));
+    App.saveSample({ cad: summary });
   }
 
   async function exportCsv() {
@@ -126,11 +129,11 @@
     $('cadTol').addEventListener('change', () => {
       if (!state.cad) return;
       state.cad.toleranceMm = Number($('cadTol').value) || 0.1;
-      if (state.cad.result) state.cad.result.stats = D.deviationStats(state.cad.result.deviations, state.cad.toleranceMm, state.cad.measure.edge);
+      if (state.cad.result) state.cad.result.stats = D.deviationStats(state.cad.result.deviations, state.cad.toleranceMm, state.cad.measure.edge, state.cad.measure.weight);
       emit('cadChanged');
     });
     $('cadScale').addEventListener('change', () => { if (state.cad) state.cad.scale = $('cadScale').checked; });
-    $('cadAlign').addEventListener('click', () => App.requestCad(state.cad.reused ? state.cad.pose : null));
+    $('cadAlign').addEventListener('click', () => App.requestCad(null));
     $('cadRefine').addEventListener('click', () => App.requestCad(state.cad.result ? state.cad.result.transform : state.cad.pose));
     for (const axis of ['x', 'y', 'z']) $(`cadRot${axis.toUpperCase()}`).addEventListener('click', () => rotate(axis));
   });

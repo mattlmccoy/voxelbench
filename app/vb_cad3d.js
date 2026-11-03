@@ -2,26 +2,42 @@
    not measured, light gray before a comparison has run). */
 (function (App) {
   'use strict';
-  const { state, on } = App;
+  const { state, on, emit } = App;
   const D = window.VBDeviation, A = window.VBAlign;
 
+  /** World positions and colors: one vertex per measurement point (grid display), or three per measured triangle,
+      colored by its centroid's deviation (triangle display). */
   function geometry(T, cad) {
-    const pose = (cad.result && cad.result.transform) || cad.pose;
-    const scan = pose ? A.apply(pose, cad.measure.points) : cad.measure.points;
-    const n = scan.length / 3, world = new Float32Array(scan.length), colors = new Float32Array(scan.length);
+    const pose = (cad.result && cad.result.transform) || cad.pose || A.IDENTITY, m = cad.measure;
     const limit = 3 * cad.toleranceMm, dev = cad.result && cad.result.deviations;
+    const tri = m.display === 'triangles';
+    const scan = A.apply(pose, tri ? m.triangles : m.points);
+    const n = scan.length / 3, world = new Float32Array(scan.length), colors = new Float32Array(scan.length);
     for (let k = 0; k < n; k++) {
       const w = App.model3D.toWorld(scan[3 * k] / state.voxelMm, scan[3 * k + 1] / state.voxelMm, scan[3 * k + 2] / state.voxelMm);
       world[3 * k] = w[0]; world[3 * k + 1] = w[1]; world[3 * k + 2] = w[2];
-      const c = dev ? D.deviationColor(dev[k], limit) : [0.8, 0.82, 0.85];
+      const c = dev ? D.deviationColor(dev[tri ? Math.floor(k / 3) : k], limit) : [0.8, 0.82, 0.85];
       colors[3 * k] = c[0]; colors[3 * k + 1] = c[1]; colors[3 * k + 2] = c[2];
     }
     const g = new T.BufferGeometry();
     g.setAttribute('position', new T.BufferAttribute(world, 3));
     g.setAttribute('color', new T.BufferAttribute(colors, 3));
-    g.setIndex(new T.BufferAttribute(cad.measure.faces, 1));
+    if (!tri) g.setIndex(new T.BufferAttribute(m.faces, 1));
     g.computeVertexNormals();
     return g;
+  }
+
+  /** A click on the model: the measurement point nearest the hit (grid display) or the hit triangle's centroid. */
+  function picked({ face, faceIndex, point }) {
+    const ctx = App.model3D.ctx(), cad = state.cad;
+    if (!ctx || !ctx.cad || !cad || !cad.measure) return;
+    let index = faceIndex;
+    if (cad.measure.display !== 'triangles') {
+      const pos = ctx.cad.geometry.attributes.position;
+      const d = (v) => (pos.getX(v) - point.x) ** 2 + (pos.getY(v) - point.y) ** 2 + (pos.getZ(v) - point.z) ** 2;
+      index = [face.a, face.b, face.c].reduce((best, v) => (d(v) < d(best) ? v : best));
+    }
+    emit('cadProbe', { vertex: index });
   }
 
   function update() {
@@ -39,6 +55,7 @@
     App.model3D.render();
   }
 
+  on('cadPick', picked);
   on('cadChanged', update);
   on('modelChanged', update);
 }(window.CTApp));

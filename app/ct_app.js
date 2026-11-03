@@ -104,6 +104,12 @@ window.CTApp = (function () {
     }
   }
 
+  /** Saves fields of the open sample's record, keeping its other fields, including an edit not yet stored. */
+  function saveSample(changes) {
+    const pending = state.unsaved.get(state.folder);
+    saveRecord('samples', CT.sampleRecord(state.folder, state.samples, changes, pending && pending._collection === 'samples' ? pending : null));
+  }
+
   async function removeRecord(collection, id) {
     state.deleting = null;
     const pending = state.unsaved.delete(id); // a save still in flight must be deleted too
@@ -332,6 +338,7 @@ window.CTApp = (function () {
 
   // Results describe the crop they ran with, so a new crop replaces them rather than leaving old voids over a new body.
   function cropChanged() {
+    if (state.cad && state.cad.result) { state.cad.result = null; state.cad.stale = 'The crop changed: press Align or Refine fit again.'; emit('cadChanged'); }
     updateModel();
     if (state.porePhase === 'running') state.rerunAfterDetect = true;
     else if (state.pores) runDetect();
@@ -428,7 +435,14 @@ window.CTApp = (function () {
       emit('statusText', data.refused ? 'Zone segmentation failed' : 'Zones segmented');
       emit('poresChanged');
     } else if (data.type === 'cad') {
-      if (state.cad && state.cad.request === data.id) { state.cad.busy = false; state.cad.result = data.refused ? null : data; state.cad.refused = data.refused || null; }
+      const cad = state.cad;
+      if (cad && data.id === state.cadSeq) {
+        cad.busy = false;
+        const fits = data.deviations && data.deviations.length === cad.measure.points.length / 3;
+        cad.result = data.refused || !fits ? null : data;
+        cad.refused = data.refused || (fits ? null : 'The CAD points changed during the run: press Align again.');
+        cad.stale = null;
+      }
       emit('cadChanged');
     } else if (data.type === 'error') {
       if (state.cad && state.cad.busy) { state.cad.busy = false; state.cad.refused = data.message; emit('cadChanged'); }
@@ -480,11 +494,11 @@ window.CTApp = (function () {
   function requestCad(pose) {
     const cad = state.cad;
     if (!worker || !cad || !cad.measure || cad.busy) return;
-    cad.busy = true; cad.refused = null; cad.request = (cad.request || 0) + 1;
-    worker.postMessage({ type: 'cad', id: cad.request, settings: state.settings, crops: cropOutlines(), points: cad.measure.points, normals: cad.measure.normals, edge: cad.measure.edge, pose,
+    cad.busy = true; cad.refused = null; state.cadSeq = (state.cadSeq || 0) + 1;
+    worker.postMessage({ type: 'cad', id: state.cadSeq, settings: state.settings, crops: cropOutlines(), points: cad.measure.points, normals: cad.measure.normals, edge: cad.measure.edge, weight: cad.measure.weight, pose,
       options: { scale: cad.scale, toleranceMm: cad.toleranceMm, rangeMm: cad.rangeMm } });
     emit('cadChanged');
   }
 
-  return { requestCad, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
+  return { requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
 }());

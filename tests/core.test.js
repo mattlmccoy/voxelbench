@@ -267,3 +267,11 @@ test('sampleRecord merges changes into the saved sample, keeping fields other st
   assert.equal(CT.sampleInfo('S1', samples).cad.file, 'bar.stl');
   assert.equal(CT.sampleInfo('S2', samples).cad, null);
 });
+
+test('sampleRecord merges a pending (not yet stored) edit before the new changes', () => {
+  const samples = new Map([['S1', { id: 'S1', folder: 'S1', name: 'Old', notes: 'old notes' }]]);
+  const pending = { id: 'S1', folder: 'S1', name: 'New', notes: 'new notes', _collection: 'samples' };
+  const r = CT.sampleRecord('S1', samples, { cad: { file: 'p.stl' } }, pending);
+  assert.equal(r.name, 'New'); assert.equal(r.notes, 'new notes'); assert.equal(r.cad.file, 'p.stl');
+  assert.equal(r._collection, undefined);
+});

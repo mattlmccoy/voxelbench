@@ -9,6 +9,7 @@
 
   const IDENTITY = { R: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0], s: 1 };
   const MAX_ICP_POINTS = 20000;
+  const TRIAL_POINTS = 1000, TRIAL_STEPS = 4; // pre-alignment scores each starting pose by a short rigid ICP on few points
   const SCALE_RANGE = [0.5, 1.5]; // a fitted uniform scale is kept within this range, so the model cannot collapse
 
   /** Eigen-decomposition of a symmetric n x n matrix (row-major array) by cyclic Jacobi: { values, vectors } with
@@ -167,7 +168,7 @@
     const src = thin(srcAll, MAX_ICP_POINTS), n = src.length / 3;
     const pair = new Float64Array(src.length), dist = new Float64Array(n), keep = new Uint8Array(n);
     let T = init, rms = Infinity, done = 0;
-    for (; done < iterations; done++) {
+    for (;; done++) { // each pass pairs at the current pose, so the reported RMS is always that of the returned pose
       const moved = apply(T, src);
       for (let i = 0; i < n; i++) {
         const { index: j, d2 } = grid.nearest(moved[3 * i], moved[3 * i + 1], moved[3 * i + 2]);
@@ -178,8 +179,9 @@
       let sum = 0, kept = 0;
       for (let i = 0; i < n; i++) { keep[i] = median === 0 || dist[i] <= trim * median ? 1 : 0; if (keep[i]) { sum += dist[i] ** 2; kept++; } }
       const now = Math.sqrt(sum / (kept || 1));
-      if (Math.abs(rms - now) < tol) { rms = now; break; }
+      const settled = Math.abs(rms - now) < tol;
       rms = now;
+      if (settled || done === iterations) break;
       T = fitTransform(src, pair, { scale, keep, scaleRange: scale ? SCALE_RANGE : null });
     }
     return { ...T, rms, iterations: done };
@@ -191,9 +193,9 @@
       const d = [p[i] - c[0], p[i + 1] - c[1], p[i + 2] - c[2]];
       for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++) C[3 * r + k] += d[r] * d[k];
     }
-    const { values, vectors } = eigenSymmetric(C, 3);
+    const { vectors } = eigenSymmetric(C, 3);
     const [a, b] = vectors, e3 = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-    return { c, axes: [a, b, e3], spread: values.reduce((s, v) => s + Math.max(v, 0), 0) };
+    return { c, axes: [a, b, e3] };
   }
 
   const halton = (i, b) => { let f = 1, r = 0; for (; i > 0; i = Math.floor(i / b)) { f /= b; r += f * (i % b); } return r; };
@@ -208,8 +210,8 @@
   /** Starting poses: the principal axes matched under the four proper sign flips, plus the spread rotations about
       the centroids. Each is scored by a short ICP on a thinned copy; the best is refined fully. */
   function preAlign(src, dst, { scale = false } = {}) {
-    const fs = frame(src), fd = frame(dst), s = scale && fs.spread > 0 ? Math.sqrt(fd.spread / fs.spread) : 1;
-    const index = nearestIndex(dst, Math.max(extentOf(dst) / 48, 1e-6)), few = thin(src, 2000);
+    const fs = frame(src), fd = frame(dst), s = 1; // trial poses are scored rigid; the scale is freed only at the end
+    const index = nearestIndex(dst, Math.max(extentOf(dst) / 48, 1e-6)), few = thin(src, TRIAL_POINTS);
     const poses = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].map((flip) => {
       const R = new Array(9).fill(0); // source axis k to flip_k times target axis k
       for (let k = 0; k < 3; k++) for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) R[3 * r + c] += flip[k] * fd.axes[k][r] * fs.axes[k][c];
@@ -218,7 +220,7 @@
     let best = null;
     for (const R of poses) {
       const t = [0, 1, 2].map((r) => fd.c[r] - s * (R[3 * r] * fs.c[0] + R[3 * r + 1] * fs.c[1] + R[3 * r + 2] * fs.c[2]));
-      const trial = icp(few, dst, { init: { R, t, s }, iterations: 6, scale, index });
+      const trial = icp(few, dst, { init: { R, t, s }, iterations: TRIAL_STEPS, index });
       if (!best || trial.rms < best.rms) best = trial;
     }
     return icp(src, dst, { init: best, scale, index });

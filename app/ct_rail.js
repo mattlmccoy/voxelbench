@@ -168,7 +168,7 @@
   function saveSample() {
     if (!state.folder) return;
     const v = (id) => $(id).value.trim();
-    App.saveRecord('samples', CT.sampleRecord(state.folder, state.samples, { name: v('sampleName') || state.folder, material: v('sampleMaterial'), process: v('sampleProcess'), notes: v('sampleNotes') }));
+    App.saveSample({ name: v('sampleName') || state.folder, material: v('sampleMaterial'), process: v('sampleProcess'), notes: v('sampleNotes') });
   }
 
   function renderFacts() {

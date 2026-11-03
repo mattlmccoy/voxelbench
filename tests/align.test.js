@@ -105,3 +105,14 @@ test('scaled ICP from a wrong pose does not collapse the model: scale stays with
   const right = A.icp(src, A.apply({ R: rotation([0, 0, 1], 0.1), t: [0.5, 0, 0], s: 0.8 }, dst), { scale: true });
   assert.ok(Math.abs(right.s - 0.8) < 0.01, `s ${right.s}`);
 });
+
+test('ICP reports the RMS of the pose it returns, also when it stops on the iteration cap', () => {
+  const rnd = random(6);
+  const src = lShape(1500, rnd), dst = A.apply({ R: rotation(unit([0, 1, 0]), 0.3), t: [1, 0, 0], s: 1 }, lShape(1500, rnd));
+  const fit = A.icp(src, dst, { iterations: 2 });
+  const moved = A.apply(fit, src), grid = A.nearestIndex(dst, 0.3);
+  const d = Array.from({ length: moved.length / 3 }, (_, i) => Math.sqrt(grid.nearest(moved[3 * i], moved[3 * i + 1], moved[3 * i + 2]).d2)).sort((a, b) => a - b);
+  const median = d[d.length >> 1], kept = d.filter((x) => x <= 3 * median);
+  const rms = Math.sqrt(kept.reduce((s, x) => s + x * x, 0) / kept.length);
+  assert.ok(Math.abs(fit.rms - rms) < 1e-9, `${fit.rms} vs ${rms}`);
+});

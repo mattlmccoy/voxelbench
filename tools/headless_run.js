@@ -166,7 +166,7 @@ if (require.main === module) main(process.argv.slice(2));
 function compareCad(a, mesh, { spacingMm, unitMm = 1, ...options } = {}) {
   const m = St.measurePoints(mesh, { spacing: spacingMm || 2 * BIN * a.voxelMm, unitMm });
   return Cad.compareToCad({ gray: a.vol.gray, filled: a.base.body.filled, dims: a.vol.dims, bin: BIN, voxelMm: a.voxelMm, circle: a.circle, airGray: a.airGray,
-    poreThreshold: a.settings.poreThreshold, points: m.points, normals: m.normals, edge: m.edge, ...options });
+    poreThreshold: a.settings.poreThreshold, points: m.points, normals: m.normals, edge: m.edge, weight: m.weight, ...options });
 }
 
 /** Filler and fiber analysis on an analysis (its smoothed full-resolution slices and sample mask). */

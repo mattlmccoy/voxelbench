@@ -21,14 +21,27 @@
   function meshOf(positions) {
     const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
     for (let i = 0; i < positions.length; i++) { const k = i % 3; if (positions[i] < min[k]) min[k] = positions[i]; if (positions[i] > max[k]) max[k] = positions[i]; }
-    return { positions, normals: faceNormals(positions), triangles: positions.length / 9, bounds: { min, max } };
+    return { positions, normals: faceNormals(positions), areas: triangleAreas(positions), triangles: positions.length / 9, bounds: { min, max } };
   }
+
+  function triangleAreas(positions) {
+    const n = positions.length / 9, out = new Float64Array(n);
+    for (let t = 0; t < n; t++) {
+      const p = positions.subarray(9 * t, 9 * t + 9);
+      const ux = p[3] - p[0], uy = p[4] - p[1], uz = p[5] - p[2], vx = p[6] - p[0], vy = p[7] - p[1], vz = p[8] - p[2];
+      out[t] = Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
+    }
+    return out;
+  }
+  const MIN_AREA = 1e-12; // file units squared: a triangle below this has no normal and is skipped
 
   function parseStl(buffer) {
     if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 15) throw new Error('Not an STL file: too short.');
     const view = new DataView(buffer);
     const count = buffer.byteLength >= 84 ? view.getUint32(80, true) : -1;
-    if (count > 0 && 84 + 50 * count === buffer.byteLength) {
+    const text0 = new TextDecoder().decode(new Uint8Array(buffer, 0, Math.min(256, buffer.byteLength)));
+    // Binary when the size matches the count, or holds it with trailing bytes and does not read as ASCII STL.
+    if (count > 0 && (84 + 50 * count === buffer.byteLength || (84 + 50 * count < buffer.byteLength && !/^\s*solid[\s\S]*facet/.test(text0)))) {
       const positions = new Float32Array(9 * count);
       for (let t = 0; t < count; t++) for (let k = 0; k < 9; k++) positions[9 * t + k] = view.getFloat32(84 + 50 * t + 12 + 4 * k, true);
       return meshOf(positions);
@@ -73,41 +86,61 @@
     }
     const n = mesh.normals;
     return keys.map((e, t) => e.map((k) => {
-      const others = owners.get(k).filter((u) => u !== t);
+      const others = owners.get(k).filter((u) => u !== t && mesh.areas[u] > MIN_AREA);
       return !others.length || others.some((u) => n[3 * t] * n[3 * u] + n[3 * t + 1] * n[3 * u + 1] + n[3 * t + 2] * n[3 * u + 2] < CREASE_COS);
     }));
   }
 
   /** Barycentric grid on every triangle with edges no longer than the spacing (mm), raised until the points fit
       maxPoints. Points are not shared between triangles, so each keeps its own triangle's normal; edge marks the
-      points on sharp edges, where a deviation along one face's normal is not defined. */
+      points on sharp edges, where a deviation along one face's normal is not defined; weight is the triangle area
+      each point stands for (mm²), so statistics follow area, not tessellation. When even one segment per triangle
+      exceeds maxPoints, points are the triangle centroids (every k-th triangle when there are still too many), shown
+      as those triangles (display 'triangles'). Zero-area triangles are skipped. */
   function measurePoints(mesh, { spacing, maxPoints = 400000, unitMm = 1 }) {
     const p = unitMm === 1 ? mesh.positions : mesh.positions.map((v) => v * unitMm);
+    const live = [];
+    for (let t = 0; t < mesh.triangles; t++) if (mesh.areas[t] > MIN_AREA) live.push(t);
+    const area = (t) => mesh.areas[t] * unitMm * unitMm;
+    const longest = live.reduce((m, t) => Math.max(m, segments(p, t, 1)), 0);
     let step = spacing, total = Infinity;
     for (;;) {
       total = 0;
-      for (let t = 0; t < mesh.triangles; t++) { const n = segments(p, t, step); total += ((n + 1) * (n + 2)) / 2; }
+      for (const t of live) { const n = segments(p, t, step); total += ((n + 1) * (n + 2)) / 2; }
       if (total <= maxPoints) break;
+      if (step >= longest) return centroids(mesh, p, live, area, maxPoints);
       step *= 1.25;
     }
-    const points = new Float32Array(3 * total), normals = new Float32Array(3 * total), tri = new Uint32Array(total), edge = new Uint8Array(total), faces = [];
+    const points = new Float32Array(3 * total), normals = new Float32Array(3 * total), tri = new Uint32Array(total), edge = new Uint8Array(total), weight = new Float32Array(total), faces = [];
     const sharp = sharpEdges(mesh);
     let w = 0;
-    for (let t = 0; t < mesh.triangles; t++) {
-      const n = segments(p, t, step), q = p.subarray(9 * t, 9 * t + 9), base = w, [ab, bc, ca] = sharp[t];
+    for (const t of live) {
+      const n = segments(p, t, step), q = p.subarray(9 * t, 9 * t + 9), base = w, [ab, bc, ca] = sharp[t], share = area(t) / (((n + 1) * (n + 2)) / 2);
       const at = (i, j) => base + j * (n + 1) - (j * (j - 1)) / 2 + i; // row j holds n + 1 - j points
       for (let j = 0; j <= n; j++) {
         for (let i = 0; i + j <= n; i++, w++) {
           const a = i / n, b = j / n;
           for (let k = 0; k < 3; k++) { points[3 * w + k] = q[k] + a * (q[3 + k] - q[k]) + b * (q[6 + k] - q[k]); normals[3 * w + k] = mesh.normals[3 * t + k]; }
-          tri[w] = t;
+          tri[w] = t; weight[w] = share;
           edge[w] = (ab && j === 0) || (ca && i === 0) || (bc && i + j === n) ? 1 : 0;
           if (i + j < n) faces.push(at(i, j), at(i + 1, j), at(i, j + 1));
           if (i + j + 1 < n) faces.push(at(i + 1, j), at(i + 1, j + 1), at(i, j + 1));
         }
       }
     }
-    return { points, normals, tri, edge, faces: Uint32Array.from(faces), spacing: step };
+    return { points, normals, tri, edge, weight, faces: Uint32Array.from(faces), spacing: step, display: 'grid' };
+  }
+
+  function centroids(mesh, p, live, area, maxPoints) {
+    const pick = live.length <= maxPoints ? live : Array.from({ length: maxPoints }, (_, k) => live[Math.floor((k * live.length) / maxPoints)]);
+    const scale = live.length / pick.length, n = pick.length;
+    const points = new Float32Array(3 * n), normals = new Float32Array(3 * n), tri = new Uint32Array(n), weight = new Float32Array(n), triangles = new Float32Array(9 * n);
+    pick.forEach((t, k) => {
+      for (let a = 0; a < 3; a++) { points[3 * k + a] = (p[9 * t + a] + p[9 * t + 3 + a] + p[9 * t + 6 + a]) / 3; normals[3 * k + a] = mesh.normals[3 * t + a]; }
+      triangles.set(p.subarray(9 * t, 9 * t + 9), 9 * k);
+      tri[k] = t; weight[k] = area(t) * scale;
+    });
+    return { points, normals, tri, edge: new Uint8Array(n), weight, faces: new Uint32Array(0), triangles, spacing: null, display: 'triangles', sampled: pick.length < live.length ? { of: live.length } : null };
   }
 
   return { parseStl, writeStl, measurePoints, faceNormals };

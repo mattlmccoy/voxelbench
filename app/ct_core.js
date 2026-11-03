@@ -137,9 +137,12 @@
     return { folder, name: (s && s.name) || folder, material: (s && s.material) || '', process: (s && s.process) || '', notes: (s && s.notes) || '', calibration_air: !(s && s.calibration_air === false), cad: (s && s.cad) || null };
   }
 
-  /** The sample's full record with changes merged in, so a step that saves one field keeps the others. */
-  function sampleRecord(folder, samples, changes) {
-    return { ...sampleInfo(folder, samples), ...changes, id: folder, folder, updated_at: new Date().toISOString() };
+  /** The sample's full record with changes merged in, so a step that saves one field keeps the others; pending is an
+      edit saved but not yet back from the store, merged before the changes. */
+  function sampleRecord(folder, samples, changes, pending = null) {
+    const { _collection, ...unsaved } = pending || {};
+    const base = pending ? new Map([...(samples || new Map()), [folder, { ...(samples && samples.get(folder)), ...unsaved }]]) : samples;
+    return { ...sampleInfo(folder, base), ...changes, id: folder, folder, updated_at: new Date().toISOString() };
   }
 
   function planeShape(plane, { nx, ny, nz }) {
