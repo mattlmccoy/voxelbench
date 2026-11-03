@@ -78,8 +78,9 @@
       ['Volume fraction', `${fmt(s.volume_percent, 4)} % of the sample mask`],
       ['ESD 10th / 50th / 90th', `${fmt(s.esd_p10_mm)} / ${fmt(s.esd_p50_mm)} / ${fmt(s.esd_p90_mm)} mm`],
       ['Mean nearest neighbor', `${fmt(d.mean_nn_mm)} mm`],
-      ['Clark–Evans R', d.clark_evans === null ? `too few particles (needs ${F.MIN_FOR_DISPERSION})` : `${fmt(d.clark_evans, 2)} (1 random, < 1 clustered, > 1 regular)`],
+      ['Clark–Evans R', d.clark_evans === null ? `too few particles away from the surface (${d.guarded ?? 0}; needs ${F.MIN_FOR_DISPERSION})` : `${fmt(d.clark_evans, 2)} from ${d.guarded} particles away from the surface (1 random, < 1 clustered, > 1 regular)`],
       ['Fibers', tensorText(s.orientation)],
+      ['Flakes', `${s.flakes} (flat: no single direction, left out of the tensor)`],
     ]);
     if (s.count && (s.near_noise === s.count || s.volume_percent < NEGLIGIBLE_PERCENT)) {
       $('fillerWarn').hidden = false;
@@ -87,7 +88,7 @@
     }
     drawHistogram(r.particles);
     renderRegions(r);
-    $('fillerNote').textContent = 'Orientation tensor: weighted mean of p pᵀ over the fibers\' main axes; eigenvalue 1 = all aligned, 1/3 each = random in 3D. Clark–Evans R compares the mean nearest-neighbor distance with a random arrangement at the same density; the part\'s edges push it up for small counts. The 3D view shows fibers as cyan segments and other particles as white points.';
+    $('fillerNote').textContent = 'Orientation tensor: weighted mean of p pᵀ over the fibers\' main axes; eigenvalue 1 = all aligned, 1/3 each = random in 3D. Clark–Evans R compares the mean nearest-neighbor distance with a random arrangement at the same density, using only particles at least twice the random spacing inside the sample, so its surface does not push R up. Fibers: elongation ≥ 3 along one axis; flakes: flat in one axis. The 3D view shows fibers as cyan segments and other particles as white points.';
   }
 
   // 3D: fibers as line segments along their main axis, other particles as points.

@@ -2,12 +2,12 @@
    that keep only their moments (count, centroid, second moments), so a full-resolution scan needs no label volume.
    Shape from the moments, nearest-neighbor dispersion, and the orientation tensor of resolved fibers. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_align.js'));
-  else root.VBFiller = factory(root.VBAlign);
-}(typeof self !== 'undefined' ? self : this, function (A) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_align.js'), require('./ct_zones.js'));
+  else root.VBFiller = factory(root.VBAlign, root.CTZones);
+}(typeof self !== 'undefined' ? self : this, function (A, Z) {
   'use strict';
 
-  const CLIP_ITERATIONS = 4;
+  const CLIP_ITERATIONS = 4, MIN_SD = 1;
   const FIBER_ASPECT = 3, FIBER_MIN_LENGTH_VOX = 3;
   const MIN_FOR_DISPERSION = 20, MIN_FIBERS_FOR_TENSOR = 5; // fewer give no Clark–Evans ratio or orientation tensor
 
@@ -16,10 +16,11 @@
   /** Median and robust SD (1.4826 x MAD) of the matrix gray, re-estimated after clipping values above median + k SD
       so a bright phase does not move them; threshold = median + k SD. */
   function robustThreshold(values, k = 4) {
+    if (!values.length) return { median: null, sd: null, threshold: null, k };
     let v = Float64Array.from(values).sort(), median = 0, sd = 0;
     for (let it = 0; it < CLIP_ITERATIONS; it++) {
       median = medianOf(v);
-      sd = 1.4826 * medianOf(v.map((x) => Math.abs(x - median)).sort());
+      sd = Math.max(MIN_SD, 1.4826 * medianOf(v.map((x) => Math.abs(x - median)).sort())); // quantized or noise-free gray
       const kept = v.filter((x) => x <= median + k * sd);
       if (kept.length === v.length || !kept.length) break;
       v = kept;
@@ -45,13 +46,28 @@
       for (let k = 0; k < SUMMED; k++) acc[N_ACC * a + k] += acc[N_ACC * b + k];
       for (let k = SUMMED; k < N_ACC; k++) acc[N_ACC * a + k] = Math.max(acc[N_ACC * a + k], acc[N_ACC * b + k]);
     };
+    // Slots of finished components are reused: memory follows the runs of two slices, not of the whole volume.
+    const free = [], particles = [];
+    let active = [], peakLabels = 0, dropped = 0;
     const fresh = () => {
-      if (used === parent.length) {
-        const p = new Int32Array(2 * used); p.set(parent); parent = p;
-        const q = new Float64Array(2 * N_ACC * used); q.set(acc); acc = q;
+      let l;
+      if (free.length) l = free.pop();
+      else {
+        if (used === parent.length) {
+          const p = new Int32Array(2 * used); p.set(parent); parent = p;
+          const q = new Float64Array(2 * N_ACC * used); q.set(acc); acc = q;
+        }
+        l = used++;
       }
-      parent[used] = used;
-      return used++;
+      parent[l] = l;
+      active.push(l);
+      peakLabels = Math.max(peakLabels, used - free.length);
+      return l;
+    };
+    const finish = (l) => {
+      const o = N_ACC * l;
+      if (acc[o] < minVoxels) dropped++;
+      else particles.push({ id: particles.length + 1, voxels: acc[o], clipped: acc[o + 10] > 0, peak: acc[o + 11], ...particleShape(acc.subarray(o, o + 10)) });
     };
     const rEdge = circle ? (circle.r - 1.5) ** 2 : Infinity;
     const outsideCircle = (x, y) => circle && (x - circle.cx) ** 2 + (y - circle.cy) ** 2 > circle.r * circle.r;
@@ -84,21 +100,23 @@
         }
         cur[y] = runs;
       }
+      // Runs now point at their roots; a component this slice did not touch can grow no more.
+      const live = new Set();
+      for (const runs of cur) for (const r of runs) { r.label = find(r.label); live.add(r.label); }
+      for (const l of active) {
+        if (parent[l] !== l) free.push(l);
+        else if (!live.has(l)) { finish(l); free.push(l); }
+      }
+      active = [...live];
       prev = cur;
     }
-    const particles = [];
-    let dropped = 0;
-    for (let l = 0; l < used; l++) {
-      if (parent[l] !== l) continue;
-      const o = N_ACC * l;
-      if (acc[o] < minVoxels) { dropped++; continue; }
-      particles.push({ id: particles.length + 1, voxels: acc[o], clipped: acc[o + 10] > 0, peak: acc[o + 11], ...particleShape(acc.subarray(o, o + 10)) });
-    }
-    return { particles, dropped };
+    for (const l of active) finish(l);
+    return { particles, dropped, peakLabels };
   }
 
-  /** Shape from the moments: centroid, principal variances (each voxel's own extent of 1/12 included), aspect ratio
-      √(λ1/λ3), length √(12 λ1) and diameter √(12 λ3) as for a rod, main direction, and equivalent sphere diameter. */
+  /** Shape from the moments: centroid, principal variances λ1 ≥ λ2 ≥ λ3 (each voxel's own extent of 1/12 included),
+      aspect √(λ1/λ3), elongation √(λ1/λ2), flatness √(λ2/λ3), length √(12 λ1) as for a rod, diameter 4√λ3 as for a
+      round cross-section, main direction, and equivalent sphere diameter. */
   function particleShape(m) {
     const n = m[0], c = [m[1] / n, m[2] / n, m[3] / n];
     const C = [m[4] / n - c[0] * c[0], m[7] / n - c[0] * c[1], m[8] / n - c[0] * c[2], 0, m[5] / n - c[1] * c[1], m[9] / n - c[1] * c[2], 0, 0, m[6] / n - c[2] * c[2]];
@@ -106,11 +124,15 @@
     for (const k of [0, 4, 8]) C[k] += 1 / 12;
     const { values, vectors } = A.eigenSymmetric(C, 3);
     const lambdas = values.map((v) => Math.max(v, 1 / 12));
-    return { centroid: c, lambdas, aspect: Math.sqrt(lambdas[0] / lambdas[2]), length_vox: Math.sqrt(12 * lambdas[0]), diameter_vox: Math.sqrt(12 * lambdas[2]),
+    return { centroid: c, lambdas, aspect: Math.sqrt(lambdas[0] / lambdas[2]), elongation: Math.sqrt(lambdas[0] / lambdas[1]), flatness: Math.sqrt(lambdas[1] / lambdas[2]),
+      length_vox: Math.sqrt(12 * lambdas[0]), diameter_vox: 4 * Math.sqrt(lambdas[2]),
       direction: vectors[0], esd_vox: Math.cbrt((6 * n) / Math.PI) };
   }
 
-  const isFiber = (p) => p.aspect >= FIBER_ASPECT && p.length_vox >= FIBER_MIN_LENGTH_VOX;
+  /** fiber: long in one direction (elongation ≥ 3, length ≥ 3 voxels); flake: flat (flatness ≥ 3) and not a fiber, so
+      its in-plane "direction" is arbitrary and it stays out of the orientation tensor; otherwise particle. */
+  const shapeClass = (p) => (p.elongation >= FIBER_ASPECT && p.length_vox >= FIBER_MIN_LENGTH_VOX ? 'fiber' : p.flatness >= FIBER_ASPECT ? 'flake' : 'particle');
+  const isFiber = (p) => shapeClass(p) === 'fiber';
 
   /** Nearest-neighbor distance of every centroid to another (voxels), by a uniform grid. */
   function nearestOther(c) {
@@ -142,15 +164,19 @@
     return out;
   }
 
-  /** Nearest-neighbor distances (voxels) and the Clark–Evans ratio: mean NN over 0.554 ρ^(−1/3), the mean NN of a
-      random (Poisson) arrangement at the same number density; 1 random, below 1 clustered, above 1 regular. */
-  function dispersion(particles, maskVoxels) {
+  /** Nearest-neighbor distances (voxels) and the Clark–Evans ratio R = mean NN / (0.554 ρ^(−1/3)), the mean NN of a
+      random (Poisson) arrangement at the same number density: 1 random, below 1 clustered, above 1 regular. With depth
+      (each particle's distance into the sample, voxels), R uses only particles at least twice the random mean NN deep
+      (a guard zone), so the sample's surface does not push R up; too few such particles give no R. */
+  function dispersion(particles, maskVoxels, depth = null) {
     const c = new Float64Array(3 * particles.length);
     particles.forEach((p, i) => c.set(p.centroid, 3 * i));
     const nn = nearestOther(c);
-    if (particles.length < 2) return { nn, mean_nn: null, clark_evans: null };
-    const mean = nn.reduce((s, d) => s + d, 0) / nn.length, rho = particles.length / maskVoxels;
-    return { nn, mean_nn: mean, clark_evans: particles.length >= MIN_FOR_DISPERSION ? mean / (0.554 * rho ** (-1 / 3)) : null };
+    if (particles.length < 2) return { nn, mean_nn: null, clark_evans: null, guarded: 0 };
+    const random = 0.554 * (particles.length / maskVoxels) ** (-1 / 3), buffer = 2 * random;
+    const use = depth ? Array.from(nn.keys()).filter((i) => depth[i] >= buffer) : Array.from(nn.keys());
+    const mean = (ix) => ix.reduce((s, i) => s + nn[i], 0) / ix.length;
+    return { nn, mean_nn: mean(Array.from(nn.keys())), guarded: use.length, clark_evans: use.length >= MIN_FOR_DISPERSION ? mean(use) / random : null };
   }
 
   /** Second-order orientation tensor a2 = Σ w p pᵀ / Σ w of the fibers' main directions, weighted by voxel count. */
@@ -178,7 +204,7 @@
   function summarize(particles, { maskVoxels, voxelMm }) {
     const whole = particles.filter((p) => !p.clipped), esd = whole.map((p) => p.esd_vox * voxelMm).sort((a, b) => a - b);
     const fibers = particles.filter(isFiber), voxels = particles.reduce((s, p) => s + p.voxels, 0);
-    return { count: particles.length, clipped: particles.length - whole.length, fibers: fibers.length, volume_percent: maskVoxels ? (100 * voxels) / maskVoxels : null,
+    return { count: particles.length, clipped: particles.length - whole.length, fibers: fibers.length, flakes: particles.filter((p) => shapeClass(p) === 'flake').length, volume_percent: maskVoxels ? (100 * voxels) / maskVoxels : null,
       esd_p10_mm: quantile(esd, 0.1), esd_p50_mm: quantile(esd, 0.5), esd_p90_mm: quantile(esd, 0.9), orientation: orientationTensor(fibers) };
   }
 
@@ -215,15 +241,20 @@
       for (let y = 0; y < dims.ny; y += stride) for (let x = 0; x < dims.nx; x += stride) { const v = s[y * dims.nx + x]; if (v >= poreThreshold && keep(x, y, z)) values.push(v); }
     }
     const noise = robustThreshold(values, k);
+    if (noise.threshold === null) return { refused: 'No matrix voxels in the sample mask to set a threshold from.' };
     const label = (level) => labelBright({ getSlice, dims, keep, threshold: level, minVoxels, circle });
     const found = label(noise.threshold);
     const m = measurementThreshold({ median: noise.median, detection: noise.threshold }, found.particles.filter((p) => !p.clipped).map((p) => p.peak));
     const t = { detection: noise.threshold, median: noise.median, sd: noise.sd, k, bright_gray: m.bright_gray, threshold: threshold !== null ? threshold : m.threshold, manual: threshold !== null };
     const { particles, dropped } = t.threshold === noise.threshold ? found : label(t.threshold);
     const mm = particles.map((p) => ({ ...p, volume_mm3: p.voxels * voxelMm ** 3, esd_mm: p.esd_vox * voxelMm, length_mm: p.length_vox * voxelMm, diameter_mm: p.diameter_vox * voxelMm,
-      x_mm: p.centroid[0] * voxelMm, y_mm: p.centroid[1] * voxelMm, z_mm: p.centroid[2] * voxelMm, fiber: isFiber(p), near_noise: nearNoise(p.peak, t) }));
-    const d = dispersion(particles, maskVoxels);
-    return { threshold: t, particles: mm, dropped, summary: { ...summarize(particles, { maskVoxels, voxelMm }), near_noise: mm.filter((p) => p.near_noise).length }, dispersion: { mean_nn_mm: d.mean_nn === null ? null : d.mean_nn * voxelMm, clark_evans: d.clark_evans },
+      x_mm: p.centroid[0] * voxelMm, y_mm: p.centroid[1] * voxelMm, z_mm: p.centroid[2] * voxelMm, fiber: isFiber(p), shape: shapeClass(p), near_noise: nearNoise(p.peak, t) }));
+    const inside = Z.distanceInside(filled, b), depth = particles.map((p) => {
+      const bx = Math.min(b.nx - 1, Math.floor(p.centroid[0] / bin)), by = Math.min(b.ny - 1, Math.floor(p.centroid[1] / bin)), bz = Math.min(b.nz - 1, Math.floor(p.centroid[2] / bin));
+      return inside[(bz * b.ny + by) * b.nx + bx] * bin;
+    });
+    const d = dispersion(particles, maskVoxels, depth);
+    return { threshold: t, particles: mm, dropped, summary: { ...summarize(particles, { maskVoxels, voxelMm }), near_noise: mm.filter((p) => p.near_noise).length }, dispersion: { mean_nn_mm: d.mean_nn === null ? null : d.mean_nn * voxelMm, clark_evans: d.clark_evans, guarded: d.guarded },
       nn_mm: Float32Array.from(d.nn, (v) => v * voxelMm), maskVoxels, minVoxels };
   }
 
@@ -235,16 +266,16 @@
       let c = false;
       for (let i = 0, j = n - 1; i < n; j = i++) {
         const a = pts[i], b = pts[j];
-        if ((a.row > row) !== (b.row > row) && col < ((b.col - a.col) * (row - a.row)) / (b.row - a.row) + a.col) c = !c;
+        if ((a.row > row) !== (b.row > row) && col < ((b.col - a.col) * (row - a.row)) / (b.row - a.row) + a.col) c = !c; // voxel i tests at i + ½, as rasterPolygon does
       }
       return c;
     };
     return particles.filter((p) => {
       const [x, y, z] = p.centroid;
       const [col, row, slice] = region.plane === 'XY' ? [x, y, z] : region.plane === 'XZ' ? [x, z, y] : [y, z, x];
-      return Math.round(slice) >= region.slice_from && Math.round(slice) <= region.slice_to && inside(col, row);
+      return Math.round(slice) >= region.slice_from && Math.round(slice) <= region.slice_to && inside(col + 0.5, row + 0.5);
     });
   }
 
-  return { analyzeFiller, particlesInRegion, measurementThreshold, nearNoise, MIN_FOR_DISPERSION, MIN_FIBERS_FOR_TENSOR, robustThreshold, labelBright, particleShape, isFiber, dispersion, orientationTensor, summarize, FIBER_ASPECT, FIBER_MIN_LENGTH_VOX };
+  return { shapeClass, analyzeFiller, particlesInRegion, measurementThreshold, nearNoise, MIN_FOR_DISPERSION, MIN_FIBERS_FOR_TENSOR, robustThreshold, labelBright, particleShape, isFiber, dispersion, orientationTensor, summarize, FIBER_ASPECT, FIBER_MIN_LENGTH_VOX };
 }));

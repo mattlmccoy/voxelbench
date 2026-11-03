@@ -191,7 +191,7 @@ onmessage = ({ data }) => {
       }
       const r = self.VBFiller.analyzeFiller({ getSlice: (z) => smoothed[z], dims: vol.full, filled: body.filled, binnedDims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm, circle: vol.circle,
         poreThreshold: data.settings.poreThreshold, k: data.k, minVoxels: data.minVoxels, threshold: data.threshold });
-      postMessage({ type: 'filler', id: data.id, ...r }, [r.nn_mm.buffer]);
+      postMessage({ type: 'filler', id: data.id, ...r }, r.nn_mm ? [r.nn_mm.buffer] : []);
     } else if (data.type === 'cad') {
       if (ensureBody(data.settings, data.crops)) sendModel();
       const r = self.VBCad.compareToCad({ gray: vol.gray, filled: body.filled, dims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm, circle: vol.circle, airGray,

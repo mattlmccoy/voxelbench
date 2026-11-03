@@ -327,6 +327,7 @@ window.CTApp = (function () {
     state.porePhase = 'running';
     state.detectStart = performance.now();
     Object.assign(state, { pores: null, runs: null, rejected: new Set(), selected: null, zones: null, patches: null, patchLabels: null, voidMeshes: null, regionStats: new Map() });
+    if (state.filler) { state.filler = null; emit('fillerChanged'); } // it read the smoothed slices of the old run
     emit('poresChanged');
     emit('voidMeshesChanged');
     worker.postMessage({ type: 'detect', settings: state.settings, crops: cropOutlines() });
@@ -453,10 +454,11 @@ window.CTApp = (function () {
       }
       emit('cadChanged');
     } else if (data.type === 'error') {
+      // An error belongs to the step that was waiting on the worker; the pore step only when segmentation was running.
       if (state.cad && state.cad.busy) { state.cad.busy = false; state.cad.refused = data.message; emit('cadChanged'); }
-      state.porePhase = 'error';
-      emit('statusText', data.message);
-      emit('poresChanged');
+      if (state.filler && state.filler.busy) { state.filler = { busy: false, result: null, refused: data.message }; emit('fillerChanged'); }
+      if (state.wall && state.wall.busy) { state.wall = null; emit('wallChanged'); emit('statusText', data.message); }
+      if (state.porePhase === 'running') { state.porePhase = 'error'; emit('statusText', data.message); emit('poresChanged'); }
     }
   }
 

@@ -89,7 +89,7 @@ test('the orientation tensor of fibers along z is diag(0, 0, 1); of evenly sprea
 });
 
 test('summarize gives the count, volume fraction, ESD percentiles in mm and the fiber count', () => {
-  const ps = [at([0, 0, 0], { voxels: 100, esd_vox: 5 }), at([9, 9, 9], { voxels: 300, esd_vox: 8, clipped: true }), at([5, 5, 5], { voxels: 200, esd_vox: 7, aspect: 6, length_vox: 12, direction: [0, 1, 0] })];
+  const ps = [at([0, 0, 0], { voxels: 100, esd_vox: 5 }), at([9, 9, 9], { voxels: 300, esd_vox: 8, clipped: true }), at([5, 5, 5], { voxels: 200, esd_vox: 7, aspect: 6, elongation: 6, length_vox: 12, direction: [0, 1, 0] })];
   const s = F.summarize(ps, { maskVoxels: 10000, voxelMm: 0.04 });
   assert.equal(s.count, 3); assert.equal(s.clipped, 1); assert.equal(s.fibers, 1);
   assert.ok(Math.abs(s.volume_percent - 6) < 1e-9);
@@ -126,4 +126,40 @@ test('particlesInRegion keeps the particles whose centroid lies inside the outli
   assert.deepEqual(F.particlesInRegion(ps, { plane: 'XY', points: square, slice_from: 0, slice_to: 20 }).map((p) => p.centroid), [[5, 5, 5], [5, 30, 5]].slice(0, 1));
   // XZ: col = x, row = z, slice = y
   assert.deepEqual(F.particlesInRegion(ps, { plane: 'XZ', points: square, slice_from: 0, slice_to: 40 }).map((p) => p.centroid), [[5, 5, 5], [5, 30, 5]]);
+});
+
+test('the labeler frees finished labels: peak label slots stay near two slices of runs, not the whole volume', () => {
+  const dots = volume((x, y, z) => x % 2 === 0 && y % 2 === 0 && z % 2 === 0); // 20 x 20 dots per even slice, none touching
+  const r = F.labelBright({ getSlice: (z) => dots[z], dims, keep: () => true, threshold: 2000, minVoxels: 1 });
+  assert.equal(r.particles.length, 20 * 20 * 20);
+  assert.ok(r.peakLabels <= 2 * 20 * 20 + 64, `peak ${r.peakLabels}`);
+});
+
+test('a flat disk is a flake, not a fiber; a round fiber reads its diameter', () => {
+  const disk = (x, y, z) => z >= 19 && z < 21 && (x - 20) ** 2 + (y - 20) ** 2 <= 100;
+  const rod = (x, y, z) => x >= 2 && x < 38 && (y - 20) ** 2 + (z - 8) ** 2 <= 25;
+  const { particles } = run(volume((x, y, z) => disk(x, y, z) || rod(x, y, z)));
+  const d = particles.find((p) => Math.abs(p.centroid[2] - 19.5) < 1e-9), f = particles.find((p) => p !== d);
+  assert.equal(F.shapeClass(d), 'flake'); assert.equal(F.isFiber(d), false);
+  assert.equal(F.shapeClass(f), 'fiber');
+  assert.ok(Math.abs(f.diameter_vox - 10) < 0.6, `diameter ${f.diameter_vox}`);
+});
+
+test('Clark–Evans uses only particles farther from the surface than their nearest neighbor', () => {
+  let s = 7;
+  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32; };
+  const cube = Array.from({ length: 1000 }, () => at([rnd() * 100, rnd() * 100, rnd() * 100]));
+  const depth = (p) => Math.min(...p.centroid, ...p.centroid.map((c) => 100 - c));
+  const r = F.dispersion(cube, 1e6, cube.map(depth));
+  assert.ok(Math.abs(r.clark_evans - 1) < 0.12, `random cube R ${r.clark_evans}`);
+  assert.ok(r.guarded > 100 && r.guarded < 1000, `${r.guarded}`);
+  const slab = Array.from({ length: 1000 }, () => at([rnd() * 447, rnd() * 447, rnd() * 5]));
+  const thin = F.dispersion(slab, 447 * 447 * 5, slab.map((p) => Math.min(p.centroid[2], 5 - p.centroid[2])));
+  assert.equal(thin.clark_evans, null, 'a thin slab leaves too few particles away from its faces');
+});
+
+test('the robust SD has a floor of 1 gray, and an empty sample gives no threshold', () => {
+  const t = F.robustThreshold(new Float32Array(1000).fill(500), 4);
+  assert.equal(t.sd, 1); assert.equal(t.threshold, 504);
+  assert.equal(F.robustThreshold(new Float32Array(0), 4).threshold, null);
 });

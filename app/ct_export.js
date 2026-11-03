@@ -204,10 +204,10 @@
       `# Filler and fiber particles for ${sample.folder} (${describe(sample)})`,
       ...provenanceRows(provenance),
       `# Thresholds: detection ${r5(t.detection)} (matrix median ${r5(t.median)} + ${t.k} robust SD ${r5(t.sd)}), measurement ${r5(t.threshold)}${t.manual ? ' (set by hand)' : ` (halfway to the median particle peak ${r5(t.bright_gray)})`}. Particles: 26-connected voxels at or above measurement inside the sample mask, at least ${result.minVoxels} voxels.`,
-      '# Shape from second moments: aspect_ratio = sqrt(largest/smallest principal variance); length and diameter as for a rod; direction = main axis. fiber: aspect >= 3 and length >= 3 voxels. near_noise: peak within 1 robust SD of detection (may be matrix noise). clipped: touches the FOV edge or the volume faces.',
+      '# Shape from second moments: aspect_ratio = sqrt(largest/smallest principal variance); length as for a rod, diameter as for a round cross-section; direction = main axis. shape: fiber (elongation sqrt(l1/l2) >= 3, length >= 3 voxels), flake (flatness sqrt(l2/l3) >= 3), else particle. near_noise: peak within 1 robust SD of detection (may be matrix noise). clipped: touches the FOV edge or the volume faces.',
       `# Summary: ${JSON.stringify(result.summary)} Dispersion: ${JSON.stringify(result.dispersion)}`,
-      row(['id', 'x_mm', 'y_mm', 'z_mm', 'voxels', 'volume_mm3', 'esd_mm', 'length_mm', 'diameter_mm', 'aspect_ratio', 'direction_x', 'direction_y', 'direction_z', 'peak_gray', 'fiber', 'near_noise', 'clipped']),
-      ...particles.map((p) => row([p.id, r5(p.x_mm), r5(p.y_mm), r5(p.z_mm), p.voxels, r5(p.volume_mm3), r5(p.esd_mm), r5(p.length_mm), r5(p.diameter_mm), r5(p.aspect), ...p.direction.map(r5), p.peak, p.fiber, p.near_noise, p.clipped])),
+      row(['id', 'x_mm', 'y_mm', 'z_mm', 'voxels', 'volume_mm3', 'esd_mm', 'length_mm', 'diameter_mm', 'aspect_ratio', 'direction_x', 'direction_y', 'direction_z', 'peak_gray', 'fiber', 'near_noise', 'clipped', 'shape']),
+      ...particles.map((p) => row([p.id, r5(p.x_mm), r5(p.y_mm), r5(p.z_mm), p.voxels, r5(p.volume_mm3), r5(p.esd_mm), r5(p.length_mm), r5(p.diameter_mm), r5(p.aspect), ...p.direction.map(r5), p.peak, p.fiber, p.near_noise, p.clipped, p.shape ?? null])),
     ].join('\n') + '\n';
   }
 
