@@ -52,3 +52,16 @@ test('the synthetic scan with phantom rods calibrates the matrix to its true den
   assert.ok(Math.abs(matrix.value - truth.matrix_density) < 0.01, `${matrix.value} vs ${truth.matrix_density}`);
   assert.equal(matrix.extrapolated, false);
 });
+
+test('the synthetic pores are all closed and nearly spherical', async () => {
+  const { files, truth } = S.makeScan({});
+  const tiffs = await Promise.all(files.map(async (f) => CT.parseTiff(await f.arrayBuffer())));
+  const stack = { slices: tiffs.map((t) => t.pixels), voxelMm: tiffs[0].voxelMm, dims: { nx: tiffs[0].width, ny: tiffs[0].height, nz: tiffs.length } };
+  const a = H.analyze(stack, { settings: { poreThreshold: 1350 } }, { patches: false });
+  const c = a.connectivity;
+  assert.equal(c.pores.length, truth.pore_count);
+  assert.equal(c.pores.filter((p) => p.open).length, 0);
+  assert.equal(c.summary.open_percent, 0);
+  for (const p of c.pores) if (p.sphericity !== null) assert.ok(p.sphericity >= 0.8, `pore ${p.id}: ${p.sphericity}`);
+  assert.ok(c.pores.every((p) => p.surface_distance_mm > 0.1));
+});

@@ -1,6 +1,6 @@
 /* Runs pore detection off the page's main thread. The main thread sends the binned volume once, and sends full-
    resolution slices only when the smoothing changes; smoothed slices are kept here so threshold reruns are quick. */
-importScripts('ct_core.js', 'ct_pores.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js');
+importScripts('ct_core.js', 'ct_pores.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js', 'vb_connectivity.js');
 const P = self.CTPores, R = self.CTRegions, Z = self.CTZones, D = self.CTSheetData;
 const MODEL_DOWNSAMPLE = 2;
 const COARSE_STEP = 2; // binned voxels per coarse cell: 4 full voxels, about 0.16 mm at 40 um
@@ -35,10 +35,13 @@ function finishDetect({ settings }) {
   const coarse = P.detectPores(vol.gray, vol.outside, vol.dims, body, settings, { bin: vol.bin, voxelMm: vol.voxelMm });
   say('Fine segmentation on the loaded grid');
   const result = P.fineDetect({ dims: vol.full, bin: vol.bin, settings, voxelMm: vol.voxelMm, coarse, binnedDims: vol.dims, getSmoothed: (z) => smoothed[z] });
+  say('Open and closed pores, networks, sphericity');
+  const conn = self.VBConnectivity.annotatePores({ pores: result.pores, runs: result.runs, dims: vol.full, filled: body.filled, binnedDims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm });
+  result.pores = conn.pores;
   pores = result;
   pores.settings = settings;
   const { offsets, start, end, id, rows } = result.runs;
-  postMessage({ type: 'pores', pores: result.pores, runs: { offsets, start: start.slice(), end: end.slice(), id: id.slice(), rows } });
+  postMessage({ type: 'pores', pores: result.pores, connectivity: conn.summary, runs: { offsets, start: start.slice(), end: end.slice(), id: id.slice(), rows } });
   sendPatches();
 }
 

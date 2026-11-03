@@ -8,6 +8,7 @@ const CT = require('../app/ct_core.js');
 const P = require('../app/ct_pores.js');
 const R = require('../app/ct_regions.js');
 const Z = require('../app/ct_zones.js');
+const K = require('../app/vb_connectivity.js');
 
 const BIN = 2, COARSE_STEP = 2;
 const SWEEP = { poreThreshold: [1100, 1200, 1400, 1500], fineSigma: [0.75, 1.25], bodyThreshold: [1300, 1500] };
@@ -65,7 +66,8 @@ function analyze({ slices, voxelMm, dims }, run, { patches: withPatches = true, 
   const summary = P.summarize(base.result.pores, base.bodyMm3, rejected);
   const airGray = R.estimateAirGray(vol.gray, vol.outside, base.body.filled);
   log(`Base: ${summary.all_void_percent_of_body.toFixed(3)} % void, ${base.result.pores.length} regions`);
-  const out = { settings, crops, circle, vol, smoothed, base, rejected, summary, airGray };
+  const connectivity = K.annotatePores({ pores: base.result.pores, runs: base.result.runs, dims, filled: base.body.filled, binnedDims: vol.dims, bin: BIN, voxelMm });
+  const out = { settings, crops, circle, vol, smoothed, base, rejected, summary, airGray, connectivity };
   if (!withPatches) return out;
 
   const coarse = Z.prepareCoarse({ runs: base.result.runs, pores: base.result.pores, gray: vol.gray, filled: base.body.filled, binnedDims: vol.dims, fullDims: dims, bin: BIN, step: COARSE_STEP, voxelMm, circle });
