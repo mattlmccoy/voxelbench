@@ -712,6 +712,7 @@
     $('rangeTo').addEventListener('change', () => { if (state.draft) state.draft.sliceTo = Number($('rangeTo').value); });
     $('runPores').addEventListener('click', App.runDetect);
     App.on('settingsApplied', renderSettings);
+    App.saveRun = saveRun; // the batch saves each scan's run
     $('resetSettings').addEventListener('click', () => { state.settings = { ...P.DEFAULT_SETTINGS }; renderSettings(); $('poreStatus').textContent = 'Default parameters restored. Press Segment pores to apply.'; });
     $('referenceRegion').addEventListener('change', (e) => { state.referenceId = e.target.value; renderRegions(); });
     $('referenceDensity').addEventListener('change', (e) => { state.referenceDensity = e.target.value === '' ? NaN : Number(e.target.value); renderRegions(); });

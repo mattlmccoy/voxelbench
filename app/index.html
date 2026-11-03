@@ -193,6 +193,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
       <p class="mono muted" id="openerText"></p>
       <p class="error" id="loadError" hidden></p>
       <div class="tablewrap" style="max-height:none"><table id="startSamples"></table></div>
+      <div class="row" id="batchRow" hidden><button id="batchRun">Run all scans</button><button id="batchCsv" disabled>Batch table (CSV)</button><span class="mono muted" id="batchStatus"></span></div>
     </div>
     <section class="pane with-vertical main" id="paneXY" style="--plane: var(--plane-xy)"></section>
     <section class="pane" id="pane3D" style="--plane: var(--line-control)">
@@ -325,7 +326,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
           <div id="dimWrap" hidden>
             <p class="mono" id="dimSummary"></p>
             <div class="tablewrap"><table id="dimTable"></table></div>
-            <p class="hint">Dimensions: each Measure line with a nominal passes when nominal − tol ≤ measured ≤ nominal + tol. The measured length is between the clicked points on the slice, at the loaded voxel size.</p>
+            <p class="hint">Dimensions: each Measure (caliper) line with a nominal passes when nominal − tol ≤ measured ≤ nominal + tol. The measured length is between the clicked points on the slice, at the loaded voxel size.</p>
           </div>
         </div>
       </details>
@@ -478,6 +479,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 <script src="vb_wallrail.js"></script>
 <script src="vb_comparerail.js"></script>
 <script src="vb_bookmarks.js"></script>
+<script src="vb_batch.js"></script>
 <script src="ct_sheet.js"></script>
 <script src="ct_sheetpages.js"></script>
 <script src="ct_sheetexport.js"></script>

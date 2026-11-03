@@ -211,5 +211,21 @@
     ].join('\n') + '\n';
   }
 
-  return { fillerCsv, cadCsv, poreCsv, annotationCsv, regionCsv, npyHeader, maskParts, zipStream, poreChunks, patchCsv, zoneCsv };
+  const BATCH_COLUMNS = ['folder', 'name', 'porosity_percent', 'pores', 'crack_like', 'mask_mm3', 'open_percent', 'closed_percent', 'settings', 'pore_threshold', 'voxel_mm', 'bin_factor', 'error'];
+
+  /** One scan of a batch: its pore summary (P.summarize), open/closed split, and the settings it ran with. */
+  function batchRow(sample, summary, split, { source = null, poreThreshold = null, voxelMm = null, binFactor = null, error = null } = {}) {
+    const s = summary || {}, o = split || {};
+    return { folder: sample.folder, name: sample.name, porosity_percent: s.all_void_percent_of_body ?? null, pores: s.pore_count ?? null, crack_like: s.crack_like_count ?? null,
+      mask_mm3: s.body_volume_mm3 ?? null, open_percent: o.open_percent ?? null, closed_percent: o.closed_percent ?? null, settings: source, pore_threshold: poreThreshold,
+      voxel_mm: voxelMm, bin_factor: binFactor, error };
+  }
+
+  function batchCsv(rows, { provenance }) {
+    const r5 = (v) => (typeof v === 'number' && Number.isFinite(v) ? Number(v.toFixed(5)) : v);
+    return [`# Batch run of ${rows.length} scans; ${provenance}`, '# settings: "saved run" when the scan had a saved run (its own settings), else "batch" (the settings when the batch started). Porosity of the sample mask; open/closed as in the pore step.',
+      row(BATCH_COLUMNS), ...rows.map((x) => row(BATCH_COLUMNS.map((c) => r5(x[c]))))].join('\n') + '\n';
+  }
+
+  return { batchRow, batchCsv, fillerCsv, cadCsv, poreCsv, annotationCsv, regionCsv, npyHeader, maskParts, zipStream, poreChunks, patchCsv, zoneCsv };
 }));

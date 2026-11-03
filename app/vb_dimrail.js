@@ -22,7 +22,7 @@
   }
 
   function render() {
-    const lines = state.folder ? App.annotationsOf(state.folder).filter((a) => a.kind === 'measure' && Number.isFinite(a.length_mm)) : [];
+    const lines = state.folder ? App.annotationsOf(state.folder).filter((a) => a.kind === 'caliper' && Number.isFinite(a.length_mm)) : []; // the Measure tool saves kind 'caliper'
     $('dimWrap').hidden = !lines.length;
     const table = $('dimTable');
     table.textContent = '';

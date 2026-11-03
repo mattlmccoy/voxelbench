@@ -181,11 +181,20 @@ test('the filler CSV has one row per particle with its shape, fiber and noise fl
 });
 
 test('the annotation CSV carries the nominal, tolerances, deviation and pass of a toleranced measurement', () => {
-  const base = { id: 'a1', created_at: 't', sample: { folder: 'S', name: 'S', material: '', process: '' }, plane: 'XY', slice: 3, kind: 'measure', type: 'length', window: { low: 0, high: 1 }, note: '', voxels: [], mm: [] };
+  const base = { id: 'a1', created_at: 't', sample: { folder: 'S', name: 'S', material: '', process: '' }, plane: 'XY', slice: 3, kind: 'caliper', type: 'pore', window: { low: 0, high: 1 }, note: '', voxels: [], mm: [] };
   const csv = E.annotationCsv([{ ...base, length_mm: 10.03, nominal_mm: 10, tol_minus_mm: 0.05, tol_plus_mm: 0.02 }, { ...base, id: 'a2', length_mm: 4 }]);
   const lines = csv.trim().split('\n'), head = lines[0].split(',');
   for (const c of ['nominal_mm', 'tol_minus_mm', 'tol_plus_mm', 'deviation_mm', 'pass']) assert.ok(head.includes(c), c);
   const cell = (r, c) => lines[r].split(',')[head.indexOf(c)];
   assert.equal(cell(1, 'pass'), 'false'); assert.equal(cell(1, 'deviation_mm'), '0.03');
   assert.equal(cell(2, 'pass'), ''); assert.equal(cell(2, 'nominal_mm'), '');
+});
+
+test('batchCsv: one row per scan with porosity, open/closed and which settings were used; a failed scan keeps its error', () => {
+  const ok = E.batchRow({ folder: 'A', name: 'Part A' }, { all_void_percent_of_body: 5.25, pore_count: 10, crack_like_count: 2, body_volume_mm3: 800 }, { open_percent: 4.5, closed_percent: 0.75 }, { source: 'saved run', poreThreshold: 1300, voxelMm: 0.04, binFactor: 1 });
+  const bad = E.batchRow({ folder: 'B', name: 'B' }, null, null, { error: 'out of memory' });
+  const lines = E.batchCsv([ok, bad], { provenance: 'VoxelBench test' }).trim().split('\n'), data = lines.filter((l) => !l.startsWith('#'));
+  const head = data[0].split(','), cell = (r, c) => data[r].split(',')[head.indexOf(c)];
+  assert.equal(cell(1, 'porosity_percent'), '5.25'); assert.equal(cell(1, 'open_percent'), '4.5'); assert.equal(cell(1, 'settings'), 'saved run');
+  assert.equal(cell(2, 'error'), 'out of memory'); assert.equal(cell(2, 'porosity_percent'), '');
 });

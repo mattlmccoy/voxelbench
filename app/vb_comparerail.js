@@ -4,7 +4,7 @@
   'use strict';
   const CT = window.CT;
   const { state, $, on } = App;
-  const fmt = (v) => (v === null ? 'n/a' : Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(3));
+  const fmt = (v) => (v === null ? 'n/a' : Number.isInteger(v) || Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(3));
 
   function options() {
     const sel = $('compareWith'), keep = sel.value;

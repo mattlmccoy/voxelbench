@@ -21,8 +21,9 @@
   - `voxel_mm`, `bin_factor`, `regions`, `zones` and `calibration`.
 
   It has **no** open/closed, filler or CAD numbers, so runs saved before this phase read n/a for them.
-- **Measurement.** `CT.makeAnnotation` with `kind: 'measure'` stores `length_mm` (`app/ct_core.js:314`). There is no
-  nominal field yet.
+- **Measurement.** The Measure tool saves `CT.makeAnnotation` with `kind: 'caliper'` (two points), which stores
+  `length_mm` (`app/ct_core.js` makeAnnotation; corrected during the browser check, the first draft said 'measure').
+  There is no nominal field yet.
 - **Store collections.** `samples, labels, regions, annotations` (`app/vb_store.js:12`). Projects without a
   collection import as empty.
 
