@@ -65,3 +65,24 @@ test('the synthetic pores are all closed and nearly spherical', async () => {
   for (const p of c.pores) if (p.sphericity !== null) assert.ok(p.sphericity >= 0.8, `pore ${p.id}: ${p.sphericity}`);
   assert.ok(c.pores.every((p) => p.surface_distance_mm > 0.1));
 });
+
+test('a crop face counts as surface: synthetic pores cut by it read as open, pores clear of it stay closed', async () => {
+  const size = 160;
+  const { files, truth } = S.makeScan({});
+  const tiffs = await Promise.all(files.map(async (f) => CT.parseTiff(await f.arrayBuffer())));
+  const stack = { slices: tiffs.map((t) => t.pixels), voxelMm: tiffs[0].voxelMm, dims: { nx: size, ny: size, nz: size } };
+  const cut = 80; // keep x < cut
+  const crops = [{ plane: 'XY', points: [{ col: 0, row: 0 }, { col: cut, row: 0 }, { col: cut, row: size }, { col: 0, row: size }] }];
+  const a = H.analyze(stack, { settings: { poreThreshold: 1350 }, crops }, { patches: false });
+  const found = a.connectivity.pores;
+  const near = (p) => found.reduce((best, q) => (Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z) < Math.hypot(best.x - p.x, best.y - p.y, best.z - p.z) ? q : best));
+  const straddle = truth.pores.filter((p) => p.x - p.r < cut - 5 && p.x + p.r > cut + 3); // keeps at least 5 voxels inside the crop
+  const clear = truth.pores.filter((p) => p.x + p.r < cut - 6);
+  assert.ok(straddle.length > 0 && clear.length > 0, `${straddle.length} cut, ${clear.length} clear`);
+  for (const p of straddle) {
+    const q = near(p);
+    assert.ok(Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z) < p.r, `cut pore at x=${p.x.toFixed(1)} was found`);
+    assert.equal(q.open, true, `cut pore at x=${p.x.toFixed(1)}`);
+  }
+  for (const p of clear) assert.equal(near(p).open, false, `clear pore at x=${p.x.toFixed(1)}`);
+});

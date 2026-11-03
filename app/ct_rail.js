@@ -323,6 +323,14 @@
     const patchVolume = state.patches ? state.patches.reduce((t, p) => t + p.volume_mm3, 0) : null;
     const rows = [['Pores, AR ≤ 2.5', `${s.pore_count}, ${s.pore_volume_mm3.toFixed(1)} mm³`], ['Pores, AR > 2.5', `${s.crack_like_count}, ${s.crack_like_volume_mm3.toFixed(1)} mm³`], ['Pores at FOV edge', `${s.clipped_count}, ${s.clipped_volume_mm3.toFixed(1)} mm³`],
       ['ESD < 0.16 mm', `${small}`], ['Rejected', `${s.rejected_count}`], ['Low-density regions (excluded)', state.patches ? `${state.patches.length}, ${patchVolume.toFixed(1)} mm³` : 'segmenting']];
+    const k = state.connectivity;
+    if (k) {
+      const axes = ['x', 'y', 'z'].filter((a) => k.through[a]);
+      rows.push(['Open porosity', `${k.open_percent.toFixed(2)} %, ${k.open_mm3.toFixed(1)} mm³`], ['Closed porosity', `${k.closed_percent.toFixed(2)} %, ${k.closed_mm3.toFixed(1)} mm³`],
+        ['Through-path', axes.length ? `along ${axes.join(', ')}` : 'none']);
+    }
+    $('poreOpenNote').hidden = !k;
+    if (k) $('poreOpenNote').textContent = `Open: reaches the sample surface, or is reached by outside air through gray below the pore threshold (${state.settings.poreThreshold}), at ${CT.gridText(state.binFactor * 2)} resolution; a crack narrower than that reads as closed, and a crop face counts as surface. Through-path: a network of touching pores reaching both ends of the part along an axis.`;
     const fit = App.calibration();
     if (fit && fit.ok && state.solidGray != null) rows.push(['Matrix eq. density', `${App.densityText(fit, state.solidGray)} g/cm³`]);
     $('poreCalNote').hidden = !(fit && fit.ok);
@@ -368,11 +376,12 @@
     }
     const test = { all: () => true, pore: (p) => !p.crack_like && !p.clipped, small: (p) => p.diameter_mm < 0.16, crack: (p) => p.crack_like, rejected: (p) => state.rejected.has(p.id) }[poreFilter];
     const list = state.pores.filter(test);
-    for (const h of ['ID', 'ESD (mm)', 'Vol. (mm³)', 'AR', 'Class', '']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
+    for (const h of ['ID', 'ESD (mm)', 'Vol. (mm³)', 'AR', 'Sphericity', 'Surface (mm)', 'Class', '']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
     for (const p of list.slice(0, TABLE_ROWS)) {
       const tr = table.insertRow();
       tr.className = `pick${p.id === state.selected ? ' selected' : ''}${state.rejected.has(p.id) ? ' rejected' : ''}`;
-      for (const c of [p.id, p.diameter_mm.toFixed(3), p.volume_mm3.toFixed(4), p.elongation.toFixed(1), p.clipped ? 'FOV edge' : p.crack_like ? 'AR > cutoff' : 'AR ≤ cutoff']) tr.insertCell().textContent = c;
+      const cls = `${p.clipped ? 'FOV edge' : p.crack_like ? 'AR > cutoff' : 'AR ≤ cutoff'}${p.open ? ', open' : p.open === false ? ', closed' : ''}`;
+      for (const c of [p.id, p.diameter_mm.toFixed(3), p.volume_mm3.toFixed(4), p.elongation.toFixed(1), p.sphericity == null ? '–' : p.sphericity.toFixed(2), p.surface_distance_mm == null ? '–' : p.surface_distance_mm.toFixed(2), cls]) tr.insertCell().textContent = c;
       const cell = tr.insertCell();
       const reject = document.createElement('button');
       reject.className = 'link';

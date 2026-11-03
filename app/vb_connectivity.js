@@ -25,10 +25,33 @@
     return area > 0 ? (Math.PI ** (1 / 3) * (6 * voxels) ** (2 / 3)) / area : null;
   }
 
-  function annotatePores({ pores, runs, dims, filled, binnedDims, bin, voxelMm }) {
+  /** Binned voxels that outside air reaches through gray below the threshold: the mask's closing bridges crack mouths,
+      so a pore joined to the outside by a crack sits deep inside the mask but is still open. */
+  function airReach(filled, gray, threshold, { nx, ny, nz }) {
+    const n = filled.length, reach = new Uint8Array(n), stack = [];
+    const low = (i) => filled[i] && gray[i] < threshold && !reach[i];
+    const neighbors = (i, fn) => {
+      const x = i % nx, y = Math.floor(i / nx) % ny, z = Math.floor(i / (nx * ny));
+      if (x > 0) fn(i - 1); if (x < nx - 1) fn(i + 1);
+      if (y > 0) fn(i - nx); if (y < ny - 1) fn(i + nx);
+      if (z > 0) fn(i - nx * ny); if (z < nz - 1) fn(i + nx * ny);
+    };
+    for (let i = 0; i < n; i++) {
+      if (!low(i)) continue;
+      let touches = false;
+      neighbors(i, (j) => { if (!filled[j]) touches = true; });
+      const x = i % nx, y = Math.floor(i / nx) % ny, z = Math.floor(i / (nx * ny));
+      if (touches || x === 0 || y === 0 || z === 0 || x === nx - 1 || y === ny - 1 || z === nz - 1) { reach[i] = 1; stack.push(i); }
+    }
+    while (stack.length) neighbors(stack.pop(), (j) => { if (low(j)) { reach[j] = 1; stack.push(j); } });
+    return reach;
+  }
+
+  function annotatePores({ pores, runs, dims, filled, binnedDims, bin, voxelMm, gray = null, poreThreshold = null }) {
     const { ny } = dims, b = binnedDims;
     const depth = Z.distanceInside(filled, b);
-    const info = new Map(pores.map((p) => [p.id, { minDepth: Infinity, x0: Infinity, x1: -1, y0: Infinity, y1: -1, z0: Infinity, z1: -1, voxels: 0, runs: [] }]));
+    const reach = gray && Number.isFinite(poreThreshold) ? airReach(filled, gray, poreThreshold, b) : null;
+    const info = new Map(pores.map((p) => [p.id, { reached: false, minDepth: Infinity, x0: Infinity, x1: -1, y0: Infinity, y1: -1, z0: Infinity, z1: -1, voxels: 0, runs: [] }]));
     const parent = new Map(pores.map((p) => [p.id, p.id]));
     const find = (a) => { while (parent.get(a) !== a) { parent.set(a, parent.get(parent.get(a))); a = parent.get(a); } return a; };
     const join = (a, c) => { if (info.has(a) && info.has(c)) { const ra = find(a), rc = find(c); if (ra !== rc) parent.set(rc, ra); } };
@@ -46,7 +69,11 @@
         m.y0 = Math.min(m.y0, y); m.y1 = Math.max(m.y1, y); m.z0 = Math.min(m.z0, z); m.z1 = Math.max(m.z1, z);
         const by = Math.floor(y / bin), bz = Math.floor(z / bin);
         if (by < b.ny && bz < b.nz) {
-          for (let bx = Math.floor(runs.start[i] / bin); bx <= Math.floor((runs.end[i] - 1) / bin) && bx < b.nx; bx++) m.minDepth = Math.min(m.minDepth, depth[(bz * b.ny + by) * b.nx + bx]);
+          for (let bx = Math.floor(runs.start[i] / bin); bx <= Math.floor((runs.end[i] - 1) / bin) && bx < b.nx; bx++) {
+            const k = (bz * b.ny + by) * b.nx + bx;
+            m.minDepth = Math.min(m.minDepth, depth[k]);
+            if (reach && reach[k]) m.reached = true;
+          }
         }
         if (i > runs.offsets[row] && runs.end[i - 1] === runs.start[i] && runs.id[i - 1] !== runs.id[i]) join(runs.id[i - 1], runs.id[i]);
         if (y > 0) touch(i, row - 1);
@@ -75,7 +102,7 @@
         }
         shape = sphericity(mask, { nx: w, ny: h, nz: d }, m.voxels);
       }
-      const open = m.minDepth <= OPEN_DEPTH;
+      const open = m.minDepth <= OPEN_DEPTH || m.reached;
       return { ...p, surface_distance_mm: Number.isFinite(m.minDepth) ? m.minDepth * bin * voxelMm : null, open, sphericity: shape, network: find(p.id), box: [m.x0, m.x1, m.y0, m.y1, m.z0, m.z1] };
     });
 

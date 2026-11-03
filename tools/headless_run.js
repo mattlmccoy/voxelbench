@@ -66,7 +66,7 @@ function analyze({ slices, voxelMm, dims }, run, { patches: withPatches = true, 
   const summary = P.summarize(base.result.pores, base.bodyMm3, rejected);
   const airGray = R.estimateAirGray(vol.gray, vol.outside, base.body.filled);
   log(`Base: ${summary.all_void_percent_of_body.toFixed(3)} % void, ${base.result.pores.length} regions`);
-  const connectivity = K.annotatePores({ pores: base.result.pores, runs: base.result.runs, dims, filled: base.body.filled, binnedDims: vol.dims, bin: BIN, voxelMm });
+  const connectivity = K.annotatePores({ pores: base.result.pores, runs: base.result.runs, dims, filled: base.body.filled, binnedDims: vol.dims, bin: BIN, voxelMm, gray: vol.gray, poreThreshold: settings.poreThreshold });
   const out = { settings, crops, circle, vol, smoothed, base, rejected, summary, airGray, connectivity };
   if (!withPatches) return out;
 

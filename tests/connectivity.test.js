@@ -78,3 +78,20 @@ test('a part with no pores gives zeros and no networks', () => {
   const out = K.annotatePores({ pores: [], runs, dims, filled, binnedDims, bin, voxelMm });
   assert.deepEqual(out.summary, { open_mm3: 0, closed_mm3: 0, open_percent: 0, closed_percent: 0, networks: 0, through: { x: false, y: false, z: false } });
 });
+
+test('a pore joined to outside air by a crack that the mask closed over is open', () => {
+  // Interior pore 7 (full 13..16) plus a one-voxel-wide crack from it to the top face; the filled mask covers the crack.
+  const { runs, pores } = part([[7, 13, 16, 13, 16, 13, 16], [8, 6, 9, 6, 9, 13, 16]]);
+  const gray = new Uint16Array(binnedDims.nx * binnedDims.ny * binnedDims.nz);
+  const grayAt = (x, y, z) => {
+    if (!filled[(z * binnedDims.ny + y) * binnedDims.nx + x]) return 700; // air
+    if (x >= 6 && x <= 8 && y >= 6 && y <= 8 && z >= 6 && z <= 8) return 700; // pore 7, binned
+    if (x === 7 && y === 7 && z <= 6) return 700; // the crack up to the top face
+    return 2000;
+  };
+  for (let z = 0, i = 0; z < binnedDims.nz; z++) for (let y = 0; y < binnedDims.ny; y++) for (let x = 0; x < binnedDims.nx; x++, i++) gray[i] = grayAt(x, y, z);
+  const out = K.annotatePores({ pores, runs, dims, filled, binnedDims, bin, voxelMm, gray, poreThreshold: 1300 });
+  const byId = new Map(out.pores.map((p) => [p.id, p]));
+  assert.equal(byId.get(7).open, true, 'reached through the crack');
+  assert.equal(byId.get(8).open, false, 'pore 8 has solid all round');
+});

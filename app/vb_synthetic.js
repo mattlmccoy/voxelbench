@@ -62,7 +62,7 @@
       const name = `synthetic_${String(z + 1).padStart(3, '0')}.tif`;
       return { name, webkitRelativePath: `synthetic_scan/${name}`, arrayBuffer: async () => CT.writeTiff(size, size, s, voxelMm) };
     });
-    return { files, truth: { porosity_percent: (100 * open) / body, pore_count: pores.length, matrix_gray: MATRIX_GRAY, air_gray: AIR_GRAY,
+    return { files, truth: { porosity_percent: (100 * open) / body, pore_count: pores.length, pores: pores.map((p) => ({ ...p })), matrix_gray: MATRIX_GRAY, air_gray: AIR_GRAY,
       ...(phantoms ? { phantoms: rods, matrix_density: (MATRIX_GRAY - AIR_GRAY) / GRAY_PER_DENSITY } : {}) } };
   }
 

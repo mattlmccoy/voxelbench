@@ -36,7 +36,7 @@ function finishDetect({ settings }) {
   say('Fine segmentation on the loaded grid');
   const result = P.fineDetect({ dims: vol.full, bin: vol.bin, settings, voxelMm: vol.voxelMm, coarse, binnedDims: vol.dims, getSmoothed: (z) => smoothed[z] });
   say('Open and closed pores, networks, sphericity');
-  const conn = self.VBConnectivity.annotatePores({ pores: result.pores, runs: result.runs, dims: vol.full, filled: body.filled, binnedDims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm });
+  const conn = self.VBConnectivity.annotatePores({ pores: result.pores, runs: result.runs, dims: vol.full, filled: body.filled, binnedDims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm, gray: vol.gray, poreThreshold: settings.poreThreshold });
   result.pores = conn.pores;
   pores = result;
   pores.settings = settings;
