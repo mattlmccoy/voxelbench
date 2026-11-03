@@ -8,9 +8,10 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
 
 - Slice views (XY, XZ, YZ) and a 3D view, in grayscale or a rainbow (turbo) color map.
 - Pore segmentation: porosity, pore count and size, pores elongated or cut by the field of view (FOV).
-- Open and closed porosity: a pore is open when it reaches the part surface or outside air reaches it through
-  gray below the pore threshold. Networks of touching pores, a through-path check along each axis, and each pore's
-  sphericity and distance to the surface.
+- Open and closed porosity: a pore is open when outside air reaches it through gray below the pore threshold,
+  starting at the part surface or a crop face; a pore cut by the first or last slice is unknown unless air reaches
+  it. Networks of touching pores, a through-path check along each axis, and each pore's sphericity and distance to
+  the surface.
 - Low-density regions: gray below 0.8 of the matrix but above the pore threshold, reported apart from porosity.
 - Gray-value zones relative to a baseline (the whole part, or the pore-free ends of the long axis).
 - Regions with your own labels, annotations and length measurements.

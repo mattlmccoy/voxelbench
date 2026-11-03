@@ -131,8 +131,9 @@ build) and artifact database (artifact build). Done when both builds open a scan
 
 **Phase 3: open vs. closed porosity.** (Built 2026-11-03; plan in `docs/plans/2026-11-03-phase-3-connectivity.md`.
 Builder's calls: the through-path is checked along each axis between the mask's two ends rather than between two
-chosen faces; a pore within one binned voxel of the mask edge counts as open, as does one reached by an outside-air
-flood fill through gray below the pore threshold; each pore also gets Wadell sphericity and surface distance.)
+chosen faces; a pore is open when an outside-air flood fill through binned gray below the pore threshold reaches it,
+and unknown when it touches the first or last slice and is not reached; each pore also gets Wadell sphericity
+(surface-mesh area and volume, pores of 100 voxels or more) and surface distance.)
 Open pores connect to the outside air through below-threshold voxels;
 closed pores do not. Report open, closed and total porosity; a through-path check between two chosen faces;
 state that the split depends on threshold and resolution (a crack below resolution reads as closed).
