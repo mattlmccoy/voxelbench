@@ -1,6 +1,6 @@
 /* Runs pore detection off the page's main thread. The main thread sends the binned volume once, and sends full-
    resolution slices only when the smoothing changes; smoothed slices are kept here so threshold reruns are quick. */
-importScripts('ct_core.js', 'ct_pores.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js', 'vb_connectivity.js', 'vb_align.js', 'vb_deviation.js', 'vb_cad.js', 'vb_filler.js');
+importScripts('ct_core.js', 'ct_pores.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js', 'vb_connectivity.js', 'vb_align.js', 'vb_deviation.js', 'vb_cad.js', 'vb_filler.js', 'vb_wall.js');
 const P = self.CTPores, R = self.CTRegions, Z = self.CTZones, D = self.CTSheetData;
 const MODEL_DOWNSAMPLE = 2;
 const COARSE_STEP = 2; // binned voxels per coarse cell: 4 full voxels, about 0.16 mm at 40 um
@@ -180,6 +180,9 @@ onmessage = ({ data }) => {
       sendZones(data);
     } else if (data.type === 'sheet') {
       sendSheet(data);
+    } else if (data.type === 'wall') {
+      if (ensureBody(data.settings, data.crops)) sendModel();
+      postMessage({ type: 'wall', id: data.id, ...self.VBWall.wallReport(body.filled, vol.dims, vol.bin, vol.voxelMm) });
     } else if (data.type === 'filler') {
       if (ensureBody(data.settings, data.crops)) sendModel();
       if (!smoothed || smoothedSigma !== data.settings.fineSigma || smoothed.length !== vol.full.nz || !smoothed[vol.full.nz - 1]) {

@@ -382,6 +382,18 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
         </div>
       </details>
 
+      <details class="step" name="steps" id="step8">
+        <summary><span class="num">8</span>Wall thickness <span class="tag" id="wallTag">optional</span></summary>
+        <div class="body">
+          <p class="hint">Local wall thickness of the sample mask (pores filled), at the ridge of the distance to the outside: about 2 × that distance − ½ analysis voxel, ±½ voxel. Walls under about 2 analysis voxels are not resolved.</p>
+          <div class="row"><button id="runWall" disabled>Measure walls</button><button id="wallExport" disabled>Thinnest places (CSV)</button><span class="mono muted" id="wallExportNote"></span></div>
+          <p class="mono" id="wallFit"></p>
+          <div class="kv mono" id="wallStats"></div>
+          <canvas id="wallHist" width="300" height="110" hidden style="width:100%;max-width:300px"></canvas>
+          <div class="tablewrap" id="wallWrap" hidden><table id="wallTable"></table></div>
+        </div>
+      </details>
+
       <details id="secScan">
         <summary>Scan information <span class="tag" id="scanTag"></span></summary>
         <div class="body">
@@ -455,6 +467,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 <script src="vb_cad3d.js"></script>
 <script src="vb_fillerrail.js"></script>
 <script src="vb_dimrail.js"></script>
+<script src="vb_wallrail.js"></script>
 <script src="ct_sheet.js"></script>
 <script src="ct_sheetpages.js"></script>
 <script src="ct_sheetexport.js"></script>

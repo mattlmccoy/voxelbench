@@ -12,6 +12,7 @@ const K = require('../app/vb_connectivity.js');
 const St = require('../app/vb_stl.js');
 const Cad = require('../app/vb_cad.js');
 const Fi = require('../app/vb_filler.js');
+const Wa = require('../app/vb_wall.js');
 
 const BIN = 2, COARSE_STEP = 2;
 const SWEEP = { poreThreshold: [1100, 1200, 1400, 1500], fineSigma: [0.75, 1.25], bodyThreshold: [1300, 1500] };
@@ -175,4 +176,9 @@ function analyzeFiller(a, options = {}) {
     poreThreshold: a.settings.poreThreshold, ...options });
 }
 
-module.exports = { analyze, compareCad, analyzeFiller, detect, readStack, smoothAll, BIN, COARSE_STEP };
+/** Wall thickness on an analysis's sample mask. */
+function analyzeWall(a) {
+  return Wa.wallReport(a.base.body.filled, a.vol.dims, BIN, a.voxelMm);
+}
+
+module.exports = { analyze, compareCad, analyzeFiller, analyzeWall, detect, readStack, smoothAll, BIN, COARSE_STEP };

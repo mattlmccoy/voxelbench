@@ -338,6 +338,7 @@ window.CTApp = (function () {
 
   // Results describe the crop they ran with, so a new crop replaces them rather than leaving old voids over a new body.
   function cropChanged() {
+    if (state.wall && state.wall.result) { state.wall = null; emit('wallChanged'); }
     if (state.filler && state.filler.result) { state.filler = { busy: false, result: null, refused: 'The crop changed: run Find filler again.' }; emit('fillerChanged'); }
     if (state.cad && state.cad.result) { state.cad.result = null; state.cad.stale = 'The crop changed: press Align or Refine fit again.'; emit('cadChanged'); }
     updateModel();
@@ -435,6 +436,9 @@ window.CTApp = (function () {
       if (!data.refused) state.zoneThreshold = data.threshold;
       emit('statusText', data.refused ? 'Zone segmentation failed' : 'Zones segmented');
       emit('poresChanged');
+    } else if (data.type === 'wall') {
+      if (state.wall && data.id === state.wallSeq) state.wall = { busy: false, result: data };
+      emit('wallChanged');
     } else if (data.type === 'filler') {
       if (state.filler && data.id === state.fillerSeq) { state.filler = { busy: false, result: data.refused ? null : data, refused: data.refused || null }; }
       emit('fillerChanged');
@@ -514,5 +518,13 @@ window.CTApp = (function () {
     emit('fillerChanged');
   }
 
-  return { requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
+  function requestWall() {
+    if (!worker || (state.wall && state.wall.busy)) return;
+    state.wallSeq = (state.wallSeq || 0) + 1;
+    state.wall = { busy: true, result: null };
+    worker.postMessage({ type: 'wall', id: state.wallSeq, settings: state.settings, crops: cropOutlines() });
+    emit('wallChanged');
+  }
+
+  return { requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
 }());
