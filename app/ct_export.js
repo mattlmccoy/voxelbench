@@ -13,8 +13,8 @@
   };
   const row = (values) => values.map(cell).join(',');
 
-  const PORE_COLUMNS = ['id', 'x_voxel', 'y_voxel', 'z_voxel', 'x_mm', 'y_mm', 'z_mm', 'volume_mm3', 'equivalent_diameter_mm', 'elongation', 'crack_like', 'clipped', 'rejected'];
-  const poreRow = (p, rejected) => [p.id, p.x, p.y, p.z, p.x_mm, p.y_mm, p.z_mm, p.volume_mm3, p.diameter_mm, p.elongation, p.crack_like, p.clipped, rejected.has(p.id)];
+  const PORE_COLUMNS = ['id', 'x_voxel', 'y_voxel', 'z_voxel', 'x_mm', 'y_mm', 'z_mm', 'volume_mm3', 'equivalent_diameter_mm', 'elongation', 'crack_like', 'clipped', 'rejected', 'open', 'surface_distance_mm', 'network', 'sphericity'];
+  const poreRow = (p, rejected) => [p.id, p.x, p.y, p.z, p.x_mm, p.y_mm, p.z_mm, p.volume_mm3, p.diameter_mm, p.elongation, p.crack_like, p.clipped, rejected.has(p.id), p.open, p.surface_distance_mm, p.network, p.sphericity];
 
   const describe = (s) => [s.name, s.material || 'material not recorded', s.process || 'process not recorded'].join(', ');
 
@@ -29,6 +29,7 @@
       `# Settings: ${JSON.stringify(settings)}`,
       `# Summary: ${JSON.stringify(summary)}`,
       '# Smallest size kept is the minVolumeMm3 setting. Clipped pores touch the reconstruction edge.',
+      '# open: touches the sample mask surface (within 1 binned voxel) at this resolution; a crack narrower than about a voxel reads as closed, and a crop face counts as surface. network: pores whose voxels touch share a number. sphericity: Wadell, from the surface mesh; empty below 27 voxels.',
       ...calibrationRows(calibration),
       `# Voxel indices are 0-based on ${gridNote(binFactor)}.`,
       row(PORE_COLUMNS),

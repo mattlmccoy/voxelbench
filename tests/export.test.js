@@ -13,9 +13,9 @@ test('poreCsv writes settings as comments, one row per pore, and the review stat
   assert.ok(lines.some((l) => l.startsWith('#') && l.includes('poreThreshold')));
   assert.ok(lines.some((l) => l.startsWith('#') && /uncalibrated/i.test(l)));
   const rows = lines.filter((l) => !l.startsWith('#'));
-  assert.equal(rows[0], 'id,x_voxel,y_voxel,z_voxel,x_mm,y_mm,z_mm,volume_mm3,equivalent_diameter_mm,elongation,crack_like,clipped,rejected');
-  assert.equal(rows[1], '1,10.5,20.5,30.5,0.42,0.82,1.22,0.5,0.98,1.2,false,false,false');
-  assert.equal(rows[2], '2,1.5,2.5,3.5,0.06,0.1,0.14,0.1,0.57,4,true,false,true');
+  assert.equal(rows[0], 'id,x_voxel,y_voxel,z_voxel,x_mm,y_mm,z_mm,volume_mm3,equivalent_diameter_mm,elongation,crack_like,clipped,rejected,open,surface_distance_mm,network,sphericity');
+  assert.equal(rows[1], '1,10.5,20.5,30.5,0.42,0.82,1.22,0.5,0.98,1.2,false,false,false,,,,');
+  assert.equal(rows[2], '2,1.5,2.5,3.5,0.06,0.1,0.14,0.1,0.57,4,true,false,true,,,,');
 });
 
 test('annotationCsv quotes notes with commas and quotes, and flattens the points', () => {
@@ -140,4 +140,16 @@ test('a calibrated export never also says uncalibrated', () => {
     assert.ok(!/uncalibrated/i.test(csv), csv.slice(0, 400));
     assert.ok(/equivalent density/i.test(csv));
   }
+});
+
+test('the pore CSV carries open/closed, surface distance, network and sphericity with their definitions', () => {
+  const pores = [{ id: 1, x: 1, y: 2, z: 3, x_mm: 0.1, y_mm: 0.2, z_mm: 0.3, volume_mm3: 0.5, diameter_mm: 0.98, elongation: 1.2, crack_like: false, clipped: false, open: true, surface_distance_mm: 0.08, network: 1, sphericity: 0.91 },
+    { id: 2, x: 1, y: 2, z: 3, x_mm: 0.1, y_mm: 0.2, z_mm: 0.3, volume_mm3: 0.001, diameter_mm: 0.12, elongation: 1, crack_like: false, clipped: false, open: false, surface_distance_mm: 1.2, network: 2, sphericity: null }];
+  const lines = E.poreCsv(pores, new Set(), { sample: { folder: 'S', name: 'S' }, settings: {}, summary: {} }).trim().split('\n');
+  const data = lines.filter((l) => !l.startsWith('#'));
+  const head = data[0].split(','), cell = (r, c) => data[r].split(',')[head.indexOf(c)];
+  for (const c of ['open', 'surface_distance_mm', 'network', 'sphericity']) assert.ok(head.includes(c), c);
+  assert.equal(cell(1, 'open'), 'true'); assert.equal(cell(1, 'surface_distance_mm'), '0.08'); assert.equal(cell(1, 'sphericity'), '0.91');
+  assert.equal(cell(2, 'sphericity'), '', 'too small for a shape');
+  assert.ok(lines.some((l) => l.startsWith('#') && /open: touches the sample mask surface/i.test(l)));
 });
