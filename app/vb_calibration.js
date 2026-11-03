@@ -12,7 +12,7 @@
 
   /** Fit points from phantoms ({ name, density_g_cm3, gray }); air first when included and its gray is known. */
   function calibrationPoints(phantoms, { airGray, includeAir }) {
-    const points = phantoms.map((p) => ({ name: p.name, gray: p.gray, density: p.density_g_cm3 }));
+    const points = phantoms.map((p) => ({ name: p.name, gray: p.gray, density: p.density_g_cm3, ...(Number.isFinite(p.sd) ? { sd: p.sd } : {}) }));
     return includeAir && Number.isFinite(airGray) ? [{ name: 'Air', gray: airGray, density: AIR_DENSITY }, ...points] : points;
   }
 
@@ -20,14 +20,20 @@
   function fitCalibration(points) {
     const n = points.length;
     if (n < 2) return { ok: false, reason: 'A calibration needs at least 2 points (phantoms, or one phantom and air).' };
+    const empty = points.find((p) => !Number.isFinite(p.gray));
+    if (empty) return { ok: false, reason: `${empty.name} has no voxels inside the field of view; outline it again.` };
     const mg = points.reduce((s, p) => s + p.gray, 0) / n, md = points.reduce((s, p) => s + p.density, 0) / n;
     let sgg = 0, sgd = 0, sdd = 0;
     for (const p of points) { sgg += (p.gray - mg) ** 2; sgd += (p.gray - mg) * (p.density - md); sdd += (p.density - md) ** 2; }
     if (!(sgg > 1e-9)) return { ok: false, reason: 'The points must have different gray values.' };
     const slope = sgd / sgg, intercept = md - slope * mg;
+    if (!(slope > 0)) return { ok: false, reason: 'Density must rise with gray; check that each phantom has its own density.' };
+    // Points closer in gray than about 3 SD of their noise cannot fix a slope.
+    const sds = points.map((p) => p.sd).filter(Number.isFinite);
+    const grays = points.map((p) => p.gray), span = Math.max(...grays) - Math.min(...grays);
+    if (sds.length && span < 3 * Math.max(...sds)) return { ok: false, reason: `The points span ${span.toFixed(0)} gray, less than 3 times their noise (SD ${Math.max(...sds).toFixed(0)}); use phantoms of more different density.` };
     const residuals = points.map((p) => p.density - (intercept + slope * p.gray));
     const sse = residuals.reduce((s, r) => s + r * r, 0);
-    const grays = points.map((p) => p.gray);
     return { ok: true, method: 'linear', n, intercept, slope, r2: n > 2 && sdd > 0 ? 1 - sse / sdd : null, residuals, gray_range: [Math.min(...grays), Math.max(...grays)] };
   }
 

@@ -124,3 +124,10 @@ test('a phantom region carries its name and measured density, and is a measureme
     assert.throws(() => R.makeRegion({ ...args, phantom: bad }, R.DEFAULT_LABELS), /phantom needs a name and a measured density/);
   }
 });
+
+test('after saving a phantom or a crop, drawing continues with a user label', () => {
+  const labels = [{ id: 'lot_7', label: 'Lot 7', color: '#123456' }, { id: 'other_region', label: 'Other', color: '#c9d64f' }];
+  assert.equal(R.drawLabel('phantom', labels), 'lot_7');
+  assert.equal(R.drawLabel('crop', labels), 'lot_7');
+  assert.equal(R.drawLabel('other_region', labels), 'other_region');
+});

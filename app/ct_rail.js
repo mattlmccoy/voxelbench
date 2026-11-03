@@ -106,7 +106,8 @@
       const phantom = state.regionLabel === 'phantom' ? state.phantomDraft : undefined;
       const record = R.makeRegion({ ...common, plane: d.plane, sliceFrom: crop ? 0 : Number($('rangeFrom').value), sliceTo: crop ? depth - 1 : Number($('rangeTo').value), label: state.regionLabel, voxelMm: state.voxelMm, dims: state.dims, phantom }, App.regionLabels());
       App.saveRecord('regions', record);
-      if (crop) { App.cropChanged(); setTool('navigate'); } else if (phantom) setTool('navigate');
+      if (crop || phantom) { state.regionLabel = R.drawLabel(state.regionLabel, App.regionLabels()); state.phantomDraft = null; setTool('navigate'); }
+      if (crop) App.cropChanged();
       else if (state.zones && state.zones.map) App.requestZones();
     } else {
       App.saveRecord('annotations', CT.makeAnnotation({ ...common, dims: state.dims, voxelMm: state.voxelMm, window: { ...state.window }, plane: d.plane, slice: d.slice, kind: d.kind, type: state.type }));
@@ -324,6 +325,8 @@
       ['ESD < 0.16 mm', `${small}`], ['Rejected', `${s.rejected_count}`], ['Low-density regions (excluded)', state.patches ? `${state.patches.length}, ${patchVolume.toFixed(1)} mm³` : 'segmenting']];
     const fit = App.calibration();
     if (fit && fit.ok && state.solidGray != null) rows.push(['Matrix eq. density', `${App.densityText(fit, state.solidGray)} g/cm³`]);
+    $('poreCalNote').hidden = !(fit && fit.ok);
+    if (fit && fit.ok) $('poreCalNote').textContent = calibrationNote(fit);
     for (const [k, v] of rows) {
       const a = document.createElement('span'); a.textContent = k;
       const b = document.createElement('span'); b.className = 'v'; b.textContent = v;
@@ -457,6 +460,8 @@
     if (!measured.length) return;
     const head = table.insertRow();
     const fit = App.calibration(), calibrated = Boolean(fit && fit.ok);
+    $('tableCalNote').hidden = !calibrated;
+    if (calibrated) $('tableCalNote').textContent = calibrationNote(fit);
     for (const h of ['Region', 'mm³', 'Gray', 'Matrix gray', 'Porosity (%)', 'Pores', 'Rel. density', 'g/cm³ (est.)', ...(calibrated ? ['Eq. density (g/cm³)'] : []), '']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
     const fmt = (v, d) => (v === null || v === undefined ? 'n/a' : v.toFixed(d));
     for (const r of regionRows()) {
@@ -478,6 +483,9 @@
     }
   }
 
+  // Shown under every table with equivalent densities, so the caveat and the * travel with the numbers.
+  const calibrationNote = (fit) => `Eq. density: equivalent density of the phantom material, from ${fit.n} points; not true density for doped or filled material, no beam-hardening correction. * outside the phantom gray range ${fit.gray_range[0].toFixed(0)} to ${fit.gray_range[1].toFixed(0)}.`;
+
   function renderZones() {
     const z = state.zones;
     const ok = z && z.map;
@@ -494,6 +502,8 @@
     table.textContent = '';
     const head = table.insertRow();
     const fit = App.calibration(), calibrated = Boolean(fit && fit.ok);
+    $('tableCalNote').hidden = !calibrated;
+    if (calibrated) $('tableCalNote').textContent = calibrationNote(fit);
     for (const h of ['Zone', 'mm³', 'Porosity (%)', 'Gray offset', ...(calibrated ? ['Eq. g/cm³'] : []), 'Label']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
     for (const s of [...z.stats].sort((a, b) => zoneRank(a.zone) - zoneRank(b.zone))) {
       const tr = table.insertRow();
@@ -658,7 +668,7 @@
     showFill();
     $('fill').addEventListener('input', (e) => { state.fill = Number(e.target.value); showFill(); emit('layersChanged'); });
     $('drawCrop').addEventListener('click', () => startDrawing('crop'));
-    $('drawRegion').addEventListener('click', () => startDrawing(state.regionLabel === 'crop' ? App.regionLabels()[0].id : state.regionLabel));
+    $('drawRegion').addEventListener('click', () => startDrawing(R.drawLabel(state.regionLabel, App.regionLabels())));
     $('addLabel').addEventListener('click', addLabel);
     $('zoneBaseline').addEventListener('change', (e) => { state.zoneBaseline = e.target.value; if (state.zones) App.requestZones(); });
     $('doneTool').addEventListener('click', () => setTool('navigate'));
@@ -699,7 +709,7 @@
     $('exportMask').addEventListener('click', exportMask);
   });
   on('samplesChanged', renderSampleTables);
-  on('recordsChanged', () => { renderLog(); renderRegions(); renderPoreSummary(); renderSampleForm(); renderSampleTables(); renderFacts(); renderLabels(); renderTools(); });
+  on('recordsChanged', () => { renderLog(); renderRegions(); renderPoreSummary(); renderSampleForm(); renderSampleTables(); renderFacts(); renderLabels(); renderTools(); renderZones(); });
   on('draftChanged', renderDraft);
   on('saveDraft', saveDraft);
   on('startDrawing', (label) => startDrawing(label));

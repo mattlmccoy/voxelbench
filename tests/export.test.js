@@ -131,3 +131,13 @@ test('region and zone CSVs carry equivalent density only when calibrated', () =>
   const zh = zone[0].split(',');
   assert.ok(Math.abs(Number(zone[1].split(',')[zh.indexOf('matrix_equivalent_density_g_cm3')]) - 1.01) < 1e-9);
 });
+
+test('a calibrated export never also says uncalibrated', () => {
+  const Cal = require('../app/vb_calibration.js');
+  const fit = Cal.fitCalibration([{ name: 'Air', gray: 700, density: 0.0012 }, { name: 'rod', gray: 2000, density: 1.01 }]);
+  const ctx = { sample: { folder: 'S', name: 'S' }, settings: {}, summary: {}, calibration: fit };
+  for (const csv of [E.poreCsv([], new Set(), ctx), E.patchCsv([], ctx), E.zoneCsv({ threshold: 0.04, axis: 'x', stats: [] }, {}, ctx), E.regionCsv([], { calibration: fit })]) {
+    assert.ok(!/uncalibrated/i.test(csv), csv.slice(0, 400));
+    assert.ok(/equivalent density/i.test(csv));
+  }
+});

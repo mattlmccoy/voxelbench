@@ -166,7 +166,7 @@ window.CTApp = (function () {
     if (!state.folder) return null;
     const Cal = window.VBCalibration;
     const phantoms = regionsOf(state.folder).filter((r) => r.label === 'phantom' && r.phantom)
-      .map((r) => ({ id: r.id, name: r.phantom.name, density_g_cm3: r.phantom.density_g_cm3, gray: statsOf(r).gray_p50, stats: statsOf(r) }));
+      .map((r) => ({ id: r.id, name: r.phantom.name, density_g_cm3: r.phantom.density_g_cm3, gray: statsOf(r).gray_p50, sd: statsOf(r).gray_sd, stats: statsOf(r) }));
     if (!phantoms.length) return null;
     const points = Cal.calibrationPoints(phantoms, { airGray: state.airGray, includeAir: CT.sampleInfo(state.folder, state.samples).calibration_air !== false });
     return { ...Cal.fitCalibration(points), points, phantoms };

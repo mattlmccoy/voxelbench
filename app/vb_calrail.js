@@ -44,7 +44,7 @@
     fit.points.forEach((p, k) => {
       const tr = table.insertRow();
       const phantom = fit.phantoms.find((x) => x.name === p.name && x.gray === p.gray);
-      const cells = [p.name, p.density.toFixed(4), p.gray === null ? 'n/a' : p.gray.toFixed(0), phantom ? phantom.stats.gray_sd.toFixed(0) : '', phantom ? phantom.stats.voxels.toLocaleString('en-US') : '',
+      const cells = [p.name, p.density.toFixed(4), p.gray === null ? 'n/a' : p.gray.toFixed(0), phantom && phantom.stats.gray_sd != null ? phantom.stats.gray_sd.toFixed(0) : '', phantom ? phantom.stats.voxels.toLocaleString('en-US') : '',
         fit.ok ? fit.residuals[k].toFixed(4) : ''];
       cells.forEach((c, i) => { const td = tr.insertCell(); td.textContent = c; if (!i) td.style.textAlign = 'left'; });
       const cell = tr.insertCell();

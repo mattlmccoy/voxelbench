@@ -22,13 +22,14 @@
 
   const gridNote = (f) => (f > 1 ? `the ${f}× binned grid` : 'the full-resolution grid');
 
-  function poreCsv(pores, rejected, { sample, settings, summary, provenance, binFactor = 1 }) {
+  function poreCsv(pores, rejected, { sample, settings, summary, provenance, binFactor = 1, calibration }) {
     return [
       `# Pore table for ${sample.folder} (${describe(sample)})`,
       ...provenanceRows(provenance),
       `# Settings: ${JSON.stringify(settings)}`,
       `# Summary: ${JSON.stringify(summary)}`,
-      '# Smallest size kept is the minVolumeMm3 setting. Clipped pores touch the reconstruction edge. Gray is uncalibrated.',
+      '# Smallest size kept is the minVolumeMm3 setting. Clipped pores touch the reconstruction edge.',
+      ...calibrationRows(calibration),
       `# Voxel indices are 0-based on ${gridNote(binFactor)}.`,
       row(PORE_COLUMNS),
       ...pores.map((p) => row(poreRow(p, rejected))),
@@ -37,11 +38,12 @@
 
   const PATCH_COLUMNS = ['id', 'x_voxel', 'y_voxel', 'z_voxel', 'x_mm', 'y_mm', 'z_mm', 'volume_mm3', 'equivalent_diameter_mm', 'gray_mean', 'relative_gray'];
 
-  function patchCsv(patches, { sample, provenance, binFactor = 1 }) {
+  function patchCsv(patches, { sample, provenance, binFactor = 1, calibration }) {
     return [
       `# Low-density regions for ${sample.folder} (${describe(sample)})`,
       ...provenanceRows(provenance),
-      '# Regions with smoothed gray below 0.8 of matrix (air = 0) and above the pore threshold; excluded from porosity. relative_gray: air 0, matrix 1. Gray values uncalibrated.',
+      '# Regions with smoothed gray below 0.8 of matrix (air = 0) and above the pore threshold; excluded from porosity. relative_gray: air 0, matrix 1; gray_mean is scanner gray.',
+      ...calibrationRows(calibration),
       `# Positions are voxel indices on ${gridNote(binFactor)}.`,
       row(PATCH_COLUMNS),
       ...patches.map((p) => row([p.id, p.x, p.y, p.z, p.x_mm, p.y_mm, p.z_mm, p.volume_mm3, p.diameter_mm, p.gray_mean, p.relative_gray])),
@@ -58,7 +60,7 @@
       `# Gray-value zones for ${sample.folder} (${describe(sample)})`,
       ...provenanceRows(provenance),
       ...calibrationRows(calibration),
-      `# Zones segmented on gray value (bulk attenuation), not composition. High-gray threshold: gray offset ${zones.threshold} relative to ${zones.method === 'ends' ? `the pore-free ends of the ${zones.axis} axis at equal depth` : 'the median of all pore-free solid at equal depth'}. Gray values uncalibrated.`,
+      `# Zones segmented on gray value (bulk attenuation), not composition. High-gray threshold: gray offset ${zones.threshold} relative to ${zones.method === 'ends' ? `the pore-free ends of the ${zones.axis} axis at equal depth` : 'the median of all pore-free solid at equal depth'}.`,
       row(['zone', 'assigned_label', 'volume_mm3', 'porosity_percent', 'matrix_gray_mean', 'median_gray_offset', 'matrix_equivalent_density_g_cm3', 'matrix_equivalent_density_extrapolated']),
       ...zones.stats.map((s) => row([zoneName(s.zone, labels), (labels.find((l) => l.id === assigned[s.zone]) || {}).label || 'unassigned', s.volume_mm3, s.void_percent, s.solid_gray_mean, s.excess_median, eq(s.solid_gray_mean) && eq(s.solid_gray_mean).value, eq(s.solid_gray_mean) && eq(s.solid_gray_mean).extrapolated])),
     ].join('\n') + '\n';

@@ -241,6 +241,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
           <p class="mono muted" id="poreStatus">Open a scan first.</p>
           <div class="headline" id="voidHeadline" hidden></div>
           <div class="kv mono" id="poreSummary"></div>
+          <p class="hint" id="poreCalNote" hidden></p>
           <label class="setting" id="minVoidRow" hidden><span>Minimum ESD in 3D view</span><span class="v mono" id="minVoidValue"></span><input type="range" id="minVoid" min="0" max="1" step="0.05" value="0"></label>
           <details class="sub">
             <summary>Pore and low-density region list</summary>
@@ -281,6 +282,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
           <label class="setting" id="zoneThresholdRow" hidden><span>High-gray threshold (gray offset)</span><span class="v mono" id="zoneThresholdValue"></span><input type="range" id="zoneThreshold" min="0.01" max="0.2" step="0.005"></label>
           <div class="tablewrap" id="zoneWrap" hidden><table id="zoneTable"></table></div>
           <div class="tablewrap" id="regionWrap" hidden><table id="regionTable"></table></div>
+          <p class="hint" id="tableCalNote" hidden></p>
           <details class="sub">
             <summary>Relative density from a reference region</summary>
             <div>
@@ -317,7 +319,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
       <details class="step" name="steps" id="step5">
         <summary><span class="num">5</span>Density calibration <span class="tag" id="calTag">optional</span></summary>
         <div class="body">
-          <p class="hint">Outline each reference phantom where it is solid and enter its measured density. VoxelBench fits density to the median gray of each phantom, and to air if included. The result is the equivalent density of the phantom material: doped or filled material does not read its true density. Scan protocol: docs/PHANTOM_PROTOCOL.md in the repository.</p>
+          <p class="hint">Outline each reference phantom where it is solid and enter its measured density. VoxelBench fits density to the median gray of each phantom, and to air if included. The result is the equivalent density of the phantom material: doped or filled material does not read its true density. Crop the phantoms out of the sample in step 1 if they are as dense as the part; calibration reads them either way. Scan protocol: docs/PHANTOM_PROTOCOL.md in the repository.</p>
           <div class="row">
             <label>Name <input type="text" id="phantomName" placeholder="e.g. PA12 rod" autocomplete="off" style="width:110px"></label>
             <label>g/cm³ <input type="number" id="phantomDensity" step="0.001" min="0" style="width:72px"></label>

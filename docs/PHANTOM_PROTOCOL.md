@@ -34,11 +34,13 @@ is the density a phantom of the reference material would need to show that gray.
 1. Open the scan and go to step 5, **Density calibration**.
 2. For each phantom, enter its name and measured density, press **Draw phantom**, outline the inside of the phantom
    away from its edge on the main view, and set the slices where it is solid. Save.
-3. Leave **Include air** on unless air in this scan is unreliable (for example packaging film everywhere). Air is
+3. **Crop the phantoms out of the sample in step 1** when they are as dense as the part (above the mask threshold),
+   or they join the sample mask and change porosity and the zone baseline. Calibration reads phantoms either way.
+4. Leave **Include air** on unless air in this scan is unreliable (for example packaging film everywhere). Air is
    the median gray outside the part, at 0.0012 g/cm³.
-4. Read the fit line. With three or more points, residuals above about 0.01 g/cm³ mean the line does not hold for
+5. Read the fit line. With three or more points, residuals above about 0.01 g/cm³ mean the line does not hold for
    these phantoms.
-5. Equivalent densities then appear in the region and zone tables, the porosity summary, the CSV exports and the
+6. Equivalent densities then appear in the region and zone tables, the porosity summary, the CSV exports and the
    review sheet. A value marked `*` is extrapolated: its gray lies outside the phantoms' range.
 
 Without phantoms every gray value stays "uncalibrated", and no g/cm³ appears.

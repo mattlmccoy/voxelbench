@@ -111,5 +111,9 @@
     return stored ? { save: null, remove: id } : { save: list.filter((l) => l.id !== id), remove: null };
   }
 
-  return { DEFAULT_LABELS, CROP, PHANTOM, labelOf, labelDelete, simplifyFreehand, makeRegion, regionStats, estimateAirGray, densityEstimate };
+  /** The label drawing continues with: built-in labels (crop, phantom) are one-off, so the next region is the
+      first user label. */
+  const drawLabel = (label, labels) => (BUILT_IN.includes(label) ? labels[0].id : label);
+
+  return { DEFAULT_LABELS, CROP, PHANTOM, labelOf, drawLabel, labelDelete, simplifyFreehand, makeRegion, regionStats, estimateAirGray, densityEstimate };
 }));

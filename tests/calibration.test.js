@@ -52,3 +52,20 @@ test('calibrationPoints adds air first when asked and air gray is known', () => 
   assert.deepEqual(C.calibrationPoints(phantoms, { airGray: null, includeAir: true }), [{ name: 'PA12 rod', gray: 2000, density: 1.01 }]);
   assert.deepEqual(C.calibrationPoints(phantoms, { airGray: 711, includeAir: false }), [{ name: 'PA12 rod', gray: 2000, density: 1.01 }]);
 });
+
+test('the fit refuses an empty phantom, a falling line and points closer than their noise', () => {
+  const air = { name: 'Air', gray: 700, density: 0.0012 };
+  const empty = C.fitCalibration([air, { name: 'Rod A', gray: null, density: 0.5 }]);
+  assert.equal(empty.ok, false);
+  assert.match(empty.reason, /Rod A/);
+  const falling = C.fitCalibration([{ name: 'Rod A', gray: 1345, density: 1.4 }, { name: 'Rod B', gray: 2506, density: 0.5 }]); // densities in swapped rows
+  assert.equal(falling.ok, false);
+  assert.match(falling.reason, /rise with gray/);
+  const close = C.fitCalibration([{ name: 'Rod A', gray: 1345, density: 0.5, sd: 60 }, { name: 'Rod B', gray: 1400, density: 0.55, sd: 60 }]);
+  assert.equal(close.ok, false);
+  assert.match(close.reason, /noise/);
+});
+
+test('calibrationPoints carries each phantom gray SD for the noise check', () => {
+  assert.deepEqual(C.calibrationPoints([{ name: 'r', density_g_cm3: 1, gray: 2000, sd: 55 }], { includeAir: false }), [{ name: 'r', gray: 2000, density: 1, sd: 55 }]);
+});
