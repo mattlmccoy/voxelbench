@@ -1,5 +1,5 @@
 /* Labeled regions: freehand outlines across a slice range, their statistics and density estimates.
-   Natural and doped labels record what the person believes; gray measures bulk density, not composition. */
+   Region labels record what the operator assigns; gray measures bulk attenuation, not composition. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(require('./ct_pores.js'), require('./ct_core.js'));
   else root.CTRegions = factory(root.CTPores, root.CT);

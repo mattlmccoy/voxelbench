@@ -25,7 +25,8 @@ button, select, input { font: inherit; }
 
 .studio { height: 100%; display: grid; grid-template: 40px 34px minmax(0, 1fr) 28px / minmax(0, 1fr) 380px; grid-template-areas: "top top" "strip rail" "center rail" "status status"; }
 .topbar { grid-area: top; display: flex; align-items: center; gap: 14px; padding: 0 max(14px, env(safe-area-inset-right, 0px)) 0 max(14px, env(safe-area-inset-left, 0px)); background: var(--bg-deep); border-bottom: 1px solid var(--line); min-width: 0; }
-.wordmark { font-family: var(--font-mono); font-weight: 700; letter-spacing: .12em; color: var(--fg-strong); white-space: nowrap; }
+.wordmark { font-family: var(--font-mono); font-weight: 700; font-size: 12px; letter-spacing: .12em; color: var(--fg-strong); white-space: nowrap; }
+.wordmark .cap { font-size: 16px; }
 .crumb { color: var(--fg-strong); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .conn { margin-left: auto; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); flex: none; }
@@ -171,7 +172,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 
 <div class="studio">
   <header class="topbar">
-    <span class="wordmark">VOXELBENCH</span>
+    <span class="wordmark" aria-label="VoxelBench"><span class="cap">V</span>OXEL<span class="cap">B</span>ENCH</span>
     <span class="crumb" id="crumb">X-ray computed tomography (CT) of polymer parts</span>
     <select id="sampleSelect" aria-label="Scan" hidden></select>
     <label class="filebtn">Open scan folder<input type="file" id="folder" webkitdirectory multiple></label>

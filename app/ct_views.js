@@ -33,8 +33,8 @@
     box.append(canvas);
     const slider = document.createElement('input');
     slider.type = 'range'; slider.min = 0; slider.id = `slice${plane}`; slider.className = plane === 'XY' ? 'slicebar vertical' : 'slicebar';
-    slider.setAttribute('aria-label', plane === 'XY' ? 'XY slice: top of the slider is the top of the part' : `${plane} position`);
-    if (plane === 'XY') slider.title = 'Top is the top of the part; bottom is the holder';
+    slider.setAttribute('aria-label', plane === 'XY' ? 'XY slice in file order: top of the slider is the first file' : `${plane} position`);
+    if (plane === 'XY') slider.title = 'Slice in file order: top of the slider is the first file';
     slider.addEventListener('input', () => { activePlane = plane; moveSlice(plane, Number(slider.value)); });
     if (plane === 'XY') pane.append(head, slider, box);
     else pane.append(head, box, slider);
