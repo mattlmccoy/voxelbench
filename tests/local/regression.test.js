@@ -30,3 +30,15 @@ test('Sample 2 matches version 10 with its settings and the end baseline', { ski
   assert.equal(a.chosen.threshold, 0.04);
   for (const [zone, mm3] of Object.entries(V10.zones)) near(a.chosen.stats.find((s) => s.zone === Number(zone)).volume_mm3, mm3, 0.01, `zone ${zone} mm3`);
 });
+
+test('Sample 2 gets zones from the automatic threshold with the default (automatic) baseline, with and without the crop', { skip: !ready && 'local data not set' }, () => {
+  const parsed = JSON.parse(fs.readFileSync(RUN, 'utf8'));
+  const run = parsed.data || parsed;
+  const stack = H.readStack(SCAN);
+  for (const crops of [run.crops, []]) {
+    const a = H.analyze(stack, { settings: run.settings, crops }, { zoneBaseline: 'auto' });
+    assert.ok(!a.automatic.refused, `${crops.length ? 'cropped' : 'uncropped'}: ${a.automatic.refused}`);
+    assert.ok(a.automatic.threshold > -0.1 && a.automatic.threshold < 0.2, `threshold ${a.automatic.threshold}`);
+    console.log(`${crops.length ? 'cropped' : 'uncropped'}: ${a.ready.method} baseline, automatic threshold ${a.automatic.threshold.toFixed(3)}; zones ${a.automatic.stats.map((s) => `${s.zone}:${Math.round(s.volume_mm3)}`).join(' ')}`);
+  }
+});

@@ -278,7 +278,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
             </div>
           </details>
           <p class="hint" id="zoneNote"></p>
-          <label class="pickrow">Baseline <select id="zoneBaseline"><option value="whole" selected>Whole part (median)</option><option value="ends">Pore-free ends of the long axis</option></select></label>
+          <label class="pickrow">Baseline <select id="zoneBaseline"><option value="auto" selected>Automatic (ends, else whole part)</option><option value="ends">Pore-free ends of the long axis</option><option value="whole">Whole part (median)</option></select></label>
           <label class="setting" id="zoneThresholdRow" hidden><span>High-gray threshold (gray offset)</span><span class="v mono" id="zoneThresholdValue"></span><input type="range" id="zoneThreshold" min="0.01" max="0.2" step="0.005"></label>
           <div class="tablewrap" id="zoneWrap" hidden><table id="zoneTable"></table></div>
           <div class="tablewrap" id="regionWrap" hidden><table id="regionTable"></table></div>

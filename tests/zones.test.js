@@ -86,9 +86,12 @@ test('whole-part baseline works when the ends hold pores; the end baseline refus
   assert.ok(whole.baseline.length > 0);
 });
 
-test('the default zone baseline is the whole part', () => {
-  assert.equal(Z.DEFAULT_ZONE_SETTINGS.baseline, 'whole');
-  assert.equal(Z.prepareZones({ ...material(), settings: ZONE_SETTINGS }).method, 'ends');
+test('the automatic baseline (the default) uses the ends when they are pore-free, else the whole part', () => {
+  assert.equal(Z.DEFAULT_ZONE_SETTINGS.baseline, 'auto');
+  assert.equal(Z.prepareZones({ ...material(), settings: { ...ZONE_SETTINGS, baseline: 'auto' } }).method, 'ends');
+  const porous = Z.prepareZones({ ...porousEnds(), settings: { ...ZONE_SETTINGS, baseline: 'auto' } });
+  assert.equal(porous.refused, null);
+  assert.equal(porous.method, 'whole');
 });
 
 test('draftZones separates the bright zone, the low-gray zone and the rest, relative to the ends at equal depth', () => {
@@ -299,4 +302,16 @@ test('paintZones never paints phantom regions', () => {
   const zones = new Uint8Array(32).fill(Z.ZONE.BASE);
   const phantom = { label: 'phantom', plane: 'XY', slice_from: 0, slice_to: 7, points: [{ col: 0, row: 0 }, { col: 15, row: 0 }, { col: 15, row: 15 }, { col: 0, row: 15 }] };
   assert.deepEqual([...Z.paintZones(zones, coarse, 4, [phantom], ['region_a', 'region_b'])], [...zones]);
+});
+
+test('with a whole-part baseline the zone threshold is the valley between the two tallest groups, wherever they sit', () => {
+  // Bins of 0.01 from -0.30: the larger (bright) group peaks at +0.02, a smaller darker group at -0.07.
+  const raw = Float64Array.from({ length: 60 }, (_, i) => {
+    const v = -0.3 + (i + 0.5) * 0.01;
+    return 1000 * Math.exp(-(((v - 0.02) / 0.02) ** 2)) + 500 * Math.exp(-(((v + 0.07) / 0.02) ** 2));
+  });
+  assert.equal(Z.dipInHistogram(raw), null, 'the end-baseline search finds nothing right of the tallest peak');
+  const dip = Z.valleyBetweenGroups(raw);
+  assert.ok(dip > -0.05 && dip < 0, `valley at ${dip}`);
+  assert.equal(Z.valleyBetweenGroups(Float64Array.from({ length: 60 }, (_, i) => Math.exp(-(((i - 30) / 5) ** 2)))), null, 'one group');
 });

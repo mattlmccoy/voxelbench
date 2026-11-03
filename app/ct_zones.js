@@ -19,9 +19,10 @@
     return l ? `drawn_${l.id}` : 'drawn_deleted_label';
   }
   const DEFAULT_PATCH_SETTINGS = { patchSigma: 1.5, patchFraction: 0.8, patchMinMm3: 0.1, patchMaxMm3: 20, patchSkin: 3, patchEdgeMm: 2 };
-  // baseline: 'whole' takes the median of all pore-free solid material at each depth; 'ends' only the two ends of the
-  // long axis (version 10's method, for parts graded along one axis).
-  const DEFAULT_ZONE_SETTINGS = { sigma: 3, endShare: 0.16, voidFree: 0.005, voidSigma: 6, lowDrop: 0.08, baseline: 'whole' };
+  // baseline: 'ends' takes the pore-free ends of the long axis at each depth (version 10's method); 'whole' the median
+  // of all pore-free solid; 'auto' (default) the ends when they qualify, else the whole part. The whole-part median
+  // includes any high-gray zone, which can merge two gray groups into one (it does on Sample 2), so ends come first.
+  const DEFAULT_ZONE_SETTINGS = { sigma: 3, endShare: 0.16, voidFree: 0.005, voidSigma: 6, lowDrop: 0.08, baseline: 'auto' };
   const DEPTH_BIN_MM = 0.5;
   const SKIN_MM = 0.5; // gray falls toward any surface, so a dark zone must have a core deeper than this
   const SCAN_EDGE_MM = 2; // the outer ring of the reconstruction reads dark on Sample 2 (gray recovers over 2 to 3 mm)
@@ -166,7 +167,13 @@
 
   /** Everything that does not depend on the threshold: gray relative to the pore-free ends at the same depth, which
       removes the scanner's shading from surface to center. refused says why no baseline exists. */
-  function prepareZones({ gray, voids, weight, scanDepth, body, dims, airGray, voxelMm, settings }) {
+  function prepareZones(input) {
+    if (input.settings.baseline !== 'auto') return prepareWith(input);
+    const ends = prepareWith({ ...input, settings: { ...input.settings, baseline: 'ends' } });
+    return ends.refused ? prepareWith({ ...input, settings: { ...input.settings, baseline: 'whole' } }) : ends;
+  }
+
+  function prepareWith({ gray, voids, weight, scanDepth, body, dims, airGray, voxelMm, settings }) {
     const { nx, ny, nz } = dims;
     const n = gray.length;
     const depth = distanceInside(body, dims);
@@ -228,6 +235,28 @@
     return best && best.ratio < DIP_RATIO ? value(best.at) : null;
   }
 
+  /** Gray offset of the valley between the two most prominent groups in the histogram, wherever they sit; null when
+      there is one group. Used with the whole-part baseline, whose zero lies among the groups rather than on one. */
+  function valleyBetweenGroups(raw) {
+    const count = raw.length;
+    const h = raw.map((_, i) => (raw[Math.max(0, i - 1)] + raw[i] + raw[Math.min(count - 1, i + 1)]) / 3);
+    const value = (i) => HIST.low + (i + 0.5) * HIST.step;
+    const peaks = [];
+    for (let i = 0; i < count; i++) if (h[i] > 0 && (i === 0 || h[i] >= h[i - 1]) && (i === count - 1 || h[i] > h[i + 1])) peaks.push(i);
+    let best = null;
+    for (let a = 0; a < peaks.length; a++) {
+      for (let c = a + 1; c < peaks.length; c++) {
+        let valley = peaks[a];
+        for (let i = peaks[a]; i <= peaks[c]; i++) if (h[i] < h[valley]) valley = i;
+        const ratio = h[valley] / Math.min(h[peaks[a]], h[peaks[c]]);
+        // The pair that stands highest above its valley wins: both groups must be real, not noise on one shoulder.
+        const height = Math.min(h[peaks[a]], h[peaks[c]]) - h[valley];
+        if (ratio < DIP_RATIO && (!best || height > best.height)) best = { height, at: valley };
+      }
+    }
+    return best ? value(best.at) : null;
+  }
+
   function histogramCounts(excess, depth, w) {
     const raw = new Float64Array(Math.round((HIST.high - HIST.low) / HIST.step));
     for (let i = 0; i < excess.length; i++) {
@@ -252,7 +281,7 @@
     const { excess, depth, w } = ready;
     let threshold = settings.threshold;
     if (threshold === undefined) {
-      threshold = findDip(excess, depth, w);
+      threshold = ready.method === 'whole' ? valleyBetweenGroups(histogramCounts(excess, depth, w)) : findDip(excess, depth, w);
       if (threshold === null) return { refused: 'Gray shows one group here, not two, so no zones are drawn. Outline regions by hand instead.', zones: null };
     }
     const n = gray.length;
@@ -464,5 +493,5 @@
   /** One phrase for what the gray offset is measured against, used in the page, the sheet and the CSV. */
   const baselineText = (method, axis) => (method === 'ends' ? `the pore-free ends of the ${axis} axis at equal depth below the surface` : 'the median of all pore-free solid at equal depth below the surface');
 
-  return { ZONE, ZONE_NAMES, MAX_DRAWN, zoneName, baselineText, DEFAULT_PATCH_SETTINGS, DEFAULT_ZONE_SETTINGS, distanceInside, findPatches, prepareZones, finishZones, draftZones, dipInHistogram, offsetHistogram, voidSizeMasks, paintZones, zoneTotals, voidPercentByZone, voidFractions, coarsenSolid, prepareCoarse, voidClassMasks };
+  return { ZONE, ZONE_NAMES, MAX_DRAWN, zoneName, baselineText, DEFAULT_PATCH_SETTINGS, DEFAULT_ZONE_SETTINGS, distanceInside, findPatches, prepareZones, finishZones, draftZones, dipInHistogram, valleyBetweenGroups, offsetHistogram, voidSizeMasks, paintZones, zoneTotals, voidPercentByZone, voidFractions, coarsenSolid, prepareCoarse, voidClassMasks };
 }));

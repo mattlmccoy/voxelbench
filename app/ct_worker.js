@@ -126,7 +126,8 @@ function sendVoidMeshes({ rejected, minDiameterMm }) {
 
 // The threshold-free zone step is kept until the coarse data or the baseline method changes.
 function readyFor(input) {
-  if (!zoneReady || zoneReady.method !== input.settings.baseline) zoneReady = Z.prepareZones(input);
+  const key = input.settings.baseline;
+  if (!zoneReady || zoneReady.requested !== key) { zoneReady = Z.prepareZones(input); zoneReady.requested = key; }
 }
 
 function sendZones({ threshold, regions, labelIds, baseline }) {

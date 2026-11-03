@@ -28,7 +28,7 @@ window.CTApp = (function () {
     draft: null, annotations: new Map(), regions: new Map(), samples: new Map(), labels: new Map(), unsaved: new Map(), store: null, projectDirty: false, projectFile: null, dbState: 'connecting', deleting: null,
     settings: { ...P.DEFAULT_SETTINGS }, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, porePhase: 'idle',
     bodyMm3: null, airGray: null, regionStats: new Map(), referenceId: '', referenceDensity: NaN,
-    main: 'XY', fill: 0.5, minVoidMm: 0, patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, zoneBaseline: 'whole',
+    main: 'XY', fill: 0.5, minVoidMm: 0, patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, zoneBaseline: 'auto',
     show: Object.fromEntries(LAYERS.map((l) => [l.id, true])),
   };
   let worker = null;
