@@ -223,7 +223,7 @@
 
   function batchCsv(rows, { provenance }) {
     const r5 = (v) => (typeof v === 'number' && Number.isFinite(v) ? Number(v.toFixed(5)) : v);
-    return [`# Batch run of ${rows.length} scans; ${provenance}`, '# settings: "saved run" when the scan had a saved run (its own settings), else "batch" (the settings when the batch started). Porosity of the sample mask; open/closed as in the pore step.',
+    return [`# Batch run of ${rows.length} scans; ${provenance}`, '# settings: "saved run (kept)" when the scan had a saved run (its own settings; that run is not overwritten), else "batch (run saved)" (the settings when the batch started; a run was saved). Porosity of the sample mask; open/closed as in the pore step.',
       row(BATCH_COLUMNS), ...rows.map((x) => row(BATCH_COLUMNS.map((c) => r5(x[c]))))].join('\n') + '\n';
   }
 

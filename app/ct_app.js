@@ -106,6 +106,12 @@ window.CTApp = (function () {
   }
 
   /** Saves fields of the open sample's record, keeping its other fields, including an edit not yet stored. */
+  /** The open sample's record as it will be stored, including an edit not yet back from the store. */
+  function sampleNow() {
+    const pending = state.unsaved.get(state.folder);
+    return CT.sampleRecord(state.folder, state.samples, {}, pending && pending._collection === 'samples' ? pending : null);
+  }
+
   function saveSample(changes) {
     const pending = state.unsaved.get(state.folder);
     saveRecord('samples', CT.sampleRecord(state.folder, state.samples, changes, pending && pending._collection === 'samples' ? pending : null));
@@ -205,7 +211,7 @@ window.CTApp = (function () {
   async function loadStack(stack) {
     const token = ++state.loadToken;
     if (worker) { worker.terminate(); worker = null; }
-    Object.assign(state, { slices: null, folder: null, draft: null, loading: stack.folder, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null });
+    Object.assign(state, { slices: null, folder: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null });
     $('startup').hidden = false;
     showError('');
     emit('samplesChanged');
@@ -329,6 +335,7 @@ window.CTApp = (function () {
     state.detectStart = performance.now();
     Object.assign(state, { pores: null, runs: null, rejected: new Set(), selected: null, zones: null, patches: null, patchLabels: null, voidMeshes: null, regionStats: new Map() });
     if (state.filler) { state.filler = null; emit('fillerChanged'); } // it read the smoothed slices of the old run
+    if (state.wall) { state.wall = null; emit('wallChanged'); } // it measured the old run's sample mask
     emit('poresChanged');
     emit('voidMeshesChanged');
     worker.postMessage({ type: 'detect', settings: state.settings, crops: cropOutlines() });
@@ -529,5 +536,5 @@ window.CTApp = (function () {
     emit('wallChanged');
   }
 
-  return { requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
+  return { sampleNow, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
 }());

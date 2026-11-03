@@ -5,7 +5,7 @@
   const CT = window.CT, P = window.CTPores;
   const { state, $, on, emit } = App;
 
-  function bookmarks() { return state.folder ? CT.sampleInfo(state.folder, state.samples).bookmarks || [] : []; }
+  function bookmarks() { return state.folder ? App.sampleNow().bookmarks || [] : []; } // includes a save not yet stored
 
   function renderBookmarks() {
     $('bookmarkSave').disabled = !state.folder;
@@ -40,6 +40,7 @@
     for (const p of [...state.presets.values()].sort((a, b) => a.name.localeCompare(b.name))) { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.append(o); }
     sel.value = state.presets.has(keep) ? keep : '';
     $('presetApply').disabled = !sel.value;
+    $('presetDelete').disabled = !sel.value;
   }
 
   function applyPreset() {
@@ -47,13 +48,14 @@
     if (!p) return;
     state.settings = { ...P.DEFAULT_SETTINGS, ...p.settings };
     emit('settingsApplied');
-    $('presetNote').textContent = `Applied "${p.name}". Press Segment pores to use it.`;
+    const grid = (p.bin_factor || 1) !== state.binFactor || (p.voxel_mm && Math.abs(p.voxel_mm - state.voxelMm) > 1e-6);
+    $('presetNote').textContent = `Applied "${p.name}". Press Segment pores to use it.${grid ? ` It was saved at ${(p.voxel_mm * 1000).toFixed(0)} µm${p.bin_factor > 1 ? `, ${p.bin_factor}× binned` : ''}; settings in voxels (smoothing, closing, margin, neck) keep their saved values on this grid.` : ''}`;
   }
 
   function savePreset() {
     const name = $('presetName').value.trim();
     if (!name) { $('presetNote').textContent = 'Name the preset first.'; return; }
-    App.saveRecord('presets', { id: App.newId(), name, settings: { ...state.settings }, created_at: new Date().toISOString() });
+    App.saveRecord('presets', { id: App.newId(), name, settings: { ...state.settings }, voxel_mm: state.voxelMm, bin_factor: state.binFactor, created_at: new Date().toISOString() });
     $('presetName').value = '';
     $('presetNote').textContent = `Saved "${name}" with the current parameters.`;
   }
@@ -62,7 +64,8 @@
     $('bookmarkSave').addEventListener('click', saveBookmark);
     $('presetApply').addEventListener('click', applyPreset);
     $('presetSave').addEventListener('click', savePreset);
-    $('presetSelect').addEventListener('change', () => { $('presetApply').disabled = !$('presetSelect').value; });
+    $('presetSelect').addEventListener('change', () => { $('presetApply').disabled = !$('presetSelect').value; $('presetDelete').disabled = !$('presetSelect').value; });
+    $('presetDelete').addEventListener('click', () => { const id = $('presetSelect').value; if (id) App.removeRecord('presets', id); });
   });
   for (const e of ['loaded', 'recordsChanged']) on(e, () => { renderBookmarks(); renderPresets(); });
 }(window.CTApp));

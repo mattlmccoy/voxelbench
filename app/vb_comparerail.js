@@ -15,13 +15,16 @@
     sel.value = folders.includes(keep) ? keep : '';
   }
 
+  let token = 0;
   async function compare() {
+    const mine0 = ++token; // a later call replaces this one's table
     const other = $('compareWith').value, table = $('compareTable');
     table.textContent = '';
     $('compareWrap').hidden = true;
     $('compareNote').textContent = '';
     if (!other || !state.store || !state.folder) return;
     const [mine, theirs] = await Promise.all([state.store.getRun(state.folder), state.store.getRun(other)]);
+    if (mine0 !== token) return;
     if (!mine || !theirs) { $('compareNote').textContent = `No saved run for ${!mine ? 'this scan (press Save run)' : other}.`; return; }
     const head = table.insertRow();
     for (const h of ['Metric', CT.sampleInfo(other, state.samples).name, CT.sampleInfo(state.folder, state.samples).name, 'Change']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
@@ -38,4 +41,5 @@
   on('start', () => $('compareWith').addEventListener('change', compare));
   for (const e of ['loaded', 'samplesChanged', 'recordsChanged']) on(e, options);
   on('loaded', compare);
+  on('runSaved', compare);
 }(window.CTApp));

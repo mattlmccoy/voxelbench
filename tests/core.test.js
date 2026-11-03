@@ -302,3 +302,9 @@ test('sampleRecord keeps every stored field, bookmarks included, when another fi
   assert.deepEqual(CT.sampleInfo('S1', samples).bookmarks, samples.get('S1').bookmarks);
   assert.deepEqual(CT.sampleInfo('S2', samples).bookmarks, []);
 });
+
+test('dimensionCheck treats a tolerance never entered as 0, the same on the page and in the CSV', () => {
+  assert.equal(CT.dimensionCheck(3.84, 3.8, undefined, 0.05).pass, true);
+  assert.equal(CT.dimensionCheck(3.76, 3.8, undefined, 0.05).pass, false);
+  assert.equal(CT.dimensionCheck(3.8, 3.8, null, null).pass, true);
+});

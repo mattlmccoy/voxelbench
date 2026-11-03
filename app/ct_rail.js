@@ -652,6 +652,7 @@
     try {
       await state.store.putRun(state.folder, run, chunks);
       App.markDirty();
+      App.emit('runSaved');
       sayExport(state.store.kind === 'file' ? `Run stored in the project: ${state.pores.length} regions. Save the project to keep it.` : `Saved to the shared database: ${state.pores.length} regions in ${chunks.length} parts.`);
     } catch (e) {
       sayExport(`Could not save the run: ${e.message}`);

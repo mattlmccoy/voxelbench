@@ -258,7 +258,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
             <div>
               <div id="poreSettings" style="display:grid;gap:8px"></div>
               <div class="row"><button id="resetSettings">Default parameters</button></div>
-              <div class="row"><select id="presetSelect"><option value="">Presets…</option></select><button id="presetApply" disabled>Apply</button>
+              <div class="row"><select id="presetSelect"><option value="">Presets…</option></select><button id="presetApply" disabled>Apply</button><button id="presetDelete" class="link" disabled>delete</button>
                 <input type="text" id="presetName" placeholder="preset name" style="width:110px" autocomplete="off"><button id="presetSave">Save as preset</button></div>
               <p class="mono muted" id="presetNote"></p>
             </div>
@@ -394,7 +394,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
       <details class="step" name="steps" id="step8">
         <summary><span class="num">8</span>Wall thickness <span class="tag" id="wallTag">optional</span></summary>
         <div class="body">
-          <p class="hint">Local wall thickness of the sample mask (pores filled), at the ridge of the distance to the outside: about 2 × that distance − ½ analysis voxel, ±½ voxel. Walls under about 2 analysis voxels are not resolved.</p>
+          <p class="hint">Local wall thickness of the sample mask (pores filled), at the ridge of the distance to the outside: about 2 × that distance − ½ analysis voxel, ±½ voxel. Walls thinner than about 3 analysis voxels are not reported, so the smallest value shown is 3.5 voxels; corners of the part are not walls. Takes up to about 15 s on a large scan.</p>
           <div class="row"><button id="runWall" disabled>Measure walls</button><button id="wallExport" disabled>Thinnest places (CSV)</button><span class="mono muted" id="wallExportNote"></span></div>
           <p class="mono" id="wallFit"></p>
           <div class="kv mono" id="wallStats"></div>

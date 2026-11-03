@@ -77,7 +77,8 @@ a new name.
   10 to 15 µm do not resolve at 40 µm voxels); volumes of particles under about 4 voxels across read low. Candidates
   peaking within 1 SD of the detection threshold are flagged as possible noise; the Clark–Evans ratio needs 20
   particles at least twice the random spacing inside the sample, and the orientation tensor 5 fibers.
-- Wall thickness: walls under about 3.5 analysis voxels are not resolved; the stack ends are not walls.
+- Wall thickness: walls thinner than about 3 analysis voxels are not reported (the smallest value shown, 3.5 voxels,
+  means at or below that limit); corners are not walls; where a wall runs past the first or last slice it is left out.
 - The open/closed split depends on the pore threshold and the resolution: a crack narrower than about one analysis
   voxel reads as closed, and a crop face counts as part surface.
 

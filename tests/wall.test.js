@@ -41,3 +41,18 @@ test('a one-voxel fin is below the resolved range and not listed; a flange in th
   const r = W.wallThickness(box(dims, (x, y, z) => slab(x, y) || fin(x, y, z) || flange(x, y, z)), dims, 0.1);
   assert.ok(r.stats.min_mm >= 0.35, `thinnest ${r.stats.min_mm} at ${JSON.stringify(r.thinnest[0])}`);
 });
+
+test('a tapered wall reads thin at its thin end (maximal-ball ridge)', () => {
+  const dims = { nx: 40, ny: 30, nz: 40 };
+  // a wedge in x-z: at height z it is 2 + (z - 5) voxels thick in x, z from 5 to 29
+  const wedge = (x, y, z) => y >= 5 && y < 25 && z >= 5 && z < 30 && x >= 5 && x < 5 + 2 + (z - 5);
+  const r = W.wallThickness(box(dims, wedge), dims, 0.1);
+  assert.ok(r.stats.min_mm <= 0.5, `thinnest ${r.stats.min_mm}`);
+});
+
+test('a wall whose inscribed ball reaches past the stack end is left out (its thickness there is unknown)', () => {
+  const dims = { nx: 60, ny: 60, nz: 4 };
+  const r = W.wallThickness(box(dims, (x, y) => x >= 5 && x < 55 && y >= 5 && y < 55), dims, 0.1);
+  assert.equal(r.stats.count, 0, `${r.stats.count} ridge voxels, thinnest ${r.stats.min_mm}`);
+  assert.ok(r.beyond_stack > 0);
+});

@@ -160,7 +160,7 @@
   function dimensionCheck(measured, nominal, tolMinus, tolPlus) {
     if (!Number.isFinite(measured) || !Number.isFinite(nominal)) return { deviation: null, pass: null };
     const deviation = measured - nominal;
-    return { deviation, pass: deviation >= -tolMinus - 1e-9 && deviation <= tolPlus + 1e-9 };
+    return { deviation, pass: deviation >= -(tolMinus ?? 0) - 1e-9 && deviation <= (tolPlus ?? 0) + 1e-9 }; // a tolerance never entered is 0
   }
 
   /** The sample's full record with changes merged in, so a step that saves one field keeps the others; pending is an

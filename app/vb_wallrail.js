@@ -28,8 +28,9 @@
     $('wallStats').textContent = '';
     if (!w) { $('wallFit').textContent = ''; return; }
     if (w.busy) { $('wallFit').textContent = 'Measuring walls…'; return; }
-    $('wallFit').textContent = `On ${CT.gridText(state.binFactor * App.BIN)} (analysis voxel ${fmt(r.analysis_voxel_mm * 1000, 0)} µm); ${r.stats.count.toLocaleString('en-US')} ridge voxels.`;
-    for (const [k, v] of [['Thinnest', `${fmt(r.stats.min_mm)} mm`], ['5th / 50th / 95th', `${fmt(r.stats.p05_mm)} / ${fmt(r.stats.p50_mm)} / ${fmt(r.stats.p95_mm)} mm`], ['Thickest', `${fmt(r.stats.max_mm)} mm`]]) {
+    const atLimit = r.stats.min_mm !== null && r.stats.min_mm <= r.resolved_min_mm + 1e-6;
+    $('wallFit').textContent = `On ${CT.gridText(state.binFactor * App.BIN)} (analysis voxel ${fmt(r.analysis_voxel_mm * 1000, 0)} µm); ${r.stats.count.toLocaleString('en-US')} ridge voxels${r.beyond_stack ? `; ${r.beyond_stack.toLocaleString('en-US')} left out where the wall runs past the first or last slice` : ''}.`;
+    for (const [k, v] of [['Thinnest', `${fmt(r.stats.min_mm)} mm${atLimit ? ' (at the resolved limit: walls this thin or thinner)' : ''}`], ['5th / 50th / 95th', `${fmt(r.stats.p05_mm)} / ${fmt(r.stats.p50_mm)} / ${fmt(r.stats.p95_mm)} mm`], ['Thickest', `${fmt(r.stats.max_mm)} mm`]]) {
       const a = document.createElement('span'); a.className = 'k'; a.textContent = k;
       const b = document.createElement('span'); b.className = 'v'; b.textContent = v;
       $('wallStats').append(a, b);
