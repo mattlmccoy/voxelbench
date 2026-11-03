@@ -61,7 +61,9 @@ a new name.
 - Pores smaller than about 3 voxels across are at the noise limit.
 - CAD comparison: points on sharp CAD edges are skipped (the scanned edge is rounded over about one analysis voxel),
   and a point counts as measured only where the scanned surface faces within 60° of its normal. The fitted scale is
-  limited to 0.5 to 1.5. A least-squares fit shares a local distortion (a bent wall) over the whole part.
+  limited to 0.5 to 1.5. A least-squares fit shares a local distortion (a bent wall) over the whole part. Pore walls
+  inside the part are not its surface (only air joined to the outside counts), and statistics are weighted by surface
+  area. A mesh with more triangles than the point budget is measured at triangle centroids.
 - The open/closed split depends on the pore threshold and the resolution: a crack narrower than about one analysis
   voxel reads as closed, and a crop face counts as part surface.
 
