@@ -75,12 +75,12 @@ test('groupStacks groups by folder, sorts by the number in the name, ignores oth
 });
 
 test('sampleInfo gives the folder name and blank fields for a sample nobody described', () => {
-  assert.deepEqual(CT.sampleInfo('S9', new Map()), { folder: 'S9', name: 'S9', material: '', process: '', notes: '' });
+  assert.deepEqual(CT.sampleInfo('S9', new Map()), { folder: 'S9', name: 'S9', material: '', process: '', notes: '', calibration_air: true });
 });
 
 test('sampleInfo returns the fields a user stored for the folder', () => {
-  const m = new Map([['S2', { id: 'S2', folder: 'S2', name: 'Cube A', material: 'PA12', process: 'SLS', notes: 'first build', updated_at: 't' }]]);
-  assert.deepEqual(CT.sampleInfo('S2', m), { folder: 'S2', name: 'Cube A', material: 'PA12', process: 'SLS', notes: 'first build' });
+  const m = new Map([['S2', { id: 'S2', folder: 'S2', name: 'Cube A', material: 'PA12', process: 'SLS', notes: 'first build', calibration_air: false, updated_at: 't' }]]);
+  assert.deepEqual(CT.sampleInfo('S2', m), { folder: 'S2', name: 'Cube A', material: 'PA12', process: 'SLS', notes: 'first build', calibration_air: false });
 });
 
 test('extractPlane returns the right voxels in every plane', () => {

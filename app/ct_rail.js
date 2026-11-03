@@ -48,9 +48,11 @@
     const annotating = state.tool === 'point' || state.tool === 'caliper' || state.tool === 'polygon';
     const drawing = annotating || state.tool === 'freehand';
     $('draftPanel').hidden = !drawing;
-    $('toolHintLong').textContent = state.tool === 'freehand' && state.regionLabel === 'crop' ? 'Drag a polygon around the sample on the main view, then save. Voxels outside it are excluded through the full depth of that view.' : tool.hint;
+    const hints = { crop: 'Drag a polygon around the sample on the main view, then save. Voxels outside it are excluded through the full depth of that view.',
+      phantom: `Drag a polygon inside the phantom${state.phantomDraft ? ` (${state.phantomDraft.name}, ${state.phantomDraft.density_g_cm3} g/cm³)` : ''}, away from its edge, set the slices where it is solid, then save.` };
+    $('toolHintLong').textContent = state.tool === 'freehand' && hints[state.regionLabel] ? hints[state.regionLabel] : tool.hint;
     $('types').hidden = !annotating;
-    $('regionLabels').hidden = state.tool !== 'freehand' || state.regionLabel === 'crop';
+    $('regionLabels').hidden = state.tool !== 'freehand' || state.regionLabel === 'crop' || state.regionLabel === 'phantom';
     $('reviewVoids').setAttribute('aria-pressed', String(state.tool === 'review'));
     const chips = (host, list, current, pick) => {
       host.textContent = '';
@@ -101,9 +103,10 @@
     if (d.kind === 'region') {
       const crop = state.regionLabel === 'crop';
       const depth = CT.planeShape(d.plane, state.dims).depth;
-      const record = R.makeRegion({ ...common, plane: d.plane, sliceFrom: crop ? 0 : Number($('rangeFrom').value), sliceTo: crop ? depth - 1 : Number($('rangeTo').value), label: state.regionLabel, voxelMm: state.voxelMm, dims: state.dims }, App.regionLabels());
+      const phantom = state.regionLabel === 'phantom' ? state.phantomDraft : undefined;
+      const record = R.makeRegion({ ...common, plane: d.plane, sliceFrom: crop ? 0 : Number($('rangeFrom').value), sliceTo: crop ? depth - 1 : Number($('rangeTo').value), label: state.regionLabel, voxelMm: state.voxelMm, dims: state.dims, phantom }, App.regionLabels());
       App.saveRecord('regions', record);
-      if (crop) { App.cropChanged(); setTool('navigate'); }
+      if (crop) { App.cropChanged(); setTool('navigate'); } else if (phantom) setTool('navigate');
       else if (state.zones && state.zones.map) App.requestZones();
     } else {
       App.saveRecord('annotations', CT.makeAnnotation({ ...common, dims: state.dims, voxelMm: state.voxelMm, window: { ...state.window }, plane: d.plane, slice: d.slice, kind: d.kind, type: state.type }));
@@ -164,7 +167,7 @@
   function saveSample() {
     if (!state.folder) return;
     const v = (id) => $(id).value.trim();
-    App.saveRecord('samples', { id: state.folder, folder: state.folder, name: v('sampleName') || state.folder, material: v('sampleMaterial'), process: v('sampleProcess'), notes: v('sampleNotes'), updated_at: new Date().toISOString() });
+    App.saveRecord('samples', { id: state.folder, folder: state.folder, name: v('sampleName') || state.folder, material: v('sampleMaterial'), process: v('sampleProcess'), notes: v('sampleNotes'), calibration_air: CT.sampleInfo(state.folder, state.samples).calibration_air, updated_at: new Date().toISOString() });
   }
 
   function renderFacts() {
@@ -172,6 +175,8 @@
     facts.textContent = '';
     if (!state.folder) return;
     const s = CT.sampleInfo(state.folder, state.samples);
+    const fit = App.calibration();
+    $('calHint').textContent = fit && fit.ok ? `Gray is calibrated to the equivalent density of the phantom material (${fit.n} points).` : 'Gray values are uncalibrated (no reference phantoms).';
     const { nx, ny, nz } = state.dims;
     const rows = [['Sample', sampleLabel(s)], ['Voxels', `${nx} × ${ny} × ${nz}`], ['Grid', CT.gridText(state.binFactor)],
       ['Voxel', `${(state.voxelMm * 1000).toFixed(2)} µm, isotropic assumed (${state.binFactor > 1 ? `${state.binFactor}× the TIFF resolution tag` : 'TIFF resolution tag'})`],
@@ -317,6 +322,8 @@
     const patchVolume = state.patches ? state.patches.reduce((t, p) => t + p.volume_mm3, 0) : null;
     const rows = [['Pores, AR ≤ 2.5', `${s.pore_count}, ${s.pore_volume_mm3.toFixed(1)} mm³`], ['Pores, AR > 2.5', `${s.crack_like_count}, ${s.crack_like_volume_mm3.toFixed(1)} mm³`], ['Pores at FOV edge', `${s.clipped_count}, ${s.clipped_volume_mm3.toFixed(1)} mm³`],
       ['ESD < 0.16 mm', `${small}`], ['Rejected', `${s.rejected_count}`], ['Low-density regions (excluded)', state.patches ? `${state.patches.length}, ${patchVolume.toFixed(1)} mm³` : 'segmenting']];
+    const fit = App.calibration();
+    if (fit && fit.ok && state.solidGray != null) rows.push(['Matrix eq. density', `${App.densityText(fit, state.solidGray)} g/cm³`]);
     for (const [k, v] of rows) {
       const a = document.createElement('span'); a.textContent = k;
       const b = document.createElement('span'); b.className = 'v'; b.textContent = v;
@@ -388,7 +395,7 @@
   }
 
   function regionRows() {
-    const regions = state.folder ? App.regionsOf(state.folder).filter((r) => r.label !== 'crop') : [];
+    const regions = state.folder ? App.regionsOf(state.folder).filter((r) => r.label !== 'crop' && r.label !== 'phantom') : [];
     const reference = regions.find((r) => r.id === state.referenceId) || null;
     return regions.map((r) => {
       const stats = App.statsOf(r);
@@ -427,7 +434,7 @@
 
   function renderRegions() {
     renderCrops();
-    const measured = state.folder ? App.regionsOf(state.folder).filter((r) => r.label !== 'crop') : [];
+    const measured = state.folder ? App.regionsOf(state.folder).filter((r) => r.label !== 'crop' && r.label !== 'phantom') : [];
     $('exportRegions').disabled = !measured.length;
     $('regionWrap').hidden = !measured.length;
     const select = $('referenceRegion');
@@ -449,7 +456,8 @@
     table.textContent = '';
     if (!measured.length) return;
     const head = table.insertRow();
-    for (const h of ['Region', 'mm³', 'Gray', 'Matrix gray', 'Porosity (%)', 'Pores', 'Rel. density', 'g/cm³ (est.)', '']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
+    const fit = App.calibration(), calibrated = Boolean(fit && fit.ok);
+    for (const h of ['Region', 'mm³', 'Gray', 'Matrix gray', 'Porosity (%)', 'Pores', 'Rel. density', 'g/cm³ (est.)', ...(calibrated ? ['Eq. density (g/cm³)'] : []), '']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
     const fmt = (v, d) => (v === null || v === undefined ? 'n/a' : v.toFixed(d));
     for (const r of regionRows()) {
       const def = R.labelOf(r.label, App.regionLabels());
@@ -460,6 +468,7 @@
       const dot = document.createElement('span'); dot.className = 'swatch'; dot.style.background = def.color;
       name.append(dot, def.label);
       const cells = [fmt(r.stats.volume_mm3, 2), `${fmt(r.stats.gray_mean, 0)}±${fmt(r.stats.gray_sd, 0)}`, fmt(r.stats.matrix_gray_mean, 0), r.stats.pore_fraction === null ? 'n/a' : (100 * r.stats.pore_fraction).toFixed(2), r.stats.pore_count ?? 'n/a', fmt(r.density && r.density.relative, 3), fmt(r.density && r.density.g_cm3, 3)];
+      if (calibrated) cells.push(App.densityText(fit, r.stats.matrix_gray_mean ?? r.stats.gray_mean));
       for (const c of cells) tr.insertCell().textContent = c;
       tr.insertCell().append(regionDelete(r));
       tr.addEventListener('click', () => {
@@ -484,7 +493,8 @@
     const table = $('zoneTable');
     table.textContent = '';
     const head = table.insertRow();
-    for (const h of ['Zone', 'mm³', 'Porosity (%)', 'Gray offset', 'Material']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
+    const fit = App.calibration(), calibrated = Boolean(fit && fit.ok);
+    for (const h of ['Zone', 'mm³', 'Porosity (%)', 'Gray offset', ...(calibrated ? ['Eq. g/cm³'] : []), 'Label']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
     for (const s of [...z.stats].sort((a, b) => zoneRank(a.zone) - zoneRank(b.zone))) {
       const tr = table.insertRow();
       const name = tr.insertCell();
@@ -493,7 +503,7 @@
       if (rgb) { const dot = document.createElement('span'); dot.className = 'swatch'; dot.style.background = `rgb(${rgb.join(',')})`; name.append(dot); }
       name.append(App.zoneTitle(s.zone));
       const percent = s.excess_median === null ? 'n/a' : `${s.excess_median >= 0 ? '+' : ''}${(100 * s.excess_median).toFixed(1)} %`;
-      for (const c of [s.volume_mm3.toFixed(0), s.void_percent.toFixed(1), percent]) tr.insertCell().textContent = c;
+      for (const c of [s.volume_mm3.toFixed(0), s.void_percent.toFixed(1), percent, ...(calibrated ? [App.densityText(fit, s.solid_gray_mean)] : [])]) tr.insertCell().textContent = c;
       const pick = document.createElement('select');
       pick.setAttribute('aria-label', `Label assigned to the ${App.zoneTitle(s.zone)} zone`);
       for (const [value, label] of [['undecided', 'Unassigned'], ...App.regionLabels().map((l) => [l.id, l.label])]) {
@@ -600,7 +610,7 @@
     }
   }
 
-  const runContext = () => ({ binFactor: state.binFactor, provenance: App.provenance(), labels: App.regionLabels(), sample: CT.sampleInfo(state.folder, state.samples), settings: state.settings, summary: P.summarize(state.pores, state.bodyMm3, state.rejected) });
+  const runContext = () => ({ calibration: App.calibration(), binFactor: state.binFactor, provenance: App.provenance(), labels: App.regionLabels(), sample: CT.sampleInfo(state.folder, state.samples), settings: state.settings, summary: P.summarize(state.pores, state.bodyMm3, state.rejected) });
 
   async function saveRun() {
     if (!state.store) { sayExport('Records are not available yet, so nothing was saved.'); return; }
@@ -612,7 +622,7 @@
       crops: App.cropsOf(state.folder).map((c) => ({ plane: c.plane, points: c.points })), air_gray: state.airGray, reference_region: state.referenceId || null,
       reference_density_assumed: Number.isFinite(state.referenceDensity) ? state.referenceDensity : null,
       regions: rows.map((r) => ({ id: r.id, label: r.label, plane: r.plane, slice_from: r.slice_from, slice_to: r.slice_to, note: r.note, stats: r.stats, density: r.density })),
-      patches: state.patches, solid_gray: state.solidGray ?? null, gray_calibrated: false,
+      patches: state.patches, solid_gray: state.solidGray ?? null, gray_calibrated: Boolean(App.calibration() && App.calibration().ok), calibration: (() => { const c = App.calibration(); return c ? { fit: c.ok ? { intercept: c.intercept, slope: c.slope, r2: c.r2, n: c.n, gray_range: c.gray_range, method: c.method } : null, reason: c.ok ? null : c.reason, points: c.points } : null; })(),
       zones: state.zones ? { refused: state.zones.refused ?? null, threshold: state.zones.threshold ?? null, axis: state.zones.axis ?? null, stats: state.zones.stats ?? null, baseline: state.zones.baseline ?? null, method: state.zones.method ?? null, labels: state.zoneLabels, candidates_not_composition: true } : { labels: state.zoneLabels } };
     try {
       await state.store.putRun(state.folder, run, chunks);
@@ -684,7 +694,7 @@
     $('exportPores').addEventListener('click', () => saveFile(`${state.folder}_pores.csv`, E.poreCsv(state.pores, state.rejected, runContext())));
     $('exportPatches').addEventListener('click', () => saveFile(`${state.folder}_patches.csv`, E.patchCsv(state.patches, runContext())));
     $('exportZones').addEventListener('click', () => saveFile(`${state.folder}_zones.csv`, E.zoneCsv(state.zones, state.zoneLabels, runContext())));
-    $('exportRegions').addEventListener('click', () => saveFile(`${state.folder}_regions.csv`, E.regionCsv(regionRows())));
+    $('exportRegions').addEventListener('click', () => saveFile(`${state.folder}_regions.csv`, E.regionCsv(regionRows(), { calibration: App.calibration() })));
     $('exportNotes').addEventListener('click', () => saveFile('ct_annotations.csv', E.annotationCsv([...state.annotations.values()])));
     $('exportMask').addEventListener('click', exportMask);
   });
@@ -692,6 +702,7 @@
   on('recordsChanged', () => { renderLog(); renderRegions(); renderPoreSummary(); renderSampleForm(); renderSampleTables(); renderFacts(); renderLabels(); renderTools(); });
   on('draftChanged', renderDraft);
   on('saveDraft', saveDraft);
+  on('startDrawing', (label) => startDrawing(label));
   on('toolKey', (key) => { const t = TOOLS.find((x) => x.mark.toLowerCase() === key); if (t) setTool(t.id); });
   on('statusText', (t) => { $('poreStatus').textContent = t; });
   on('loaded', () => {

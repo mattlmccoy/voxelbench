@@ -188,7 +188,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
     <div class="startup" id="startup">
       <h1>Open a scan folder to begin</h1>
       <p>Select a folder of scan folders, or one scan folder. Slices are read in this browser; no image data leaves this computer (the browser may label this an upload). Regions, annotations and results are kept in a project file you save, or in the shared database when this page runs on claude.ai.</p>
-      <div class="row"><button id="trySynthetic" title="A generated 160-voxel cube with 40 known pores; nothing to download">Try a synthetic test scan</button></div>
+      <div class="row"><button id="trySynthetic" title="A generated 160-voxel cube with 40 known pores; nothing to download">Try a synthetic test scan</button><button id="trySyntheticPhantoms" title="The same scan with two phantom rods (0.50 and 1.40 g/cm³) for trying the density calibration">With phantom rods</button></div>
       <div class="progress" id="progressBar" hidden><div></div></div>
       <p class="mono muted" id="openerText"></p>
       <p class="error" id="loadError" hidden></p>
@@ -314,6 +314,22 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
         </div>
       </details>
 
+      <details class="step" name="steps" id="step5">
+        <summary><span class="num">5</span>Density calibration <span class="tag" id="calTag">optional</span></summary>
+        <div class="body">
+          <p class="hint">Outline each reference phantom where it is solid and enter its measured density. VoxelBench fits density to the median gray of each phantom, and to air if included. The result is the equivalent density of the phantom material: doped or filled material does not read its true density. Scan protocol: docs/PHANTOM_PROTOCOL.md in the repository.</p>
+          <div class="row">
+            <label>Name <input type="text" id="phantomName" placeholder="e.g. PA12 rod" autocomplete="off" style="width:110px"></label>
+            <label>g/cm³ <input type="number" id="phantomDensity" step="0.001" min="0" style="width:72px"></label>
+            <button id="drawPhantom" disabled>Draw phantom</button>
+          </div>
+          <label class="pickrow" style="grid-template-columns:auto 1fr"><input type="checkbox" id="calAir" checked><span>Include air (0.0012 g/cm³ at the median gray outside the part)</span></label>
+          <p class="mono" id="calFit"></p>
+          <p class="hint" id="calNote"></p>
+          <div class="tablewrap" id="calWrap" hidden><table id="calTable"></table></div>
+        </div>
+      </details>
+
       <details id="secScan">
         <summary>Scan information <span class="tag" id="scanTag"></span></summary>
         <div class="body">
@@ -325,7 +341,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
             <div class="row"><button id="saveSample" disabled>Save sample details</button><span class="mono muted" id="sampleState"></span></div>
           </div>
           <div class="kv mono" id="facts"></div>
-          <p class="hint">Gray values are uncalibrated (no reference phantoms). Navy: outside the reconstructed field of view (FOV); dashed cyan line: FOV edge. Holders, packaging and reconstruction artifacts are not sample; crop them out in step 1.</p>
+          <p class="hint"><span id="calHint">Gray values are uncalibrated (no reference phantoms).</span> Navy: outside the reconstructed field of view (FOV); dashed cyan line: FOV edge. Holders, packaging and reconstruction artifacts are not sample; crop them out in step 1.</p>
           <div class="tablewrap"><table id="railSamples"></table></div>
         </div>
       </details>
@@ -377,6 +393,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 <script src="ct_views.js"></script>
 <script src="ct_model.js"></script>
 <script src="ct_rail.js"></script>
+<script src="vb_calrail.js"></script>
 <script src="ct_sheet.js"></script>
 <script src="ct_sheetpages.js"></script>
 <script src="ct_sheetexport.js"></script>

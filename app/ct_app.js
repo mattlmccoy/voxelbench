@@ -160,7 +160,19 @@ window.CTApp = (function () {
     return state.native;
   }
 
-  const provenance = () => CT.provenanceLine({ voxelMm: state.voxelMm, binFactor: state.binFactor, calibration: null, toolVersion: window.VB_VERSION });
+  /** The density calibration from this scan's phantom regions (median gray) and air, when included; null without
+      phantoms. The fit carries its points so they can be shown and saved with a run. */
+  function calibration() {
+    if (!state.folder) return null;
+    const Cal = window.VBCalibration;
+    const phantoms = regionsOf(state.folder).filter((r) => r.label === 'phantom' && r.phantom)
+      .map((r) => ({ id: r.id, name: r.phantom.name, density_g_cm3: r.phantom.density_g_cm3, gray: statsOf(r).gray_p50, stats: statsOf(r) }));
+    if (!phantoms.length) return null;
+    const points = Cal.calibrationPoints(phantoms, { airGray: state.airGray, includeAir: CT.sampleInfo(state.folder, state.samples).calibration_air !== false });
+    return { ...Cal.fitCalibration(points), points, phantoms };
+  }
+
+  const provenance = () => CT.provenanceLine({ voxelMm: state.voxelMm, binFactor: state.binFactor, calibration: calibration(), toolVersion: window.VB_VERSION });
 
   const unsavedOf = (collection) => [...state.unsaved.values()].filter((r) => r._collection === collection);
   // Records are kept on the grid they were drawn on and shown on the grid now loaded (CT.toGrid).
@@ -446,15 +458,13 @@ window.CTApp = (function () {
   function start() {
     $('folder').addEventListener('change', (e) => openFiles(e.target.files));
     $('saveProject').addEventListener('click', saveProject);
-    $('trySynthetic').addEventListener('click', () => {
-      const { files } = window.VBSynthetic.makeScan({});
-      openFiles(files);
-    });
+    $('trySynthetic').addEventListener('click', () => openFiles(window.VBSynthetic.makeScan({}).files));
+    $('trySyntheticPhantoms').addEventListener('click', () => openFiles(window.VBSynthetic.makeScan({ phantoms: true }).files));
     $('projectFile').addEventListener('change', (e) => { if (e.target.files[0]) openProject(e.target.files[0]); e.target.value = ''; });
     connectStore();
     renderSaveState();
     emit('start');
   }
 
-  return { state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance };
+  return { state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
 }());

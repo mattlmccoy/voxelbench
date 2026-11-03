@@ -134,7 +134,7 @@
   /** What the user recorded about a scan folder; a folder nobody described keeps its own name and blank fields. */
   function sampleInfo(folder, samples) {
     const s = samples && samples.get(folder);
-    return { folder, name: (s && s.name) || folder, material: (s && s.material) || '', process: (s && s.process) || '', notes: (s && s.notes) || '' };
+    return { folder, name: (s && s.name) || folder, material: (s && s.material) || '', process: (s && s.process) || '', notes: (s && s.notes) || '', calibration_air: !(s && s.calibration_air === false) };
   }
 
   function planeShape(plane, { nx, ny, nz }) {
