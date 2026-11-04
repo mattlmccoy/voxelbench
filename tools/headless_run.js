@@ -22,7 +22,7 @@ const ZONE_THRESHOLDS = [0.02, 0.03, 0.04, 0.05, 0.06, 0.075, 0.09, 0.11];
 const log = (text) => { if (require.main === module) console.log(`[${new Date().toISOString().slice(11, 19)}] ${text}`); };
 
 function readStack(folder) {
-  const names = fs.readdirSync(folder).filter((n) => /\.tiff?$/i.test(n)).sort();
+  const names = CT.sliceOrder(fs.readdirSync(folder)); // the page's order (CT.groupStacks)
   let voxelMm = null, width = 0, height = 0;
   const slices = names.map((n) => {
     const b = fs.readFileSync(path.join(folder, n));
@@ -51,7 +51,7 @@ function detect({ vol, dims, voxelMm, settings, crops, smoothed }) {
   for (let i = 0; i < body.filled.length; i++) filled += body.filled[i];
   const coarse = P.detectPores(vol.gray, vol.outside, vol.dims, body, settings, { bin: BIN, voxelMm });
   const result = P.fineDetect({ dims, bin: BIN, settings, voxelMm, coarse, binnedDims: vol.dims, getSmoothed: (z) => smoothed[z] });
-  return { body, result, bodyMm3: filled * (BIN * voxelMm) ** 3 };
+  return { body, coarse, result, bodyMm3: filled * (BIN * voxelMm) ** 3 };
 }
 
 /** The viewer's own pipeline on one stack with a saved run's crop and settings: segmentation, then (unless

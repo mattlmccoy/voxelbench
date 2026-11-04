@@ -29,9 +29,13 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
 - Lab workflow: measured lengths checked against a nominal and tolerance band; a before/after table of two scans'
   saved runs; batch runs over every scan in a folder with one summary CSV; view bookmarks; named setting presets.
 - Exports: pore, region, zone, CAD-deviation, filler, wall and batch tables (CSV), a slice image (PNG) and a review sheet (PDF).
+- Three looks under Appearance in the top bar: Lab (the original dark instrument look, default), Mac (a light Mac-style
+  inspector, one step at a time) and Glass (frosted panels floating on a blurred copy of the scan). `?skin=mac` or
+  `?skin=glass` in the address also picks one; the choice is remembered in this browser.
 
 Every quantity is checked against an independent Python (scipy) reference on the same scans; see
-[docs/REFERENCE.md](docs/REFERENCE.md). Every reported number carries a provenance line: the voxel size it was computed at, any binning, the calibration
+[docs/REFERENCE.md](docs/REFERENCE.md). Porosity can be cross-checked against Dragonfly 3D voxel by voxel; see
+[docs/DRAGONFLY_CROSSCHECK.md](docs/DRAGONFLY_CROSSCHECK.md). Every reported number carries a provenance line: the voxel size it was computed at, any binning, the calibration
 status and the VoxelBench version.
 
 ## Start

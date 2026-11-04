@@ -88,6 +88,11 @@
 
   const naturalKey = (a, b) => a.localeCompare(b, 'en', { numeric: true });
 
+  /** Slice file names (TIFF only) in the order the page reads them: by the number in the name. */
+  function sliceOrder(names) {
+    return names.filter((n) => /\.tiff?$/i.test(n) && !n.startsWith('.')).sort(naturalKey);
+  }
+
   /** Group picked files by their parent folder, keeping only slice files, in slice order. */
   function groupStacks(files) {
     const groups = new Map();
@@ -369,7 +374,7 @@
   }
 
   return {
-    FEATURE_TYPES, parseTiff, writeTiff, groupStacks, sampleInfo, sampleRecord, dimensionCheck, compareRuns, errorStep, archimedesComparison, gridText, toGrid, provenanceLine, planeShape, voxelOf, planeOf,
+    FEATURE_TYPES, parseTiff, writeTiff, groupStacks, sliceOrder, sampleInfo, sampleRecord, dimensionCheck, compareRuns, errorStep, archimedesComparison, gridText, toGrid, provenanceLine, planeShape, voxelOf, planeOf,
     extractPlane, canvasToPlane, fitView, scaleForWidthMm, widthMmAtScale, centerOn, clampScale, zoomAt, autoWindow, grayToRgba, fitCircle, insideCircle, chordAt, makeAnnotation,
   };
 }));

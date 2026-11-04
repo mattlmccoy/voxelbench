@@ -166,6 +166,28 @@
     return { axis, lo: lo[axis], hi: hi[axis], name: 'xyz'[axis] };
   }
 
+  const RING_BIN_MM = 0.25, RING_DROP = 0.03, RING_MIN_COUNT = 50;
+
+  /** How deep (mm from the reconstruction's edge) the dark outer ring reaches, at most SCAN_EDGE_MM. Mostly-solid voxels
+      at least DEPTH_BIN_MM inside the part (so surface shading is not taken for the ring) are binned by scan depth; the
+      band ends below the deepest bin whose median gray is more than RING_DROP of (interior - air) darker than the
+      interior beyond SCAN_EDGE_MM. Without enough interior to compare, the band stays SCAN_EDGE_MM. */
+  function scanEdgeBand({ gray, w, depth, scanDepth, body, airGray }) {
+    if (!scanDepth) return SCAN_EDGE_MM;
+    const bins = [], inner = [];
+    for (let i = 0; i < gray.length; i++) {
+      if (!body[i] || w[i] < MOSTLY_SOLID || depth[i] < DEPTH_BIN_MM) continue;
+      if (scanDepth[i] >= SCAN_EDGE_MM) { inner.push(gray[i]); continue; }
+      const b = Math.floor(scanDepth[i] / RING_BIN_MM);
+      (bins[b] = bins[b] || []).push(gray[i]);
+    }
+    if (inner.length < RING_MIN_COUNT) return SCAN_EDGE_MM;
+    const ref = medianOf(inner), dark = ref - RING_DROP * (ref - airGray);
+    let band = 0;
+    bins.forEach((list, b) => { if (list && list.length >= RING_MIN_COUNT && medianOf(list) < dark) band = Math.max(band, (b + 1) * RING_BIN_MM); });
+    return Math.min(SCAN_EDGE_MM, band);
+  }
+
   /** Everything that does not depend on the threshold: gray relative to the pore-free ends at the same depth, which
       removes the scanner's shading from surface to center. refused says why no baseline exists. */
   function prepareZones(input) {
@@ -180,6 +202,7 @@
     const depth = distanceInside(body, dims);
     for (let i = 0; i < n; i++) depth[i] *= voxelMm;
     const w = weight || solidWeights(voids, body, dims);
+    const scanEdgeMm = scanEdgeBand({ gray, w, depth, scanDepth, body, airGray });
     const { axis, lo, hi, name } = longestAxis(body, dims);
     const voidTop = new Float32Array(n), bodyF = new Float32Array(n);
     let bodyCount = 0;
@@ -192,7 +215,7 @@
     for (let z = 0, i = 0; z < nz; z++) {
       for (let y = 0; y < ny; y++) {
         for (let x = 0; x < nx; x++, i++) {
-          if (w[i] < MOSTLY_SOLID || depth[i] < DEPTH_BIN_MM || (scanDepth && scanDepth[i] < SCAN_EDGE_MM)) continue;
+          if (w[i] < MOSTLY_SOLID || depth[i] < DEPTH_BIN_MM || (scanDepth && scanDepth[i] < scanEdgeMm)) continue;
           const a = axis === 0 ? x : axis === 1 ? y : z;
           if (method === 'ends' && a >= lo + share && a <= hi - share) continue;
           if (vs[i] >= settings.voidFree * Math.max(bs[i], 1e-3)) continue;
@@ -203,8 +226,9 @@
       }
     }
     if (endCount < MIN_END_SHARE * bodyCount) {
-      if (method === 'whole') return { refused: `No baseline: less than ${(100 * MIN_END_SHARE).toFixed(0)}% of the body is pore-free solid (${(100 * endCount / bodyCount).toFixed(1)}%). Outline regions by hand instead.`, method };
-      return { method, refused: `No baseline: the two ends of the part along its long axis are not pore-free (${(100 * endCount / bodyCount).toFixed(1)}% of the body qualifies, ${(100 * MIN_END_SHARE).toFixed(0)}% needed). Outline regions by hand instead.` };
+      const edge = scanEdgeMm > 0 ? ` The outer ${scanEdgeMm} mm of the reconstruction reads dark and is left out.` : '';
+      if (method === 'whole') return { refused: `No baseline: less than ${(100 * MIN_END_SHARE).toFixed(0)}% of the body is pore-free solid (${(100 * endCount / bodyCount).toFixed(1)}%).${edge} Outline regions by hand instead.`, method, scanEdgeMm };
+      return { method, scanEdgeMm, refused: `No baseline: the two ends of the part along its long axis are not pore-free (${(100 * endCount / bodyCount).toFixed(1)}% of the body qualifies, ${(100 * MIN_END_SHARE).toFixed(0)}% needed).${edge} Outline regions by hand instead.` };
     }
     const mids = [], base = [];
     bins.forEach((list, b) => { if (list.length >= 50) { mids.push((b + 0.5) * DEPTH_BIN_MM); base.push(medianOf(list)); } });
@@ -215,7 +239,7 @@
     };
     const raw = new Float32Array(n);
     for (let i = 0; i < n; i++) if (w[i] > 0) { const c = baseAt(depth[i]); raw[i] = (gray[i] - c) / (c - airGray); }
-    return { refused: null, method, excess: weightedSmooth(raw, w, dims, settings.sigma), depth, w, axis: name, baseline: mids.map((d, k) => ({ depth_mm: d, gray: base[k] })) };
+    return { refused: null, method, scanEdgeMm, excess: weightedSmooth(raw, w, dims, settings.sigma), depth, w, axis: name, baseline: mids.map((d, k) => ({ depth_mm: d, gray: base[k] })) };
   }
 
   /** Gray value of the dip between the baseline group near zero and a brighter group, from a histogram with HIST's
@@ -279,7 +303,7 @@
   }
 
   function finishZones(ready, { gray, voids, scanDepth, body, dims, voxelMm, settings }) {
-    const { excess, depth, w } = ready;
+    const { excess, depth, w } = ready, edgeMm = ready.scanEdgeMm != null ? ready.scanEdgeMm : SCAN_EDGE_MM;
     let threshold = settings.threshold;
     if (threshold === undefined) {
       threshold = ready.method === 'whole' ? valleyBetweenGroups(histogramCounts(excess, depth, w)) : findDip(excess, depth, w);
@@ -298,7 +322,7 @@
     // Darker means a real dark core plus its own skin, so the shading along every surface and scan edge stays out.
     const candidate = new Uint8Array(n), core = new Uint8Array(n);
     for (let i = 0; i < n; i++) {
-      if (!body[i] || !(excess[i] < -settings.lowDrop) || (scanDepth && scanDepth[i] < SCAN_EDGE_MM)) continue;
+      if (!body[i] || !(excess[i] < -settings.lowDrop) || (scanDepth && scanDepth[i] < edgeMm)) continue;
       candidate[i] = 1;
       if (depth[i] >= SKIN_MM) core[i] = 1;
     }
@@ -319,7 +343,7 @@
       const m = stat[zone];
       return { zone, volume_mm3: m.c * voxelMm ** 3, void_percent: voidPercent[zone], solid_gray_mean: m.gc ? m.g / m.gc : null, excess_median: medianOf(lists[zone]) };
     });
-    return { refused: null, zones, threshold, stats, axis: ready.axis, baseline: ready.baseline, method: ready.method };
+    return { refused: null, zones, threshold, stats, axis: ready.axis, baseline: ready.baseline, method: ready.method, scan_edge_mm: edgeMm };
   }
 
   /** The candidate map. The ends of the long axis set the baseline at each depth from the surface. Zones: BRIGHT above
@@ -494,5 +518,5 @@
   /** One phrase for what the gray offset is measured against, used in the page, the sheet and the CSV. */
   const baselineText = (method, axis) => (method === 'ends' ? `the pore-free ends of the ${axis} axis at equal depth below the surface` : 'the median of all pore-free solid at equal depth below the surface');
 
-  return { ZONE, ZONE_NAMES, MAX_DRAWN, zoneName, baselineText, DEFAULT_PATCH_SETTINGS, DEFAULT_ZONE_SETTINGS, distanceInside, findPatches, prepareZones, finishZones, draftZones, dipInHistogram, valleyBetweenGroups, offsetHistogram, voidSizeMasks, paintZones, zoneTotals, voidPercentByZone, voidFractions, coarsenSolid, prepareCoarse, voidClassMasks };
+  return { ZONE, ZONE_NAMES, MAX_DRAWN, zoneName, baselineText, DEFAULT_PATCH_SETTINGS, DEFAULT_ZONE_SETTINGS, distanceInside, findPatches, scanEdgeBand, prepareZones, finishZones, draftZones, dipInHistogram, valleyBetweenGroups, offsetHistogram, voidSizeMasks, paintZones, zoneTotals, voidPercentByZone, voidFractions, coarsenSolid, prepareCoarse, voidClassMasks };
 }));

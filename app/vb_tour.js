@@ -121,7 +121,7 @@
   const STOPS = [
     { title: 'VoxelBench guided tour',
       body: ['This tour runs the eight steps on generated test scans with known answers: crop, pores, zones, export, density calibration, CAD comparison, filler and walls.',
-        'Each stop points at the controls it describes. Press the orange button to have the tour do the step, or do it yourself and press Next. Scans are generated in this browser; nothing is uploaded.',
+        'Each stop points at the controls it describes. Press the button in this card to have the tour do the step, or do it yourself and press Next. Scans are generated in this browser; nothing is uploaded.',
         'Esc closes the tour; the arrow keys move between stops.'] },
     { title: 'Open a scan', target: () => (state.folder ? $('crumb') : $('startup').querySelector('.row')),
       body: ['A real scan is a folder of 16-bit TIFF slices (Open scan folder). The tour uses the generated dense-band scan: a 16 mm cylinder at 0.1 mm voxels with 40 spherical pores and a band over the middle 30 % of its length that reads 10 % denser.'],
