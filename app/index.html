@@ -152,6 +152,32 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 .statusbar .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 .statusbar #readout { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
 
+/* Guided tour (vb_tour.js): a spotlight ring around the control it describes and a card beside it. */
+.tourshade { position: fixed; z-index: 80; pointer-events: none; border: 2px solid var(--accent); border-radius: 4px; box-shadow: 0 0 0 9999px rgba(5, 7, 10, .62); transition: left .18s, top .18s, width .18s, height .18s; }
+.tourshade.none { border-color: transparent; }
+.tourcard { position: fixed; z-index: 81; width: 360px; max-width: calc(100vw - 32px); max-height: calc(100vh - 16px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line-strong); border-top: 3px solid var(--accent); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); }
+.tourcard.sheet { left: 16px !important; right: 16px; bottom: 16px; top: auto !important; width: auto; max-width: none; max-height: 55vh; }
+.tourhead { display: flex; align-items: center; }
+.tourcount { color: var(--muted); }
+.tourclose { margin-left: auto; border: 0; padding: 0 6px; font-size: 18px; line-height: 1; color: var(--muted); }
+.tourtitle { margin: 0; font: 700 14px var(--font-mono); letter-spacing: .04em; color: var(--fg-strong); }
+.tourbody { display: grid; gap: 6px; }
+.tourbody p { margin: 0; line-height: 1.45; }
+.touractions { display: grid; gap: 6px; justify-items: start; }
+.touractions:empty { display: none; }
+.tourplan { margin: 0; padding-left: 20px; color: var(--muted); font-size: 12px; display: grid; gap: 2px; }
+.tourplan li.now { color: var(--fg-strong); }
+.tourplan li.done { color: var(--live); }
+.tourplan li.done::marker { content: '✓  '; }
+.tourresult { margin: 0; padding: 6px 8px; background: var(--bg-deep); border-left: 2px solid var(--live); color: var(--fg); line-height: 1.4; }
+.tourresult.bad { border-left-color: var(--err); color: var(--err); }
+.tournav { display: flex; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px solid var(--line); }
+.tournav .tournext { margin-left: auto; }
+.tourdots { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; flex: 1; }
+.tourdots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line-strong); }
+.tourdots i.past { background: var(--muted); }
+.tourdots i.on { background: var(--accent); }
+
 @media (max-width: 900px) {
   body { overflow: auto; }
   html, body { height: auto; }
@@ -177,6 +203,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
     <select id="sampleSelect" aria-label="Scan" hidden></select>
     <label class="filebtn">Open scan folder<input type="file" id="folder" webkitdirectory multiple></label>
     <label class="filebtn">Open project<input type="file" id="projectFile" accept=".json,application/json"></label>
+    <button id="tourStart" title="Step-by-step walkthrough of the eight steps on generated test scans">Guided tour</button>
     <button id="saveProject" hidden title="Save regions, annotations and runs to a file kept next to the scan">Save project</button>
     <span class="mono muted projectnote" id="projectNote" role="status"></span>
     <span class="conn mono" role="status"><span class="dot" id="dbDot"></span><span id="saveState"></span></span>
@@ -188,7 +215,8 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
     <div class="startup" id="startup">
       <h1>Open a scan folder to begin</h1>
       <p>Select a folder of scan folders, or one scan folder. Slices are read in this browser; no image data leaves this computer (the browser may label this an upload). Regions, annotations and results are kept in a project file you save, or in the shared database when this page runs on claude.ai.</p>
-      <div class="row"><button id="trySynthetic" title="A generated 160-voxel cube with 40 known pores; nothing to download">Try a synthetic test scan</button><button id="trySyntheticPhantoms" title="The same scan with two phantom rods (0.50 and 1.40 g/cm³) for trying the density calibration">With phantom rods</button><button id="trySyntheticFiller" title="The synthetic scan with 50 bright spheres and 20 short fibers lying within 8° of x, for trying the filler analysis">With filler</button><button id="trySyntheticCad" title="A generated L-shaped part, shrunk 3 % with its upright bent 0.12 mm, and its nominal STL, for trying the CAD comparison">With a CAD model</button></div>
+      <div class="row"><button id="tourStartup" class="primary" title="Walks through the eight steps on generated test scans with known answers">Take the guided tour</button><span class="muted">or try a generated scan on your own:</span></div>
+      <div class="row"><button id="trySynthetic" title="A generated 160-voxel cube with 40 known pores; nothing to download">Try a synthetic test scan</button><button id="trySyntheticDense" title="A 16 mm cylinder at 0.1 mm voxels, its middle 30 % of the length 10 % denser and its pores kept away from the ends, for trying gray-value zones">With a dense band</button><button id="trySyntheticPhantoms" title="The same scan with two phantom rods (0.50 and 1.40 g/cm³) for trying the density calibration">With phantom rods</button><button id="trySyntheticFiller" title="The synthetic scan with 50 bright spheres and 20 short fibers lying within 8° of x, for trying the filler analysis">With filler</button><button id="trySyntheticCad" title="A generated L-shaped part, shrunk 3 % with its upright bent 0.12 mm, and its nominal STL, for trying the CAD comparison">With a CAD model</button></div>
       <div class="progress" id="progressBar" hidden><div></div></div>
       <p class="mono muted" id="openerText"></p>
       <p class="error" id="loadError" hidden></p>
@@ -497,4 +525,5 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 <script src="ct_sheet.js"></script>
 <script src="ct_sheetpages.js"></script>
 <script src="ct_sheetexport.js"></script>
+<script src="vb_tour.js"></script>
 <script>CTApp.start();</script>

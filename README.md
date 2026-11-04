@@ -36,13 +36,18 @@ status and the VoxelBench version.
 
 ## Start
 
-1. Open the page and press **Try a synthetic test scan** to see every step on a generated scan with 40 known pores,
+1. Press **Take the guided tour** (or **Guided tour** in the top bar, or add `?tour` to the address) for a walkthrough
+   of the eight steps on generated scans: each stop points at its controls, can run the step for you, and reads the
+   result back next to the generated scan's known answer.
+2. Or press **Try a synthetic test scan** to see every step on a generated scan with 40 known pores,
+   **With a dense band** to try the gray-value zones on a 16 mm cylinder whose middle 30 % of the length reads 10 %
+   denser,
    **With phantom rods** to try the density calibration on two rods of known density, **With filler** to try the
    filler analysis on 50 bright spheres and 20 aligned fibers, or **With a CAD model** to try
    the CAD comparison on a generated L-shaped part (shrunk 3 %, its upright bent 0.12 mm) and its nominal STL.
-2. For a real scan, press **Open scan folder** and pick a folder of single-page, uncompressed 16-bit TIFF slices with
+3. For a real scan, press **Open scan folder** and pick a folder of single-page, uncompressed 16-bit TIFF slices with
    the voxel size in the resolution tags.
-3. Crop out holders or packaging (step 1), segment pores (step 2), map zones (step 3), export (step 4), and
+4. Crop out holders or packaging (step 1), segment pores (step 2), map zones (step 3), export (step 4), and
    calibrate density from phantoms (step 5, optional), compare to CAD (step 6, optional), and analyze filler and
    fibers (step 7, optional, after step 2).
 

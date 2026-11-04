@@ -86,3 +86,16 @@ test('a crop face counts as surface: synthetic pores cut by it read as open, por
   }
   for (const p of clear) assert.equal(near(p).open, false, `clear pore at x=${p.x.toFixed(1)}`);
 });
+
+test('the synthetic scan with a dense band gives step 3 a high-gray zone over pore-free ends', async () => {
+  const { files, truth } = S.makeScan({ denseBand: true, voxelMm: 0.1 });
+  const tiffs = await Promise.all(files.map(async (f) => CT.parseTiff(await f.arrayBuffer())));
+  const stack = { slices: tiffs.map((t) => t.pixels), voxelMm: tiffs[0].voxelMm, dims: { nx: tiffs[0].width, ny: tiffs[0].height, nz: tiffs.length } };
+  const a = H.analyze(stack, { settings: { poreThreshold: 1350 } }, { zoneBaseline: 'auto' });
+  assert.equal(a.base.result.pores.length, truth.pore_count);
+  assert.equal(a.automatic.refused, null);
+  assert.equal(a.automatic.method, 'ends');
+  const high = a.automatic.stats.find((s) => s.zone === 2);
+  assert.ok(high.volume_mm3 > 100, `high-gray zone ${high.volume_mm3} mm³`);
+  assert.ok(Math.abs(high.solid_gray_mean - truth.dense_band.gray) < 30, `${high.solid_gray_mean} vs ${truth.dense_band.gray}`);
+});
