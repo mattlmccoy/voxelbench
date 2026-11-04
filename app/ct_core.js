@@ -137,6 +137,18 @@
     return { folder, name: (s && s.name) || folder, material: (s && s.material) || '', process: (s && s.process) || '', notes: (s && s.notes) || '', calibration_air: !(s && s.calibration_air === false), cad: (s && s.cad) || null, bookmarks: (s && s.bookmarks) || [] };
   }
 
+  /** Archimedes porosity 1 − ρ_measured/ρ_solid beside the matching CT number: a sealed sample keeps water out of every
+      pore (bulk density: total porosity, against CT total); an unsealed one lets water into the open pores (apparent
+      density: closed porosity only, against CT closed). Null without a measurement. */
+  function archimedesComparison(arch, ct) {
+    if (!arch || !Number.isFinite(arch.density_g_cm3) || !Number.isFinite(arch.solid_g_cm3) || !(arch.solid_g_cm3 > 0)) return null;
+    if (arch.density_g_cm3 > arch.solid_g_cm3) return { refused: 'The measured density is above the solid density.' };
+    const porosity = 100 * (1 - arch.density_g_cm3 / arch.solid_g_cm3), sealed = arch.method !== 'unsealed';
+    const ctPercent = sealed ? ct.total_percent : ct.closed_percent;
+    return { porosity_percent: porosity, method: sealed ? 'sealed' : 'unsealed', ct_label: sealed ? 'total' : 'closed', ct_percent: Number.isFinite(ctPercent) ? ctPercent : null,
+      difference: Number.isFinite(ctPercent) ? ctPercent - porosity : null };
+  }
+
   // The step each worker request belongs to, so an error releases that step only.
   const REQUEST_STEP = { cad: 'cad', filler: 'filler', wall: 'wall', zones: 'zones', sheet: 'sheet', volume: 'pores', model: 'pores', detect: 'pores', slice: 'pores', slicesDone: 'pores', voidMeshes: 'pores' };
   /** The step a failed worker request belongs to; null when unknown (then every waiting step is released). */
@@ -357,7 +369,7 @@
   }
 
   return {
-    FEATURE_TYPES, parseTiff, writeTiff, groupStacks, sampleInfo, sampleRecord, dimensionCheck, compareRuns, errorStep, gridText, toGrid, provenanceLine, planeShape, voxelOf, planeOf,
+    FEATURE_TYPES, parseTiff, writeTiff, groupStacks, sampleInfo, sampleRecord, dimensionCheck, compareRuns, errorStep, archimedesComparison, gridText, toGrid, provenanceLine, planeShape, voxelOf, planeOf,
     extractPlane, canvasToPlane, fitView, scaleForWidthMm, widthMmAtScale, centerOn, clampScale, zoomAt, autoWindow, grayToRgba, fitCircle, insideCircle, chordAt, makeAnnotation,
   };
 }));

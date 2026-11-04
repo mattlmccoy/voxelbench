@@ -318,3 +318,16 @@ test('errorStep sends a worker error to the step whose request failed', () => {
   assert.equal(CT.errorStep('sheet'), 'sheet');
   assert.equal(CT.errorStep(undefined), null, 'unknown: every waiting step');
 });
+
+test('archimedesComparison: sealed bulk density against CT total, unsealed apparent density against CT closed', () => {
+  const sealed = CT.archimedesComparison({ density_g_cm3: 0.95, solid_g_cm3: 1.01, method: 'sealed' }, { total_percent: 5.49, closed_percent: 0.75 });
+  assert.ok(Math.abs(sealed.porosity_percent - 100 * (1 - 0.95 / 1.01)) < 1e-9);
+  assert.equal(sealed.ct_label, 'total');
+  assert.equal(sealed.ct_percent, 5.49);
+  assert.ok(Math.abs(sealed.difference - (5.49 - sealed.porosity_percent)) < 1e-9);
+  const open = CT.archimedesComparison({ density_g_cm3: 1.0, solid_g_cm3: 1.01, method: 'unsealed' }, { total_percent: 5.49, closed_percent: 0.75 });
+  assert.equal(open.ct_label, 'closed'); assert.equal(open.ct_percent, 0.75);
+  assert.equal(CT.archimedesComparison({ density_g_cm3: 1.0, solid_g_cm3: 1.01, method: 'unsealed' }, { total_percent: 5.49, closed_percent: null }).ct_percent, null);
+  assert.equal(CT.archimedesComparison(null, { total_percent: 5 }), null);
+  assert.equal(CT.archimedesComparison({ density_g_cm3: 1.2, solid_g_cm3: 1.01, method: 'sealed' }, { total_percent: 5 }).refused, 'The measured density is above the solid density.');
+});

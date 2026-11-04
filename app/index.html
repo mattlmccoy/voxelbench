@@ -243,6 +243,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
           <div class="headline" id="voidHeadline" hidden></div>
           <div class="kv mono" id="poreSummary"></div>
           <p class="hint" id="poreOpenNote" hidden></p>
+          <p class="mono" id="archLine" hidden></p>
           <p class="hint" id="poreCalNote" hidden></p>
           <label class="setting" id="minVoidRow" hidden><span>Minimum ESD in 3D view</span><span class="v mono" id="minVoidValue"></span><input type="range" id="minVoid" min="0" max="1" step="0.05" value="0"></label>
           <details class="sub">
@@ -413,6 +414,18 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
             <label>Notes <input type="text" id="sampleNotes" autocomplete="off"></label>
             <div class="row"><button id="saveSample" disabled>Save sample details</button><span class="mono muted" id="sampleState"></span></div>
           </div>
+          <details class="sub">
+            <summary>Archimedes density (optional)</summary>
+            <div>
+              <div class="row">
+                <label>Measured <input type="text" inputmode="decimal" id="archDensity" placeholder="g/cm³" style="width:64px" autocomplete="off"></label>
+                <label>Solid <input type="text" inputmode="decimal" id="archSolid" placeholder="g/cm³" style="width:64px" autocomplete="off"></label>
+                <select id="archMethod"><option value="sealed">sealed (bulk)</option><option value="unsealed">unsealed (apparent)</option></select>
+                <button id="archSave" disabled>Save</button>
+              </div>
+              <p class="hint" id="archHint">Archimedes porosity is 1 − measured/solid density. A sealed sample keeps water out of every pore, so it compares with CT total porosity; an unsealed one lets water into the open pores, so it compares with CT closed porosity. Solid density: the fully dense material (for PA12 about 1.01 g/cm³; use your material's datasheet).</p>
+            </div>
+          </details>
           <div class="kv mono" id="facts"></div>
           <p class="hint"><span id="calHint">Gray values are uncalibrated (no reference phantoms).</span> Navy: outside the reconstructed field of view (FOV); dashed cyan line: FOV edge. Holders, packaging and reconstruction artifacts are not sample; crop them out in step 1.</p>
           <div class="tablewrap"><table id="railSamples"></table></div>
@@ -480,6 +493,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 <script src="vb_comparerail.js"></script>
 <script src="vb_bookmarks.js"></script>
 <script src="vb_batch.js"></script>
+<script src="vb_archimedes.js"></script>
 <script src="ct_sheet.js"></script>
 <script src="ct_sheetpages.js"></script>
 <script src="ct_sheetexport.js"></script>
