@@ -220,8 +220,8 @@ html:is([data-skin="mac"], [data-skin="glass"]) .insightbox { border-left: 0; bo
 #dfPanel .rcinsights, .resultcard .rcinsights { margin: 0; padding-left: 16px; display: grid; gap: 4px; font-size: 12px; line-height: 1.4; }
 .resultcard.arrive { animation: rcarrive .35s ease-out; }
 @keyframes rcarrive { from { transform: translateY(-6px) scale(.98); box-shadow: 0 0 0 2px var(--accent); } to { transform: none; } }
-html[data-skin="mac"] .resultcard { background: rgba(255, 255, 255, .92); border-radius: 14px; box-shadow: 0 16px 40px rgba(0, 0, 0, .16), 0 0 0 .5px rgba(0, 0, 0, .12); border: 0; }
-html[data-skin="glass"] .resultcard { background: rgba(40, 44, 52, .55); border-radius: 22px; border: 1px solid rgba(255, 255, 255, .16); -webkit-backdrop-filter: blur(40px) saturate(160%); backdrop-filter: blur(40px) saturate(160%); }
+html[data-skin="mac"] .resultcard { background: var(--mac-sheet-a); border-radius: 14px; box-shadow: 0 16px 40px rgba(0, 0, 0, .16), 0 0 0 .5px rgba(0, 0, 0, .12); border: 0; }
+html[data-skin="glass"] .resultcard { background: var(--g-sheet); border-radius: 22px; border: 1px solid var(--line-strong); -webkit-backdrop-filter: blur(40px) saturate(160%); backdrop-filter: blur(40px) saturate(160%); }
 @media (max-width: 900px) { .resultcard { position: fixed; top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 45vh; z-index: 40; } }
 @media (prefers-reduced-motion: reduce) { .resultcard.arrive { animation: none; } }
 .resultcard .kv { grid-template-columns: minmax(0, auto) minmax(0, 1fr); }
@@ -302,19 +302,19 @@ html[data-skin="mac"] {
 }
 html[data-skin="mac"] body { background: var(--bg); }
 html[data-skin="mac"] .studio { grid-template-rows: 52px 42px minmax(0, 1fr) 26px; grid-template-columns: minmax(0, 1fr) var(--rail-w, 400px); }
-html[data-skin="mac"] .topbar { background: rgba(246, 246, 248, .94); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-bottom: 1px solid var(--line); padding-inline: 16px; gap: 10px; }
-html[data-skin="mac"] :is(button:not(.layer, .link, .jump), .filebtn) { background: #fff; color: var(--fg); border: 0; border-radius: 6px; padding: 4px 11px; font-weight: 500; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .2), 0 1px 1px rgba(0, 0, 0, .06); }
-html[data-skin="mac"] :is(button:not(.layer, .link, .jump), .filebtn):hover:not(:disabled) { background: #f5f5f7; }
+html[data-skin="mac"] .topbar { background: var(--mac-bar); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-bottom: 1px solid var(--line); padding-inline: 16px; gap: 10px; }
+html[data-skin="mac"] :is(button:not(.layer, .link, .jump), .filebtn) { background: var(--mac-ctl); color: var(--fg); border: 0; border-radius: 6px; padding: 4px 11px; font-weight: 500; box-shadow: 0 0 0 .5px var(--mac-ring), 0 1px 1px rgba(0, 0, 0, .06); }
+html[data-skin="mac"] :is(button:not(.layer, .link, .jump), .filebtn):hover:not(:disabled) { background: var(--mac-ctl-hover); }
 html[data-skin="mac"] button.primary { background: var(--accent); color: #fff; box-shadow: 0 1px 1px rgba(0, 0, 0, .12); }
-html[data-skin="mac"] button.primary:hover:not(:disabled) { background: #0077ed; }
-html[data-skin="mac"] button[aria-pressed="true"]:not(.layer) { background: rgba(0, 113, 227, .12); color: var(--accent); box-shadow: 0 0 0 .5px rgba(0, 113, 227, .45); }
-html[data-skin="mac"] :is(select, input[type=number], input[type=text]) { background: #fff; border: 1px solid rgba(0, 0, 0, .15); border-radius: 6px; padding: 3px 7px; color: var(--fg); }
-html[data-skin="mac"] :focus-visible { outline: 3px solid rgba(0, 113, 227, .38); outline-offset: 1px; }
+html[data-skin="mac"] button.primary:hover:not(:disabled) { background: var(--mac-accent-hover); }
+html[data-skin="mac"] button[aria-pressed="true"]:not(.layer) { background: var(--mac-tint); color: var(--mac-tint-ink); box-shadow: 0 0 0 .5px var(--mac-tint-ring); }
+html[data-skin="mac"] :is(select, input[type=number], input[type=text]) { background: var(--mac-field); border: 1px solid var(--mac-field-line); border-radius: 6px; padding: 3px 7px; color: var(--fg); }
+html[data-skin="mac"] :focus-visible { outline: 3px solid var(--mac-focus); outline-offset: 1px; }
 html[data-skin="mac"] .strip { background: var(--bg); border-bottom: 0; padding: 0 14px; gap: 0; }
-html[data-skin="mac"] .strip button { height: 26px; padding: 0 13px; border-radius: 0; background: rgba(0, 0, 0, .06); box-shadow: none; color: #3a3a3c; }
+html[data-skin="mac"] .strip button { height: 26px; padding: 0 13px; border-radius: 0; background: var(--mac-seg); box-shadow: none; color: var(--mac-seg-ink); }
 html[data-skin="mac"] .strip button:first-of-type { border-radius: 7px 0 0 7px; }
 html[data-skin="mac"] .strip button:last-of-type { border-radius: 0 7px 7px 0; }
-html[data-skin="mac"] .strip button[aria-pressed="true"] { background: #fff; color: var(--fg); border-radius: 6px; box-shadow: 0 1px 2px rgba(0, 0, 0, .16), 0 0 0 .5px rgba(0, 0, 0, .08); }
+html[data-skin="mac"] .strip button[aria-pressed="true"] { background: var(--mac-seg-on); color: var(--fg); border-radius: 6px; box-shadow: 0 1px 2px rgba(0, 0, 0, .16), 0 0 0 .5px rgba(0, 0, 0, .08); }
 html[data-skin="mac"] .strip .toolhint { margin-left: 14px; }
 html[data-skin="mac"] .center { background: transparent; gap: 12px; padding: 0 12px 12px; }
 html[data-skin="mac"] .pane { border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0, 0, 0, .14), 0 0 0 .5px rgba(0, 0, 0, .25); }
@@ -322,22 +322,22 @@ html[data-skin="mac"] .panehead { background: #0b0b0c; color: rgba(255, 255, 255
 html[data-skin="mac"] .panehead b { color: #fff; }
 html[data-skin="mac"] .panehead .mono { color: rgba(255, 255, 255, .5); }
 html[data-skin="mac"] .slicebar { background: #0b0b0c; accent-color: #8e8e93; }
-html[data-skin="mac"] .startup { align-self: center; max-height: 100%; overflow: auto; background: #fff; border-radius: 16px; padding: 30px 32px; box-shadow: 0 20px 50px rgba(0, 0, 0, .14), 0 0 0 .5px rgba(0, 0, 0, .1); }
-html[data-skin="mac"] .rail { background: rgba(250, 250, 252, .86); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%); border-left: 1px solid var(--line);
+html[data-skin="mac"] .startup { align-self: center; max-height: 100%; overflow: auto; background: var(--mac-sheet); border-radius: 16px; padding: 30px 32px; box-shadow: 0 20px 50px rgba(0, 0, 0, .14), 0 0 0 .5px rgba(0, 0, 0, .1); }
+html[data-skin="mac"] .rail { background: var(--mac-rail); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%); border-left: 1px solid var(--line);
   grid-template-columns: 62px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
 html[data-skin="mac"] .stepbar { grid-column: 1; grid-row: 1 / -1; flex-direction: column; align-items: center; gap: 4px; padding: 12px 0; border-right: 1px solid var(--line); }
 html[data-skin="mac"] .rail .stepbar button { width: 54px; padding: 6px 0 5px; border-radius: 9px; }
-html[data-skin="mac"] .rail .stepbar button:hover { background: rgba(0, 0, 0, .05); }
-html[data-skin="mac"] .rail .stepbar button[aria-current="true"] { background: rgba(0, 113, 227, .12); color: var(--accent); }
+html[data-skin="mac"] .rail .stepbar button:hover { background: var(--mac-hover); }
+html[data-skin="mac"] .rail .stepbar button[aria-current="true"] { background: var(--mac-tint); color: var(--mac-tint-ink); }
 html[data-skin="mac"] .rail .steps { grid-column: 2; grid-row: 1; }
 html[data-skin="mac"] .legend { grid-column: 2; grid-row: 2; background: transparent; border-top: 1px solid var(--line); }
 html[data-skin="mac"] :is(.kv, .rail .sub, .tablewrap) { background: var(--card); box-shadow: var(--card-shadow); }
-html[data-skin="mac"] th { background: #f6f6f8; }
-html[data-skin="mac"] .draftpanel { background: rgba(0, 113, 227, .07); border-bottom: 1px solid var(--line); }
+html[data-skin="mac"] th { background: var(--mac-th); }
+html[data-skin="mac"] .draftpanel { background: var(--mac-tint-soft); border-bottom: 1px solid var(--line); }
 html[data-skin="mac"] .viewtoggle button[aria-pressed="true"] { background: var(--accent); color: #fff; box-shadow: none; }
 html[data-skin="mac"] .statusbar { background: var(--bg-deep); border-top: 1px solid var(--line); }
 html[data-skin="mac"] .dot.live { box-shadow: none; }
-html[data-skin="mac"] .skinmenu { background: rgba(255, 255, 255, .94); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); border: 0; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .15), 0 12px 32px rgba(0, 0, 0, .18); }
+html[data-skin="mac"] .skinmenu { background: var(--mac-sheet-a); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); border: 0; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .15), 0 12px 32px rgba(0, 0, 0, .18); }
 
 /* ===== Glass: frosted panels floating on a blurred copy of the scan ===== */
 html[data-skin="glass"] {
@@ -351,7 +351,7 @@ html[data-skin="glass"] {
   --glass: rgba(255, 255, 255, .085); --glass-blur: blur(40px) saturate(180%);
   --glass-edge: inset 0 1px 0 rgba(255, 255, 255, .26), inset 0 0 0 1px rgba(255, 255, 255, .09), 0 22px 54px rgba(0, 0, 0, .38);
 }
-html[data-skin="glass"] body { background: radial-gradient(900px 700px at 30% 20%, #27303e, transparent 62%), radial-gradient(900px 700px at 80% 92%, #1b2830, transparent 60%), var(--bg); color: var(--fg); }
+html[data-skin="glass"] body { background: radial-gradient(900px 700px at 30% 20%, var(--g-glow-a), transparent 62%), radial-gradient(900px 700px at 80% 92%, var(--g-glow-b), transparent 60%), var(--bg); color: var(--fg); }
 html[data-skin="glass"] .skinbackdrop { display: block; position: fixed; left: -8%; top: -8%; width: 116%; height: 116%; z-index: 0; pointer-events: none; filter: blur(46px) saturate(1.5) brightness(.72); opacity: .95; }
 html[data-skin="glass"] .studio { display: block; position: relative; z-index: 1; height: 100%; }
 html[data-skin="glass"] :is(.topbar, .strip, .rail, .statusbar, .skinmenu) { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 0; box-shadow: var(--glass-edge); }
@@ -365,32 +365,33 @@ html[data-skin="glass"] .center { position: absolute; top: calc(var(--topbar-h, 
 html[data-skin="glass"] .pane { border-radius: 22px; overflow: hidden; box-shadow: 0 26px 70px rgba(0, 0, 0, .55), 0 0 0 1px rgba(255, 255, 255, .08); }
 html[data-skin="glass"] .panehead { background: rgba(0, 0, 0, .5); color: #fff; padding: 0 12px; }
 html[data-skin="glass"] .panehead .mono { color: rgba(255, 255, 255, .55); }
+html[data-skin="glass"] .panehead b { color: #fff; } /* the view headers sit on image chrome, dark in both modes */
 html[data-skin="glass"] .slicebar { background: rgba(0, 0, 0, .55); accent-color: #fff; }
 html[data-skin="glass"] .rail { position: absolute; top: 16px; right: 16px; bottom: 16px; width: var(--rail-w, 380px); border-radius: 30px; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
 html[data-skin="glass"] .stepbar { grid-row: 1; justify-content: space-between; gap: 2px; padding: 10px 10px; border-bottom: 1px solid var(--line); }
-html[data-skin="glass"] .rail .stepbar button { flex: 1 1 0; min-width: 0; padding: 5px 0 4px; border-radius: 12px; color: rgba(255, 255, 255, .7); }
-html[data-skin="glass"] .rail .stepbar button:hover { background: rgba(255, 255, 255, .1); }
-html[data-skin="glass"] .rail .stepbar button[aria-current="true"] { background: rgba(255, 255, 255, .24); color: #fff; }
+html[data-skin="glass"] .rail .stepbar button { flex: 1 1 0; min-width: 0; padding: 5px 0 4px; border-radius: 12px; color: var(--g-ink-soft); }
+html[data-skin="glass"] .rail .stepbar button:hover { background: var(--g-hover); }
+html[data-skin="glass"] .rail .stepbar button[aria-current="true"] { background: var(--g-current); color: var(--fg-strong); }
 html[data-skin="glass"] .rail .steps { grid-row: 2; }
 html[data-skin="glass"] .legend { grid-row: 3; background: transparent; border-top: 1px solid var(--line); }
 html[data-skin="glass"] .statusbar { position: absolute; left: 104px; right: calc(var(--rail-w, 380px) + 32px); bottom: 16px; height: 36px; border-radius: 18px; padding: 0 16px; }
-html[data-skin="glass"] :is(button:not(.layer, .link, .jump), .filebtn) { background: rgba(255, 255, 255, .14); color: #fff; border: 0; border-radius: 999px; padding: 6px 14px; font-weight: 500; box-shadow: none; }
-html[data-skin="glass"] :is(button:not(.layer, .link, .jump), .filebtn):hover:not(:disabled) { background: rgba(255, 255, 255, .22); }
-html[data-skin="glass"] button.primary { background: rgba(255, 255, 255, .94); color: #000; font-weight: 600; }
-html[data-skin="glass"] button.primary:hover:not(:disabled) { background: #fff; }
-html[data-skin="glass"] button[aria-pressed="true"]:not(.layer) { background: rgba(255, 255, 255, .3); color: #fff; }
-html[data-skin="glass"] :is(select, input[type=number], input[type=text]) { background: rgba(0, 0, 0, .28); border: 1px solid rgba(255, 255, 255, .14); border-radius: 9px; padding: 4px 8px; color: #fff; }
-html[data-skin="glass"] :focus-visible { outline: 2px solid rgba(255, 255, 255, .7); outline-offset: 2px; }
+html[data-skin="glass"] :is(button:not(.layer, .link, .jump), .filebtn) { background: var(--g-fill); color: var(--fg-strong); border: 0; border-radius: 999px; padding: 6px 14px; font-weight: 500; box-shadow: none; }
+html[data-skin="glass"] :is(button:not(.layer, .link, .jump), .filebtn):hover:not(:disabled) { background: var(--g-fill-hover); }
+html[data-skin="glass"] button.primary { background: var(--g-primary); color: var(--g-primary-ink); font-weight: 600; }
+html[data-skin="glass"] button.primary:hover:not(:disabled) { background: var(--g-primary-hover); }
+html[data-skin="glass"] button[aria-pressed="true"]:not(.layer) { background: var(--g-pressed); color: var(--fg-strong); }
+html[data-skin="glass"] :is(select, input[type=number], input[type=text]) { background: var(--g-field); border: 1px solid var(--g-field-line); border-radius: 9px; padding: 4px 8px; color: var(--fg-strong); }
+html[data-skin="glass"] :focus-visible { outline: 2px solid var(--g-focus); outline-offset: 2px; }
 html[data-skin="glass"] :is(.kv, .rail .sub, .tablewrap) { background: var(--card); }
-html[data-skin="glass"] .kv .v { color: #fff; }
-html[data-skin="glass"] .setting .v { color: #fff; }
-html[data-skin="glass"] th { background: rgba(24, 27, 33, .82); color: var(--muted); }
-html[data-skin="glass"] .draftpanel { background: rgba(255, 255, 255, .08); border-bottom: 1px solid var(--line); }
-html[data-skin="glass"] .notice { background: rgba(255, 214, 10, .14); color: #ffd60a; }
-html[data-skin="glass"] .viewtoggle button[aria-pressed="true"] { background: rgba(255, 255, 255, .92); color: #000; }
-html[data-skin="glass"] .startup { align-self: center; justify-self: center; max-height: 100%; overflow: auto; background: rgba(255, 255, 255, .09); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+html[data-skin="glass"] .kv .v { color: var(--fg-strong); }
+html[data-skin="glass"] .setting .v { color: var(--fg-strong); }
+html[data-skin="glass"] th { background: var(--g-th); color: var(--muted); }
+html[data-skin="glass"] .draftpanel { background: var(--g-hover); border-bottom: 1px solid var(--line); }
+html[data-skin="glass"] .notice { background: var(--g-notice); color: var(--g-notice-ink); }
+html[data-skin="glass"] .viewtoggle button[aria-pressed="true"] { background: var(--g-primary); color: var(--g-primary-ink); }
+html[data-skin="glass"] .startup { align-self: center; justify-self: center; max-height: 100%; overflow: auto; background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
   border-radius: 30px; padding: 32px 34px; box-shadow: var(--glass-edge); }
-html[data-skin="glass"] .skinmenu { background: rgba(40, 44, 52, .6); border-radius: 18px; }
+html[data-skin="glass"] .skinmenu { background: var(--g-sheet); border-radius: 18px; }
 html[data-skin="glass"] .studio .topbar .skinmenu button { border-radius: 12px; }
 html[data-skin="glass"] .dot.live { box-shadow: 0 0 8px rgba(48, 209, 88, .7); }
 
@@ -462,9 +463,68 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
   html[data-skin="lab"] .rail { display: grid; grid-template-columns: minmax(0, 1fr); }
   html[data-skin="lab"] .stepbar, html[data-skin="lab"] .rail .steps, html[data-skin="lab"] .legend { grid-column: 1; grid-row: auto; }
 }
+
+/* ===== Light and dark (Appearance > Mode; data-mode is set before the page renders). Image areas stay black. ===== */
+.modechoice { display: flex; gap: 4px; padding: 0 6px 6px; }
+@media (max-width: 900px) { .skinmenu { position: fixed; top: 8px; left: 8px; right: 8px; width: auto; max-height: calc(100vh - 16px); overflow-y: auto; } } /* on a phone the button is not at the right edge */
+html .studio .topbar .skinmenu .modechoice button { flex: 1 1 0; padding: 6px 0; text-align: center; justify-items: center; border: 1px solid var(--line); }
+html .studio .topbar .skinmenu .modechoice button[aria-checked="true"] { border-color: var(--accent); color: var(--accent); }
+html .studio .topbar .skinmenu .modechoice button[aria-checked="true"]::before { content: none; }
+
+html[data-skin="lab"][data-mode="light"] {
+  color-scheme: light;
+  --bg: #f3f0e9; --bg-deep: #e9e4d9; --panel: #fbf9f4; --line: #ddd5c6; --line-strong: #cbc1ae; --line-control: #a89d88;
+  --fg: #2b271f; --fg-strong: #0f0d09; --muted: #6e6655; --accent: #b0660a; --accent-ink: #fff;
+  --live: #1f9d4c; --warn-bg: rgba(176, 102, 10, .10); --err: #c0281d; --err-bg: rgba(192, 40, 29, .10);
+  --plane-xy: #b0660a; --plane-xz: #1c78bb; --plane-yz: #b8358f; --scrim: rgba(243, 240, 233, .88);
+}
+
+html[data-skin="mac"] {
+  --mac-bar: rgba(246, 246, 248, .94); --mac-rail: rgba(250, 250, 252, .86); --mac-sheet: #fff; --mac-sheet-a: rgba(255, 255, 255, .94);
+  --mac-ctl: #fff; --mac-ctl-hover: #f5f5f7; --mac-ring: rgba(0, 0, 0, .2); --mac-accent-hover: #0077ed;
+  --mac-tint: rgba(0, 113, 227, .12); --mac-tint-ring: rgba(0, 113, 227, .45); --mac-tint-soft: rgba(0, 113, 227, .07); --mac-focus: rgba(0, 113, 227, .38);
+  --mac-field: #fff; --mac-field-line: rgba(0, 0, 0, .15); --mac-seg: rgba(0, 0, 0, .06); --mac-seg-ink: #3a3a3c; --mac-seg-on: #fff;
+  --mac-hover: rgba(0, 0, 0, .05); --mac-th: #f6f6f8; --mac-tint-ink: var(--accent);
+}
+html[data-skin="mac"][data-mode="dark"] {
+  color-scheme: dark;
+  --bg: #1c1c1e; --bg-deep: #161618; --panel: #242426; --card: #2c2c2e; --card-shadow: 0 0 0 .5px rgba(255, 255, 255, .08), 0 1px 2px rgba(0, 0, 0, .4);
+  --line: rgba(255, 255, 255, .09); --line-strong: rgba(255, 255, 255, .15); --line-control: rgba(255, 255, 255, .18);
+  --fg: #f2f2f7; --fg-strong: #fff; --muted: #98989f; --accent: #0a84ff; --accent-ink: #fff; --live: #32d74b;
+  --warn-bg: rgba(10, 132, 255, .16); --err: #ff453a; --err-bg: rgba(255, 69, 58, .16);
+  --mac-bar: rgba(40, 40, 43, .92); --mac-rail: rgba(30, 30, 32, .9); --mac-sheet: #2c2c2e; --mac-sheet-a: rgba(44, 44, 47, .95);
+  --mac-ctl: #3a3a3d; --mac-ctl-hover: #47474b; --mac-ring: rgba(255, 255, 255, .1); --mac-accent-hover: #2a94ff;
+  --mac-tint: rgba(10, 132, 255, .22); --mac-tint-ring: rgba(10, 132, 255, .55); --mac-tint-soft: rgba(10, 132, 255, .12); --mac-focus: rgba(10, 132, 255, .5);
+  --mac-field: #1c1c1e; --mac-field-line: rgba(255, 255, 255, .14); --mac-seg: rgba(255, 255, 255, .08); --mac-seg-ink: #d1d1d6; --mac-seg-on: #5b5b60;
+  --mac-hover: rgba(255, 255, 255, .07); --mac-th: #2c2c2e; --mac-tint-ink: #6cb4ff;
+}
+
+html[data-skin="glass"] {
+  --g-ink-soft: rgba(255, 255, 255, .7); --g-hover: rgba(255, 255, 255, .1); --g-current: rgba(255, 255, 255, .24);
+  --g-fill: rgba(255, 255, 255, .14); --g-fill-hover: rgba(255, 255, 255, .22); --g-pressed: rgba(255, 255, 255, .3);
+  --g-primary: rgba(255, 255, 255, .94); --g-primary-ink: #000; --g-primary-hover: #fff;
+  --g-field: rgba(0, 0, 0, .28); --g-field-line: rgba(255, 255, 255, .14); --g-focus: rgba(255, 255, 255, .7);
+  --g-th: rgba(24, 27, 33, .82); --g-sheet: rgba(40, 44, 52, .6); --g-notice: rgba(255, 214, 10, .14); --g-notice-ink: #ffd60a;
+  --g-glow-a: #27303e; --g-glow-b: #1b2830;
+}
+html[data-skin="glass"][data-mode="light"] {
+  color-scheme: light;
+  --bg: #eef1f5; --bg-deep: rgba(0, 0, 0, .04); --panel: rgba(255, 255, 255, .6); --card: rgba(255, 255, 255, .72);
+  --line: rgba(0, 0, 0, .08); --line-strong: rgba(0, 0, 0, .14); --line-control: rgba(0, 0, 0, .18);
+  --fg: rgba(0, 0, 0, .84); --fg-strong: #000; --muted: rgba(0, 0, 0, .54); --accent: #1d1d1f; --accent-ink: #fff; --live: #28cd41;
+  --warn-bg: rgba(0, 0, 0, .06); --err: #d70015; --err-bg: rgba(255, 59, 48, .12); --scrim: rgba(255, 255, 255, .6);
+  --glass: rgba(255, 255, 255, .55); --glass-edge: inset 0 1px 0 rgba(255, 255, 255, .9), inset 0 0 0 1px rgba(0, 0, 0, .06), 0 22px 54px rgba(31, 38, 50, .14);
+  --g-ink-soft: rgba(0, 0, 0, .6); --g-hover: rgba(0, 0, 0, .05); --g-current: rgba(0, 0, 0, .1);
+  --g-fill: rgba(0, 0, 0, .06); --g-fill-hover: rgba(0, 0, 0, .1); --g-pressed: rgba(0, 0, 0, .14);
+  --g-primary: #1d1d1f; --g-primary-ink: #fff; --g-primary-hover: #000;
+  --g-field: rgba(255, 255, 255, .7); --g-field-line: rgba(0, 0, 0, .14); --g-focus: rgba(0, 0, 0, .5);
+  --g-th: rgba(244, 246, 249, .92); --g-sheet: rgba(255, 255, 255, .78); --g-notice: rgba(255, 204, 0, .2); --g-notice-ink: #7a5d00;
+  --g-glow-a: #dce4f0; --g-glow-b: #e6eef0;
+}
+html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) saturate(1.2) brightness(1.6); opacity: .35; }
 </style>
 <script src="vb_skin.js"></script>
-<script>VBSkin.boot({ doc: document, storage: (() => { try { return window.localStorage; } catch (e) { return null; } })(), url: location.search });</script>
+<script>VBSkin.boot({ doc: document, storage: (() => { try { return window.localStorage; } catch (e) { return null; } })(), url: location.search }); VBSkin.bootMode({ doc: document, storage: (() => { try { return window.localStorage; } catch (e) { return null; } })(), win: window });</script>
 
 <div class="studio">
   <header class="topbar">
@@ -476,7 +536,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
     <button id="tourStart" title="Step-by-step walkthrough of the eight steps on generated test scans">Guided tour</button>
     <button id="saveProject" hidden title="Save regions, annotations and runs to a file kept next to the scan">Save project</button>
     <span class="mono muted projectnote" id="projectNote" role="status"></span>
-    <span class="skinwrap"><button id="skinButton" type="button" title="Appearance: Lab, Mac or Glass"><svg class="skinicon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.3"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M3.4 12.6l1.3-1.3M11.3 4.7l1.3-1.3"/></svg><span>Appearance</span></button><div class="skinmenu" id="skinMenu" role="menu" hidden></div></span>
+    <span class="skinwrap"><button id="skinButton" type="button" title="Appearance: Lab, Mac or Glass; light or dark"><svg class="skinicon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.3"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M3.4 12.6l1.3-1.3M11.3 4.7l1.3-1.3"/></svg><span>Appearance</span></button><div class="skinmenu" id="skinMenu" role="menu" hidden></div></span>
     <span class="conn mono" role="status"><span class="dot" id="dbDot"></span><span id="saveState"></span></span>
   </header>
 
@@ -842,6 +902,8 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
   VBSkin.wireSettings({ doc: document, storage, button: document.getElementById('skinButton'), menu: document.getElementById('skinMenu') });
   VBSkin.wireStepBar({ doc: document, rail: document.getElementById('rail') });
   VBSkin.wireRailResize({ doc: document, storage: (() => { try { return window.localStorage; } catch (e) { return null; } })(), rail: document.getElementById('rail'), win: window });
+  // Charts take their colors when drawn: redraw them when the look or the mode changes.
+  document.addEventListener('vbskin', () => { for (const e of ['cadChanged', 'fillerChanged', 'wallChanged']) CTApp.emit(e); });
   VBSkin.wireTopbarHeight({ doc: document, bar: document.querySelector('.topbar'), win: window });
   VBSkin.wireBackdrop({ doc: document, source: () => document.querySelector('#paneXY .canvasbox canvas') });
 })();

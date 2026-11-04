@@ -82,3 +82,27 @@ test('the rail width stays between 320 px and 60 % of the window', () => {
   assert.equal(K.clampRailWidth(400, 500), 320); // a narrow window never squeezes below the minimum
   assert.equal(K.clampRailWidth(NaN, 1440), null);
 });
+
+test('the mode is system, light or dark; system by default and for anything unknown', () => {
+  assert.deepEqual(K.MODES, ['system', 'light', 'dark']);
+  assert.equal(K.pickMode(null), 'system');
+  assert.equal(K.pickMode('dark'), 'dark');
+  assert.equal(K.pickMode('sepia'), 'system');
+});
+
+test('system follows the computer; light and dark override it', () => {
+  assert.equal(K.resolveMode('system', true), 'dark');
+  assert.equal(K.resolveMode('system', false), 'light');
+  assert.equal(K.resolveMode('light', true), 'light');
+  assert.equal(K.resolveMode('dark', false), 'dark');
+});
+
+test('bootMode sets data-mode from storage and the system, even when storage throws', () => {
+  const attrs = {};
+  const doc = { documentElement: { setAttribute: (k, v) => { attrs[k] = v; } } };
+  const win = { matchMedia: () => ({ matches: true, addEventListener() {} }) };
+  assert.equal(K.bootMode({ doc, storage: { getItem: () => 'light' }, win }), 'light');
+  assert.equal(attrs['data-mode'], 'light');
+  assert.equal(K.bootMode({ doc, storage: { getItem: () => { throw new Error('blocked'); } }, win }), 'dark');
+  assert.equal(attrs['data-mode'], 'dark');
+});

@@ -29,11 +29,17 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
 - Lab workflow: measured lengths checked against a nominal and tolerance band; a before/after table of two scans'
   saved runs; batch runs over every scan in a folder with one summary CSV; view bookmarks; named setting presets.
 - Exports: pore, region, zone, CAD-deviation, filler, wall and batch tables (CSV), a slice image (PNG) and a review sheet (PDF).
-- Three looks under Appearance in the top bar: Lab (the original dark instrument look, default), Mac (a light Mac-style
-  inspector, one step at a time) and Glass (frosted panels floating on a blurred copy of the scan). `?skin=mac` or
+- Three looks under Appearance in the top bar: Lab (the original instrument look, default), Mac (a Mac-style
+  inspector) and Glass (frosted panels floating on a blurred copy of the scan), each light or dark (Mode: System
+  follows the computer). `?skin=mac` or
   `?skin=glass` in the address also picks one; the choice is remembered in this browser. In every look a step bar
   shows one step at a time, with a green dot on each step that has a result and a Next line at the end of a finished
   step; drag the panel's left edge to widen it for wide tables (double-click to reset).
+- "What this shows" in every step: the step's result read in words (one dominant void or spread porosity, voids
+  gathering near the surface, a zone's porosity against the baseline, over- or undersize against CAD, clustered
+  filler, aligned fibers, walls at the resolution limit) with what to check next.
+- Dragonfly 3D cross-check in the page (step 4): download the kit, load Dragonfly's pore mask, read Dice and the
+  causes of any difference; see docs/DRAGONFLY_CROSSCHECK.md.
 - A result card for every mark: save a region, outline, point or measurement (or click a saved one on the image) and
   a card over the view shows what it measured, compared with the whole part (porosity, solid gray, density), what to
   run for a missing number, and, for a measurement with a nominal, pass or fail.

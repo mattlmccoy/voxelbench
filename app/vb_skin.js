@@ -1,6 +1,6 @@
-/* The page's look, chosen under Appearance in the top bar:
-   - lab: the original dark instrument look (default);
-   - mac: a light Mac inspector (system font, grouped lists, one step at a time);
+/* The page's look, chosen under Appearance in the top bar, each in light or dark (Mode: system, light or dark):
+   - lab: the original instrument look (default);
+   - mac: a Mac inspector (system font, grouped lists);
    - glass: frosted panels floating on a blurred copy of the scan.
    Chosen by ?skin= in the address, else the viewer's last choice, else lab. The choice is a per-viewer convenience in
    localStorage; when storage is blocked the page still works, it just forgets. Every look shows the rail one section at a
@@ -13,7 +13,7 @@
 
   const SKINS = ['lab', 'mac', 'glass'], KEY = 'voxelbench.skin';
   const SKIN_LABELS = { lab: 'Lab', mac: 'Mac', glass: 'Glass' };
-  const SKIN_NOTES = { lab: 'The original dark instrument look', mac: 'Light, like a Mac app; one step at a time', glass: 'Frosted panels floating on the scan' };
+  const SKIN_NOTES = { lab: 'The original instrument look, amber on gray', mac: 'Like a Mac app: system font, grouped lists', glass: 'Frosted panels floating on the scan' };
   const valid = (s) => (SKINS.includes(s) ? s : null);
 
   function pickSkin({ url, stored }) {
@@ -81,6 +81,22 @@
   function write(storage, skin) { try { if (storage) storage.setItem(KEY, skin); } catch (e) { /* forgets the choice */ } }
   function apply(doc, skin) { doc.documentElement.setAttribute('data-skin', skin); return skin; }
 
+  // Light or dark: system follows the computer (prefers-color-scheme); kept per viewer like the look.
+  const MODES = ['system', 'light', 'dark'], MODE_KEY = 'voxelbench.mode';
+  const MODE_LABELS = { system: 'System', light: 'Light', dark: 'Dark' };
+  const pickMode = (stored) => (MODES.includes(stored) ? stored : 'system');
+  const resolveMode = (mode, systemDark) => (mode === 'system' ? (systemDark ? 'dark' : 'light') : mode);
+  const readMode = (storage) => { try { return storage ? storage.getItem(MODE_KEY) : null; } catch (e) { return null; } };
+  const systemDark = (win) => Boolean(win && win.matchMedia && win.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  /** Sets data-mode (light or dark) before the body renders, and follows the computer while the choice is system. */
+  function bootMode({ doc, storage, win }) {
+    const apply = () => { const m = resolveMode(pickMode(readMode(storage)), systemDark(win)); doc.documentElement.setAttribute('data-mode', m); return m; };
+    const query = win && win.matchMedia && win.matchMedia('(prefers-color-scheme: dark)');
+    if (query && query.addEventListener) query.addEventListener('change', () => { if (pickMode(readMode(storage)) === 'system') { apply(); if (doc.dispatchEvent) doc.dispatchEvent(new CustomEvent('vbskin', { detail: 'mode' })); } });
+    return apply();
+  }
+
   /** Sets the look before the page body renders, so the page never flashes another look. */
   function boot({ doc, storage, url }) { return apply(doc, pickSkin({ url, stored: read(storage) })); }
 
@@ -88,13 +104,25 @@
   const current = (doc) => doc.documentElement.getAttribute('data-skin') || 'lab';
 
   /** The Appearance menu: one choice per look. Emits 'vbskin' on the document when the look changes. */
-  function wireSettings({ doc, storage, button, menu }) {
-    menu.innerHTML = `<p class="skinmenuhead">Appearance</p>${SKINS.map((s) => `<button type="button" role="menuitemradio" data-skin="${s}"><span class="skintitle">${SKIN_LABELS[s]}</span><span class="skinnote">${SKIN_NOTES[s]}</span></button>`).join('')}`;
-    const show = () => { for (const b of menu.querySelectorAll('[data-skin]')) b.setAttribute('aria-checked', String(b.dataset.skin === current(doc))); };
+  function wireSettings({ doc, storage, button, menu, win = typeof window !== 'undefined' ? window : null }) {
+    menu.innerHTML = `<p class="skinmenuhead">Appearance</p>${SKINS.map((s) => `<button type="button" role="menuitemradio" data-skin="${s}"><span class="skintitle">${SKIN_LABELS[s]}</span><span class="skinnote">${SKIN_NOTES[s]}</span></button>`).join('')}`
+      + `<p class="skinmenuhead">Mode</p><div class="modechoice" role="group" aria-label="Light or dark">${MODES.map((m) => `<button type="button" role="menuitemradio" data-mode="${m}">${MODE_LABELS[m]}</button>`).join('')}</div>`;
+    const show = () => {
+      for (const b of menu.querySelectorAll('[data-skin]')) b.setAttribute('aria-checked', String(b.dataset.skin === current(doc)));
+      for (const b of menu.querySelectorAll('[data-mode]')) b.setAttribute('aria-checked', String(b.dataset.mode === pickMode(readMode(storage))));
+    };
     const close = () => { menu.hidden = true; button.setAttribute('aria-expanded', 'false'); };
     button.setAttribute('aria-haspopup', 'menu'); button.setAttribute('aria-expanded', 'false');
     button.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; button.setAttribute('aria-expanded', String(!menu.hidden)); show(); });
     menu.addEventListener('click', (e) => {
+      const m = e.target.closest('[data-mode]');
+      if (m) {
+        try { if (storage) storage.setItem(MODE_KEY, m.dataset.mode); } catch (err) { /* forgets the choice */ }
+        doc.documentElement.setAttribute('data-mode', resolveMode(m.dataset.mode, systemDark(win)));
+        show();
+        doc.dispatchEvent(new CustomEvent('vbskin', { detail: 'mode' }));
+        return;
+      }
       const b = e.target.closest('[data-skin]');
       if (!b) return;
       write(storage, apply(doc, b.dataset.skin));
@@ -216,5 +244,5 @@
     new win.ResizeObserver(() => { doc.documentElement.style.setProperty('--topbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`); }).observe(bar);
   }
 
-  return { SKINS, SKIN_LABELS, wireTopbarHeight, pickSkin, navItems, stepDone, nextFor, clampRailWidth, openOnly, boot, wireSettings, wireStepBar, wireRailResize, wireBackdrop };
+  return { SKINS, SKIN_LABELS, MODES, pickMode, resolveMode, bootMode, wireTopbarHeight, pickSkin, navItems, stepDone, nextFor, clampRailWidth, openOnly, boot, wireSettings, wireStepBar, wireRailResize, wireBackdrop };
 }));
