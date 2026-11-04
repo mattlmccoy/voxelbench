@@ -212,7 +212,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 .resultcard .rchead b { display: block; font-size: 13px; }
 .resultcard .rcsub { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
 .resultcard #rcClose { font-size: 18px; line-height: 1; padding: 0 2px; }
-.resultcard .rcinsights { margin: 0; padding-left: 16px; display: grid; gap: 4px; font-size: 12px; line-height: 1.4; }
+#dfPanel .rcinsights, .resultcard .rcinsights { margin: 0; padding-left: 16px; display: grid; gap: 4px; font-size: 12px; line-height: 1.4; }
 .resultcard.arrive { animation: rcarrive .35s ease-out; }
 @keyframes rcarrive { from { transform: translateY(-6px) scale(.98); box-shadow: 0 0 0 2px var(--accent); } to { transform: none; } }
 html[data-skin="mac"] .resultcard { background: rgba(255, 255, 255, .92); border-radius: 14px; box-shadow: 0 16px 40px rgba(0, 0, 0, .16), 0 0 0 .5px rgba(0, 0, 0, .12); border: 0; }
@@ -350,11 +350,13 @@ html[data-skin="glass"] body { background: radial-gradient(900px 700px at 30% 20
 html[data-skin="glass"] .skinbackdrop { display: block; position: fixed; left: -8%; top: -8%; width: 116%; height: 116%; z-index: 0; pointer-events: none; filter: blur(46px) saturate(1.5) brightness(.72); opacity: .95; }
 html[data-skin="glass"] .studio { display: block; position: relative; z-index: 1; height: 100%; }
 html[data-skin="glass"] :is(.topbar, .strip, .rail, .statusbar, .skinmenu) { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 0; box-shadow: var(--glass-edge); }
-html[data-skin="glass"] .topbar { position: absolute; z-index: 20; top: 16px; left: 16px; right: calc(var(--rail-w, 380px) + 32px); height: 52px; border-radius: 26px; padding: 0 12px 0 16px; gap: 10px; }
-html[data-skin="glass"] .strip { position: absolute; top: 84px; left: 16px; width: 72px; height: auto; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; border-radius: 24px; }
+html[data-skin="glass"] .topbar { position: absolute; z-index: 20; top: 16px; left: 16px; right: calc(var(--rail-w, 380px) + 32px); height: auto; min-height: 52px; flex-wrap: wrap; row-gap: 6px; border-radius: 26px; padding: 6px 12px 6px 16px; gap: 10px; }
+/* The floating top bar wraps when short of room; --topbar-h (measured by vb_skin.js) moves the palette and views below it. */
+html[data-skin="glass"] .topbar .crumb { flex: 1 1 0; min-width: 9ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* the title gives way before anything wraps */
+html[data-skin="glass"] .strip { position: absolute; top: calc(var(--topbar-h, 52px) + 32px); left: 16px; width: 72px; height: auto; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; border-radius: 24px; }
 html[data-skin="glass"] .strip button { height: 40px; padding: 0; border-radius: 16px; font-size: 11.5px; }
 html[data-skin="glass"] .strip .toolhint { display: none; }
-html[data-skin="glass"] .center { position: absolute; top: 84px; left: 104px; right: calc(var(--rail-w, 380px) + 32px); bottom: 66px; background: transparent; gap: 14px; grid-template-rows: minmax(0, 1fr) 132px; }
+html[data-skin="glass"] .center { position: absolute; top: calc(var(--topbar-h, 52px) + 32px); left: 104px; right: calc(var(--rail-w, 380px) + 32px); bottom: 66px; background: transparent; gap: 14px; grid-template-rows: minmax(0, 1fr) 132px; }
 html[data-skin="glass"] .pane { border-radius: 22px; overflow: hidden; box-shadow: 0 26px 70px rgba(0, 0, 0, .55), 0 0 0 1px rgba(255, 255, 255, .08); }
 html[data-skin="glass"] .panehead { background: rgba(0, 0, 0, .5); color: #fff; padding: 0 12px; }
 html[data-skin="glass"] .panehead .mono { color: rgba(255, 255, 255, .55); }
@@ -621,6 +623,20 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
           <p class="hint" id="logEmpty">No annotations for this sample. Use Point, Measure or Outline in the toolbar.</p>
           <div class="row"><input type="text" id="bookmarkName" placeholder="view name" style="width:120px" autocomplete="off"><button id="bookmarkSave" disabled>Bookmark this view</button></div>
           <ul class="log" id="bookmarkList"></ul>
+          <details class="sub" id="dfPanel">
+            <summary>Cross-check with Dragonfly 3D</summary>
+            <div>
+              <p class="hint">Checks VoxelBench's pores against Dragonfly's on the same scan. 1: segment pores, then download the kit (the counting region and VoxelBench's pores as TIFF slices, and kit.json with the settings). 2: in Dragonfly, follow docs/DRAGONFLY_CROSSCHECK.md and export its pore mask as an uncompressed TIFF. 3: load that mask here (one multi-page file, or select every slice file).</p>
+              <div class="row"><button id="dfKit" disabled>Download kit (zip)</button><button id="dfLoad" disabled>Load Dragonfly mask</button><input type="file" id="dfFile" accept=".tif,.tiff" multiple hidden></div>
+              <p class="mono muted" id="dfStatus"></p>
+              <div id="dfResult" hidden>
+                <div class="kv mono" id="dfRows"></div>
+                <ul class="rcinsights" id="dfInsights"></ul>
+                <div class="tablewrap" id="dfLargestWrap" hidden><table id="dfLargest"></table></div>
+                <div class="row"><button id="dfSave">Save comparison (JSON)</button></div>
+              </div>
+            </div>
+          </details>
           <div class="row"><label>Compare with <select id="compareWith"><option value="">another scan's saved run…</option></select></label></div>
           <p class="mono" id="compareNote"></p>
           <div class="tablewrap" id="compareWrap" hidden><table id="compareTable"></table></div>
@@ -773,6 +789,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
 <script src="vb_store.js"></script>
 <script src="vb_volume.js"></script>
 <script src="vb_calibration.js"></script>
+<script src="vb_masks.js"></script>
 <script src="vb_feedback.js"></script>
 <script src="ct_display.js"></script>
 <script src="ct_pores.js"></script>
@@ -793,6 +810,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
 <script src="ct_rail.js"></script>
 <script src="vb_calrail.js"></script>
 <script src="vb_cardrail.js"></script>
+<script src="vb_dragonfly.js"></script>
 <script src="vb_cadrail.js"></script>
 <script src="vb_cad3d.js"></script>
 <script src="vb_fillerrail.js"></script>
@@ -812,6 +830,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
   VBSkin.wireSettings({ doc: document, storage, button: document.getElementById('skinButton'), menu: document.getElementById('skinMenu') });
   VBSkin.wireStepBar({ doc: document, rail: document.getElementById('rail') });
   VBSkin.wireRailResize({ doc: document, storage: (() => { try { return window.localStorage; } catch (e) { return null; } })(), rail: document.getElementById('rail'), win: window });
+  VBSkin.wireTopbarHeight({ doc: document, bar: document.querySelector('.topbar'), win: window });
   VBSkin.wireBackdrop({ doc: document, source: () => document.querySelector('#paneXY .canvasbox canvas') });
 })();
 CTApp.start();</script>

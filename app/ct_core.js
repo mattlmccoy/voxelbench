@@ -155,7 +155,7 @@
   }
 
   // The step each worker request belongs to, so an error releases that step only.
-  const REQUEST_STEP = { cad: 'cad', filler: 'filler', wall: 'wall', zones: 'zones', sheet: 'sheet', volume: 'pores', model: 'pores', detect: 'pores', slice: 'pores', slicesDone: 'pores', voidMeshes: 'pores' };
+  const REQUEST_STEP = { cad: 'cad', filler: 'filler', wall: 'wall', zones: 'zones', sheet: 'sheet', volume: 'pores', model: 'pores', detect: 'pores', slice: 'pores', slicesDone: 'pores', voidMeshes: 'pores', regionRuns: 'crosscheck', crosscheck: 'crosscheck' };
   /** The step a failed worker request belongs to; null when unknown (then every waiting step is released). */
   const errorStep = (requestType) => REQUEST_STEP[requestType] || null;
 

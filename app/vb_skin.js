@@ -209,5 +209,12 @@
     }, 500);
   }
 
-  return { SKINS, SKIN_LABELS, pickSkin, navItems, stepDone, nextFor, clampRailWidth, openOnly, boot, wireSettings, wireStepBar, wireRailResize, wireBackdrop };
+  /** Keeps --topbar-h equal to the top bar's height, so a look whose bar floats and wraps (glass) can place what sits
+      below it; a no-op where ResizeObserver is missing. */
+  function wireTopbarHeight({ doc, bar, win }) {
+    if (!win.ResizeObserver) return;
+    new win.ResizeObserver(() => { doc.documentElement.style.setProperty('--topbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`); }).observe(bar);
+  }
+
+  return { SKINS, SKIN_LABELS, wireTopbarHeight, pickSkin, navItems, stepDone, nextFor, clampRailWidth, openOnly, boot, wireSettings, wireStepBar, wireRailResize, wireBackdrop };
 }));

@@ -1,11 +1,12 @@
 /* Runs pore detection off the page's main thread. The main thread sends the binned volume once, and sends full-
    resolution slices only when the smoothing changes; smoothed slices are kept here so threshold reruns are quick. */
-importScripts('ct_core.js', 'ct_pores.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js', 'vb_connectivity.js', 'vb_align.js', 'vb_deviation.js', 'vb_cad.js', 'vb_filler.js', 'vb_wall.js');
+importScripts('ct_core.js', 'ct_pores.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js', 'vb_connectivity.js', 'vb_align.js', 'vb_deviation.js', 'vb_cad.js', 'vb_filler.js', 'vb_wall.js', 'vb_masks.js');
 const P = self.CTPores, R = self.CTRegions, Z = self.CTZones, D = self.CTSheetData;
 const MODEL_DOWNSAMPLE = 2;
 const COARSE_STEP = 2; // binned voxels per coarse cell: 4 full voxels, about 0.16 mm at 40 um
 const MESH_FACTOR = 2; // full voxels per cell of the 3D void surfaces, about 0.08 mm at 40 um
 let vol = null, body = null, bodyKey = '', smoothed = null, smoothedSigma = null, pending = null, pores = null, smoother = null;
+let poreCoarse = null; // detectPores' coarse result: its interior minus edge zone is where pore voxels are counted
 let coarse = null, voidShare = null, zoneReady = null, airGray = null, patchLabels = null, solidGray = null;
 
 const say = (text) => postMessage({ type: 'status', text });
@@ -33,6 +34,7 @@ function sendModel() {
 function finishDetect({ settings }) {
   say('Coarse segmentation on the binned volume');
   const coarse = P.detectPores(vol.gray, vol.outside, vol.dims, body, settings, { bin: vol.bin, voxelMm: vol.voxelMm });
+  poreCoarse = coarse;
   say('Fine segmentation on the loaded grid');
   const result = P.fineDetect({ dims: vol.full, bin: vol.bin, settings, voxelMm: vol.voxelMm, coarse, binnedDims: vol.dims, getSmoothed: (z) => smoothed[z] });
   say('Open and closed pores, networks, sphericity');
@@ -43,6 +45,20 @@ function finishDetect({ settings }) {
   const { offsets, start, end, id, rows } = result.runs;
   postMessage({ type: 'pores', pores: result.pores, connectivity: conn.summary, settings, runs: { offsets, start: start.slice(), end: end.slice(), id: id.slice(), rows } });
   sendPatches();
+}
+
+/** The Dragonfly cross-check: VoxelBench's counting region and pore voxels (rejected voids left out) as runs, and,
+    with another tool's mask runs, the comparison. */
+function crosscheck({ type, runs, rejected, bodyMm3, smallMm3 }) {
+  const M = self.VBMasks, full = vol.full, skip = new Set(rejected || []);
+  const regionInput = { interior: poreCoarse.interior, edgeZone: poreCoarse.edgeZone, binnedDims: vol.dims, bin: vol.bin, fullDims: full };
+  say('Cross-check: the counting region');
+  const region = M.maskRuns((z) => M.regionSlice(regionInput, z), full);
+  const ours = M.maskRuns((z) => M.runsSlice(pores.runs, full, z, skip), full);
+  const count = (r) => { let n = 0; for (let k = 0; k < r.start.length; k++) n += r.end[k] - r.start[k]; return n; };
+  if (type === 'regionRuns') return { region, pores: ours, regionVoxels: count(region), poreVoxels: count(ours) };
+  say('Cross-check: comparing the masks');
+  return { result: M.compareRuns({ a: ours, b: runs, region, dims: full, voxelMm: vol.voxelMm, bodyMm3, smallMm3 }) };
 }
 
 function sendPatches() {
@@ -183,6 +199,9 @@ onmessage = ({ data }) => {
     } else if (data.type === 'wall') {
       if (ensureBody(data.settings, data.crops)) sendModel();
       postMessage({ type: 'wall', id: data.id, ...self.VBWall.wallReport(body.filled, vol.dims, vol.bin, vol.voxelMm) });
+    } else if (data.type === 'regionRuns' || data.type === 'crosscheck') {
+      if (!pores || !poreCoarse) throw new Error('Segment pores first: the cross-check compares against that segmentation.');
+      postMessage({ type: data.type, id: data.id, ...crosscheck(data) });
     } else if (data.type === 'filler') {
       if (ensureBody(data.settings, data.crops)) sendModel();
       if (!smoothed || smoothedSigma !== data.settings.fineSigma || smoothed.length !== vol.full.nz || !smoothed[vol.full.nz - 1]) {

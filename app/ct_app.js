@@ -211,6 +211,7 @@ window.CTApp = (function () {
   async function loadStack(stack) {
     const token = ++state.loadToken;
     if (worker) { worker.terminate(); worker = null; }
+    for (const c of calls.values()) c.reject(new Error('Another scan was opened.')); calls.clear();
     Object.assign(state, { slices: null, folder: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null });
     $('startup').hidden = false;
     showError('');
@@ -445,6 +446,9 @@ window.CTApp = (function () {
       if (!data.refused) state.zoneThreshold = data.threshold;
       emit('statusText', data.refused ? 'Zone segmentation failed' : 'Zones segmented');
       emit('poresChanged');
+    } else if (data.type === 'regionRuns' || data.type === 'crosscheck') {
+      const call = calls.get(data.id);
+      if (call) { calls.delete(data.id); call.resolve(data); }
     } else if (data.type === 'wall') {
       if (state.wall && data.id === state.wallSeq) state.wall = { busy: false, result: data };
       emit('wallChanged');
@@ -471,6 +475,7 @@ window.CTApp = (function () {
       if (mine('pores') && state.porePhase === 'running') { state.porePhase = 'error'; emit('statusText', data.message); emit('poresChanged'); }
       if (mine('sheet') && state.onSheetError) { state.onSheetError(new Error(data.message)); state.onSheet = null; state.onSheetError = null; } // the export would wait forever
       if (step === 'zones') emit('statusText', `Zones: ${data.message}`);
+      if (step === 'crosscheck') { for (const c of calls.values()) c.reject(new Error(data.message)); calls.clear(); }
     }
   }
 
@@ -548,6 +553,15 @@ window.CTApp = (function () {
     emit('fillerChanged');
   }
 
+  // Worker requests answered by promise (the cross-check): id -> { resolve, reject }.
+  const calls = new Map();
+  let callSeq = 0;
+  function callWorker(type, payload = {}, transfer = []) {
+    if (!worker) return Promise.reject(new Error('Open a scan and segment pores first.'));
+    const id = ++callSeq;
+    return new Promise((resolve, reject) => { calls.set(id, { resolve, reject }); worker.postMessage({ type, id, ...payload }, transfer); });
+  }
+
   function requestWall() {
     if (!worker || (state.wall && state.wall.busy)) return;
     state.wallSeq = (state.wallSeq || 0) + 1;
@@ -556,5 +570,5 @@ window.CTApp = (function () {
     emit('wallChanged');
   }
 
-  return { sampleNow, openDemo, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
+  return { sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
 }());

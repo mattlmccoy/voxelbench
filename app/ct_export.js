@@ -167,6 +167,38 @@
     return new Blob([local, body, tail]);
   }
 
+  /** A zip of several files, each deflated on its own: entries is an iterable or async iterable of { name, bytes }, so
+      a stack of slices can be made one at a time. Names are UTF-8; 32-bit sizes, so under 4 GB in all. */
+  async function zipFiles(entries) {
+    const parts = [], central = [];
+    let offset = 0, count = 0;
+    for await (const { name, bytes } of entries) {
+      const stream = new CompressionStream('deflate-raw');
+      const packed = new Response(stream.readable).blob();
+      const writer = stream.writable.getWriter();
+      await writer.write(bytes); await writer.close();
+      const body = await packed;
+      const crc = (crcUpdate(0xffffffff, bytes) ^ 0xffffffff) >>> 0;
+      const nameBytes = new TextEncoder().encode(name);
+      const fields = (d, at) => {
+        d.setUint16(at, 20, true); d.setUint16(at + 2, 0x0800, true); d.setUint16(at + 4, 8, true); // UTF-8 names, deflate
+        d.setUint32(at + 10, crc, true); d.setUint32(at + 14, body.size, true); d.setUint32(at + 18, bytes.length, true);
+        d.setUint16(at + 22, nameBytes.length, true);
+      };
+      const local = new Uint8Array(30 + nameBytes.length), dl = new DataView(local.buffer);
+      dl.setUint32(0, 0x04034b50, true); fields(dl, 4); local.set(nameBytes, 30);
+      const entry = new Uint8Array(46 + nameBytes.length), de = new DataView(entry.buffer);
+      de.setUint32(0, 0x02014b50, true); de.setUint16(4, 20, true); fields(de, 6); de.setUint32(42, offset, true); entry.set(nameBytes, 46);
+      parts.push(local, body); central.push(entry);
+      offset += local.length + body.size; count++;
+    }
+    const size = central.reduce((n, e) => n + e.length, 0);
+    const end = new Uint8Array(22), dd = new DataView(end.buffer);
+    dd.setUint32(0, 0x06054b50, true); dd.setUint16(8, count, true); dd.setUint16(10, count, true);
+    dd.setUint32(12, size, true); dd.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, end]);
+  }
+
   /** Pore rows split so each stored database document stays well under its size limit. */
   function poreChunks(pores, rejected) {
     const chunks = [];
@@ -227,5 +259,5 @@
       row(BATCH_COLUMNS), ...rows.map((x) => row(BATCH_COLUMNS.map((c) => r5(x[c]))))].join('\n') + '\n';
   }
 
-  return { batchRow, batchCsv, fillerCsv, cadCsv, poreCsv, annotationCsv, regionCsv, npyHeader, maskParts, zipStream, poreChunks, patchCsv, zoneCsv };
+  return { batchRow, batchCsv, fillerCsv, cadCsv, poreCsv, annotationCsv, regionCsv, npyHeader, maskParts, zipStream, zipFiles, poreChunks, patchCsv, zoneCsv };
 }));

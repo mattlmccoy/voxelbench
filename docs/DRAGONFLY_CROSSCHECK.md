@@ -13,9 +13,17 @@ There are two runs:
 > versions. Steps marked **(confirm)** are the ones the help pages did not settle. Write down what your version calls
 > them so this page can be corrected.
 
-## 1. Make the kit (any computer with Node.js)
+## 1. Make the kit
 
-The scan needs a saved VoxelBench run: set the crop and settings in the page, then save the run.
+**In the page (easiest).** Open the scan, set the crop and settings, segment pores, then in step 4 open
+**Cross-check with Dragonfly 3D** and press **Download kit (zip)**. Unzip it outside this repository; it has the
+layout below. After the Dragonfly runs, press **Load Dragonfly mask** in the same panel and pick the exported mask
+(one multi-page TIFF, or every slice file): the panel shows both porosities, Dice, the causes of the difference in
+words, and the largest pores only one tool found (click one to see it). **Save comparison (JSON)** keeps the record.
+Load the matched mask and the independent mask in turn.
+
+**From the command line (any computer with Node.js).** The scan needs a saved VoxelBench run: set the crop and
+settings in the page, then save the run.
 
 ```bash
 node tools/crosscheck/dragonfly_kit.js <scan-folder> <saved-run.json> <kit-folder>
@@ -75,6 +83,8 @@ or a manual range). Write down:
 Export the pore mask the same way as in step 7, into `dragonfly_independent/`.
 
 ## 4. Compare
+
+In the page: **Load Dragonfly mask** in step 4 (section 1 above). From the command line:
 
 ```bash
 node tools/crosscheck/compare.js <kit-folder> <kit-folder>/dragonfly_matched "Dragonfly matched"

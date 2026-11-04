@@ -316,6 +316,8 @@ test('errorStep sends a worker error to the step whose request failed', () => {
   for (const t of ['volume', 'model', 'detect', 'slice', 'slicesDone', 'voidMeshes']) assert.equal(CT.errorStep(t), 'pores', t);
   assert.equal(CT.errorStep('zones'), 'zones');
   assert.equal(CT.errorStep('sheet'), 'sheet');
+  assert.equal(CT.errorStep('regionRuns'), 'crosscheck');
+  assert.equal(CT.errorStep('crosscheck'), 'crosscheck');
   assert.equal(CT.errorStep(undefined), null, 'unknown: every waiting step');
 });
 

@@ -9,8 +9,6 @@ const CT = require('../../app/ct_core.js');
 const H = require('../headless_run.js');
 const M = require('./masks.js');
 
-const SMOOTHING = 'separable 3-D Gaussian, sigma = fineSigma voxels, kernel cut at ceil(3 sigma) and normalized, edge slices/rows repeated';
-
 /** The kit for an analysis from headless_run.analyze: region and pore slices, and the facts for kit.json. */
 function buildKit(a) {
   const { dims, voxelMm, settings, base, rejected } = a;
@@ -22,21 +20,8 @@ function buildKit(a) {
     for (const v of poreSlice(z)) poreVoxels += v;
     for (const v of regionSlice(z)) regionVoxels += v;
   }
-  const info = {
-    format: 'voxelbench-dragonfly-kit/1',
-    dims, voxel_mm: voxelMm, analysis_bin: H.BIN,
-    settings: { poreThreshold: settings.poreThreshold, fineSigma: settings.fineSigma, margin: settings.margin, minVolumeMm3: settings.minVolumeMm3,
-      bodyThreshold: settings.bodyThreshold, closeRadius: settings.closeRadius },
-    rule: `pore voxel = smoothed gray < ${settings.poreThreshold}, inside the region; joined through faces (6-connected); groups under ${settings.minVolumeMm3} mm3 dropped`,
-    smoothing: SMOOTHING, connectivity: 6,
-    min_group_voxels: Math.ceil(settings.minVolumeMm3 / voxelMm ** 3 - 1e-9),
-    body_mm3: base.bodyMm3,
-    voxelbench: {
-      all_void_percent_of_body: a.summary.all_void_percent_of_body,
-      void_count: base.result.pores.length - rejected.size, rejected_count: rejected.size,
-      pore_voxels: poreVoxels, region_voxels: regionVoxels,
-    },
-  };
+  const info = M.kitInfo({ dims, voxelMm, bin: H.BIN, settings, bodyMm3: base.bodyMm3, porosityPercent: a.summary.all_void_percent_of_body,
+    voidCount: base.result.pores.length - rejected.size, rejectedCount: rejected.size, poreVoxels, regionVoxels });
   return { info, regionSlice, poreSlice };
 }
 
