@@ -7,6 +7,7 @@
   else root.VBConnectivity = factory(root.CTPores, root.CTZones);
 }(typeof self !== 'undefined' ? self : this, function (P, Z) {
   'use strict';
+  const NEAR_SURFACE_MM = 0.5; // the shell near-surface voids are counted in
 
   const THROUGH_SLACK = 2; // binned voxels beyond the segmentation margin, for through-paths
   const MIN_SHAPE_VOXELS = 100; // about 6 voxels across; smaller pores are too coarse for a shape
@@ -146,7 +147,10 @@
       });
     }
     const body = maskVoxels * (bin * voxelMm) ** 3;
-    return { pores: out.map(({ box, ...p }) => p), summary: { ...openClosed(out, body), networks: groups.size, through } };
+    // The share of the part within NEAR_SURFACE_MM of its surface: what near-surface void volume is measured against.
+    let shell = 0, inside = 0;
+    for (let i = 0; i < filled.length; i++) { if (!filled[i]) continue; inside++; if (depth[i] * bin * voxelMm <= NEAR_SURFACE_MM + 1e-9) shell++; }
+    return { pores: out.map(({ box, ...p }) => p), summary: { ...openClosed(out, body), networks: groups.size, through, near_surface: { mm: NEAR_SURFACE_MM, body_share: inside ? shell / inside : null } } };
   }
 
   return { sphericity, openClosed, annotatePores };

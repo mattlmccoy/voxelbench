@@ -205,6 +205,11 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 /* The hidden attribute wins over every display rule (.row, .draftpanel, .setting set display). */
 [hidden] { display: none !important; }
 .calhead { margin: 6px 0 2px; font-weight: 600; }
+/* "What this shows": each step's result read in words, under its numbers. */
+.insightbox { margin: 8px 0; padding: 8px 10px 8px 12px; border-left: 2px solid var(--accent); background: var(--card, rgba(255, 255, 255, .03)); border-radius: 0 var(--radius, 6px) var(--radius, 6px) 0; }
+.insightbox .insighthead { margin: 0 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.insightbox ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; font-size: 12px; line-height: 1.45; }
+html:is([data-skin="mac"], [data-skin="glass"]) .insightbox { border-left: 0; border-radius: 12px; padding: 10px 12px; }
 /* The result card: what a mark measured, over the top right of the main view. */
 .resultcard { position: absolute; top: 30px; right: 10px; z-index: 15; width: min(320px, 46%); max-height: calc(100% - 240px); min-height: 0; overflow: auto; padding: 12px 14px; display: grid; gap: 8px;
   background: var(--panel); color: var(--fg); border: 1px solid var(--line-strong, var(--line)); border-radius: var(--radius, 6px); box-shadow: 0 12px 32px rgba(0, 0, 0, .35); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
@@ -541,6 +546,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
           </div>
           <p class="mono muted" id="poreStatus">Open a scan first.</p>
           <div class="headline" id="voidHeadline" hidden></div>
+          <div class="insightbox" id="poreInsights" hidden><p class="insighthead">What this shows</p><ul></ul></div>
           <div class="kv mono" id="poreSummary"></div>
           <p class="hint" id="poreOpenNote" hidden></p>
           <p class="mono" id="archLine" hidden></p>
@@ -587,6 +593,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
           <label class="pickrow">Baseline <select id="zoneBaseline"><option value="auto" selected>Automatic (ends, else whole part)</option><option value="ends">Pore-free ends of the long axis</option><option value="whole">Whole part (median)</option></select></label>
           <label class="setting" id="zoneThresholdRow" hidden><span>High-gray threshold (gray offset)</span><span class="v mono" id="zoneThresholdValue"></span><input type="range" id="zoneThreshold" min="0.01" max="0.2" step="0.005"></label>
           <div class="tablewrap" id="zoneWrap" hidden><table id="zoneTable"></table></div>
+          <div class="insightbox" id="zoneInsights" hidden><p class="insighthead">What this shows</p><ul></ul></div>
           <div class="tablewrap" id="regionWrap" hidden><table id="regionTable"></table></div>
           <p class="hint" id="regionRefNote" hidden>For a relative density per region, pick a reference under "Density relative to a reference region" below.</p>
           <p class="hint" id="tableCalNote" hidden></p>
@@ -686,6 +693,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
           </div>
           <p class="mono" id="cadFit"></p>
           <p class="error" id="cadWarn" hidden></p>
+          <div class="insightbox" id="cadInsights" hidden><p class="insighthead">What this shows</p><ul></ul></div>
           <div class="kv mono" id="cadStats"></div>
           <canvas id="cadHist" width="300" height="120" hidden style="width:100%;max-width:300px"></canvas>
           <p class="mono" id="cadProbe"></p>
@@ -706,6 +714,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
           </div>
           <p class="mono" id="fillerFit"></p>
           <p class="error" id="fillerWarn" hidden></p>
+          <div class="insightbox" id="fillerInsights" hidden><p class="insighthead">What this shows</p><ul></ul></div>
           <div class="kv mono" id="fillerStats"></div>
           <canvas id="fillerHist" width="300" height="110" hidden style="width:100%;max-width:300px"></canvas>
           <div class="tablewrap" id="fillerRegionWrap" hidden><table id="fillerRegions"></table></div>
@@ -720,6 +729,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
           <p class="hint">Local wall thickness of the sample mask (pores filled), at the ridge of the distance to the outside: about 2 × that distance − ½ analysis voxel, ±½ voxel. Walls thinner than about 3 analysis voxels are not reported, so the smallest value shown is 3.5 voxels; corners of the part are not walls. Takes up to about 15 s on a large scan.</p>
           <div class="row"><button id="runWall" disabled>Measure walls</button><button id="wallExport" disabled>Thinnest places (CSV)</button><span class="mono muted" id="wallExportNote"></span></div>
           <p class="mono" id="wallFit"></p>
+          <div class="insightbox" id="wallInsights" hidden><p class="insighthead">What this shows</p><ul></ul></div>
           <div class="kv mono" id="wallStats"></div>
           <canvas id="wallHist" width="300" height="110" hidden style="width:100%;max-width:300px"></canvas>
           <div class="tablewrap" id="wallWrap" hidden><table id="wallTable"></table></div>
@@ -791,6 +801,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
 <script src="vb_calibration.js"></script>
 <script src="vb_masks.js"></script>
 <script src="vb_feedback.js"></script>
+<script src="vb_insights.js"></script>
 <script src="ct_display.js"></script>
 <script src="ct_pores.js"></script>
 <script src="ct_regions.js"></script>
@@ -811,6 +822,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
 <script src="vb_calrail.js"></script>
 <script src="vb_cardrail.js"></script>
 <script src="vb_dragonfly.js"></script>
+<script src="vb_insightrail.js"></script>
 <script src="vb_cadrail.js"></script>
 <script src="vb_cad3d.js"></script>
 <script src="vb_fillerrail.js"></script>

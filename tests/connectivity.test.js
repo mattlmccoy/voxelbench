@@ -78,7 +78,7 @@ test('two touching pores from the top face to the bottom face form one network, 
 test('a part with no pores gives zeros and no networks', () => {
   const { runs } = part([]);
   const out = K.annotatePores({ pores: [], runs, dims, filled, binnedDims, bin, voxelMm });
-  assert.deepEqual(out.summary, { open_mm3: 0, closed_mm3: 0, unknown_mm3: 0, open_percent: 0, closed_percent: 0, unknown_percent: 0, networks: 0, through: { x: false, y: false, z: false } });
+  assert.deepEqual(out.summary, { open_mm3: 0, closed_mm3: 0, unknown_mm3: 0, open_percent: 0, closed_percent: 0, unknown_percent: 0, networks: 0, through: { x: false, y: false, z: false }, near_surface: out.summary.near_surface });
 });
 
 test('a pore joined to outside air by a crack that the mask closed over is open', () => {
@@ -155,4 +155,15 @@ test('a pore larger than the shape budget is measured on a coarser copy, close t
   const c = K.annotatePores({ pores, runs, dims, filled, binnedDims, bin, voxelMm, maxShapeCells: 600 }).pores[0];
   assert.ok(c.shape_bin > 1, `shape_bin ${c.shape_bin}`);
   assert.ok(full > 0 && Math.abs(c.sphericity - full) < 0.08, `full ${full}, coarse ${c.sphericity}`);
+});
+
+test('the summary gives the share of the part within 0.5 mm of its surface, the baseline for near-surface voids', () => {
+  // A 20 x 20 x 4 block of 0.1 mm voxels; the stack ends are inside, so only the four side faces are surface:
+  // within 0.5 mm (5 voxels) of a side lies 1 - (10/20)^2 of the block.
+  const d = { nx: 20, ny: 20, nz: 4 };
+  const filled = box(d, () => 1);
+  const runs = runsFrom(new Uint8Array(20 * 20 * 4), d);
+  const out = K.annotatePores({ pores: [], runs, dims: d, filled, binnedDims: d, bin: 1, voxelMm: 0.1 });
+  assert.equal(out.summary.near_surface.mm, 0.5);
+  assert.ok(Math.abs(out.summary.near_surface.body_share - 0.75) < 1e-9, String(out.summary.near_surface.body_share));
 });
