@@ -51,7 +51,7 @@ function detect({ vol, dims, voxelMm, settings, crops, smoothed }) {
   for (let i = 0; i < body.filled.length; i++) filled += body.filled[i];
   const coarse = P.detectPores(vol.gray, vol.outside, vol.dims, body, settings, { bin: BIN, voxelMm });
   const result = P.fineDetect({ dims, bin: BIN, settings, voxelMm, coarse, binnedDims: vol.dims, getSmoothed: (z) => smoothed[z] });
-  return { body, result, bodyMm3: filled * (BIN * voxelMm) ** 3 };
+  return { body, coarse, result, bodyMm3: filled * (BIN * voxelMm) ** 3 };
 }
 
 /** The viewer's own pipeline on one stack with a saved run's crop and settings: segmentation, then (unless

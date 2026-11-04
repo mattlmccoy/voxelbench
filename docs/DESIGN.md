@@ -179,7 +179,8 @@ in the public repository) before every release, and v10 retires only after it pa
 Acceptance checks per analysis (Matt, 2026-11-03):
 - **Synthetic volumes** with known porosity, density and geometry, in the public test suite.
 - **An independent Python reference** (scipy), as `ct_pipeline` does today, on the same inputs.
-- **A cross-check against commercial CT software** on at least one shared scan.
+- **A cross-check against commercial CT software** on at least one shared scan. Dragonfly 3D first: a matched run
+  (VoxelBench's region and threshold) and an independent one, compared voxel by voxel; see `docs/DRAGONFLY_CROSSCHECK.md`.
 - **Archimedes density, opt-in per sample**, since not every sample can be measured that way. When a sample has
   it, the report shows CT and Archimedes side by side. The part envelope used for porosity (how surface
   openings are closed) is stated in every report and chosen per project, so it can be set to match the
