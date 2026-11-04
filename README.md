@@ -31,7 +31,9 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
 - Exports: pore, region, zone, CAD-deviation, filler, wall and batch tables (CSV), a slice image (PNG) and a review sheet (PDF).
 - Three looks under Appearance in the top bar: Lab (the original dark instrument look, default), Mac (a light Mac-style
   inspector, one step at a time) and Glass (frosted panels floating on a blurred copy of the scan). `?skin=mac` or
-  `?skin=glass` in the address also picks one; the choice is remembered in this browser.
+  `?skin=glass` in the address also picks one; the choice is remembered in this browser. In every look a step bar
+  shows one step at a time, with a green dot on each step that has a result and a Next line at the end of a finished
+  step; drag the panel's left edge to widen it for wide tables (double-click to reset).
 
 Every quantity is checked against an independent Python (scipy) reference on the same scans; see
 [docs/REFERENCE.md](docs/REFERENCE.md). Porosity can be cross-checked against Dragonfly 3D voxel by voxel; see

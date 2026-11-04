@@ -44,5 +44,28 @@
     return { value: fit.intercept + fit.slope * gray, extrapolated: gray < lo - margin || gray > hi + margin };
   }
 
-  return { AIR_DENSITY, calibrationPoints, fitCalibration, applyCalibration };
+  const g3 = (d) => `${d.value.toFixed(3)}${d.extrapolated ? '*' : ''} g/cm³`;
+
+  /** Text after a voxel's gray in the status bar: its equivalent density when calibrated. */
+  function grayReadout(fit, gray) {
+    const d = applyCalibration(fit, gray);
+    return d ? ` ≈ ${g3(d)} eq.` : ' uncalibrated';
+  }
+
+  /** What a calibration gives for the open scan: the solid matrix at its mean gray, the bulk with the pores (air in
+      them), and the Archimedes measurement beside them; todo names the step to run when the matrix is not known. */
+  function calibrationResults({ fit, solidGray, porosityPercent, archimedesDensity }) {
+    if (!fit || !fit.ok) return { rows: [], todo: null };
+    const matrix = applyCalibration(fit, solidGray);
+    if (!matrix) return { rows: [], todo: 'Segment pores (step 2) to get the solid matrix and bulk densities of this scan.' };
+    const rows = [['Solid matrix', g3(matrix)]];
+    if (Number.isFinite(porosityPercent)) {
+      const p = porosityPercent / 100;
+      rows.push([`Bulk, with ${porosityPercent.toFixed(2)} % pores`, g3({ value: matrix.value * (1 - p) + AIR_DENSITY * p, extrapolated: matrix.extrapolated })]);
+    }
+    if (Number.isFinite(archimedesDensity)) rows.push(['Archimedes, measured', `${archimedesDensity.toFixed(3)} g/cm³`]);
+    return { rows, todo: null };
+  }
+
+  return { AIR_DENSITY, calibrationPoints, fitCalibration, applyCalibration, grayReadout, calibrationResults };
 }));

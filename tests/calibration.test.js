@@ -69,3 +69,30 @@ test('the fit refuses an empty phantom, a falling line and points closer than th
 test('calibrationPoints carries each phantom gray SD for the noise check', () => {
   assert.deepEqual(C.calibrationPoints([{ name: 'r', density_g_cm3: 1, gray: 2000, sd: 55 }], { includeAir: false }), [{ name: 'r', gray: 2000, density: 1, sd: 55 }]);
 });
+
+// Air at gray 700 and a 1.01 g/cm³ rod at gray 2000: an exact line.
+const line = () => C.fitCalibration([{ name: 'Air', gray: 700, density: 0.0012 }, { name: 'PA12 rod', gray: 2000, density: 1.01 }]);
+
+test('the voxel readout says uncalibrated without a fit and gives the equivalent density with one', () => {
+  assert.equal(C.grayReadout(null, 1500), ' uncalibrated');
+  assert.equal(C.grayReadout({ ok: false, reason: 'x' }, 1500), ' uncalibrated');
+  assert.equal(C.grayReadout(line(), 2000), ' ≈ 1.010 g/cm³ eq.');
+  assert.equal(C.grayReadout(line(), 3000), ' ≈ 1.786* g/cm³ eq.'); // beyond the rod: extrapolated
+});
+
+test('results for the scan: what to run first when the matrix gray is not known yet', () => {
+  assert.deepEqual(C.calibrationResults({ fit: null, solidGray: 2000 }), { rows: [], todo: null });
+  const r = C.calibrationResults({ fit: line(), solidGray: null, porosityPercent: null });
+  assert.deepEqual(r.rows, []);
+  assert.match(r.todo, /Segment pores \(step 2\)/);
+});
+
+test('results for the scan: solid matrix, bulk with the pores, and Archimedes beside them', () => {
+  const r = C.calibrationResults({ fit: line(), solidGray: 2000, porosityPercent: 5, archimedesDensity: 0.95 });
+  assert.equal(r.todo, null);
+  assert.deepEqual(r.rows, [
+    ['Solid matrix', '1.010 g/cm³'],
+    ['Bulk, with 5.00 % pores', '0.960 g/cm³'], // 1.01 × 0.95 + 0.0012 × 0.05
+    ['Archimedes, measured', '0.950 g/cm³'],
+  ]);
+});

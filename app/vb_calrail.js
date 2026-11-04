@@ -24,6 +24,34 @@
     App.saveSample({ calibration_air: include });
   }
 
+  /** On the phantom test scan, which rod is which: the densities to type are not on the image. */
+  function renderDemo() {
+    const demo = state.demoPhantoms, rods = demo && demo.folder === state.folder ? demo.rods : null;
+    $('calDemo').hidden = !rods;
+    if (!rods) return;
+    const c = (state.dims.nx - 1) / 2;
+    const place = (r) => `${r.center.y < c ? 'upper' : 'lower'} ${r.center.x < c ? 'left' : 'right'}`;
+    $('calDemo').textContent = `Test scan: ${rods.map((r) => `the ${place(r)} rod is ${r.density_g_cm3.toFixed(2)} g/cm³`).join('; ')} (on XY). Outline each, with its density, to calibrate.`;
+  }
+
+  /** What the calibration gives for this scan, and where else its densities appear. */
+  function renderResults(fit) {
+    const ok = Boolean(fit && fit.ok);
+    $('calResultWrap').hidden = !ok;
+    if (!ok) return;
+    const arch = App.sampleNow().archimedes;
+    const porosity = state.pores ? window.CTPores.summarize(state.pores, state.bodyMm3, state.rejected).all_void_percent_of_body : null;
+    const { rows, todo } = Cal.calibrationResults({ fit, solidGray: state.solidGray ?? null, porosityPercent: porosity, archimedesDensity: arch ? arch.density_g_cm3 : null });
+    const host = $('calResults');
+    host.textContent = '';
+    for (const [k, v] of rows) {
+      const a = document.createElement('span'); a.textContent = k;
+      const b = document.createElement('span'); b.className = 'v'; b.textContent = v;
+      host.append(a, b);
+    }
+    $('calWhere').textContent = `${todo ? `${todo} ` : ''}Equivalent density also shows at the cursor in the status bar, in the step 3 zone and region tables, and in the review sheet and saved run. Bulk counts the pores as air. * outside the phantom gray range.`;
+  }
+
   function render() {
     $('drawPhantom').disabled = !state.folder;
     if (state.tool !== 'freehand' && $('calNote').textContent.startsWith('Outline')) $('calNote').textContent = ''; // drawing finished
@@ -34,6 +62,8 @@
     const table = $('calTable');
     table.textContent = '';
     $('calWrap').hidden = !fit;
+    renderDemo();
+    renderResults(fit);
     if (!fit) { $('calFit').textContent = 'Uncalibrated: no phantoms outlined.'; return; }
     $('calFit').textContent = fit.ok
       ? `density = ${fit.intercept.toFixed(5)} + ${fit.slope.toExponential(4)} × gray · ${fit.n} points${fit.r2 === null ? ' (exact line)' : ` · R² ${fit.r2.toFixed(4)}`}`

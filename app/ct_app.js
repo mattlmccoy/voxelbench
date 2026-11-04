@@ -211,7 +211,7 @@ window.CTApp = (function () {
   async function loadStack(stack) {
     const token = ++state.loadToken;
     if (worker) { worker.terminate(); worker = null; }
-    Object.assign(state, { slices: null, folder: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null });
+    Object.assign(state, { slices: null, folder: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null });
     $('startup').hidden = false;
     showError('');
     emit('samplesChanged');
@@ -509,12 +509,14 @@ window.CTApp = (function () {
   /** Opens a generated test scan; returns its known answers (truth). */
   function openDemo(kind) {
     const demo = DEMOS[kind]();
+    // The phantom scan's rods (name, density, center) are kept with its folder so step 5 can say which rod is which.
+    state.demoPhantoms = demo.truth.phantoms ? { folder: demo.files[0].webkitRelativePath.split('/')[0], rods: demo.truth.phantoms } : null;
     openFiles(demo.files);
     return demo.truth;
   }
 
   function start() {
-    $('folder').addEventListener('change', (e) => openFiles(e.target.files));
+    $('folder').addEventListener('change', (e) => { state.demoPhantoms = null; openFiles(e.target.files); });
     $('saveProject').addEventListener('click', saveProject);
     $('trySynthetic').addEventListener('click', () => openDemo('scan'));
     $('trySyntheticDense').addEventListener('click', () => openDemo('dense'));

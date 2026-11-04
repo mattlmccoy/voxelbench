@@ -227,8 +227,8 @@
     }
     if (endCount < MIN_END_SHARE * bodyCount) {
       const edge = scanEdgeMm > 0 ? ` The outer ${scanEdgeMm} mm of the reconstruction reads dark and is left out.` : '';
-      if (method === 'whole') return { refused: `No baseline: less than ${(100 * MIN_END_SHARE).toFixed(0)}% of the body is pore-free solid (${(100 * endCount / bodyCount).toFixed(1)}%).${edge} Outline regions by hand instead.`, method, scanEdgeMm };
-      return { method, scanEdgeMm, refused: `No baseline: the two ends of the part along its long axis are not pore-free (${(100 * endCount / bodyCount).toFixed(1)}% of the body qualifies, ${(100 * MIN_END_SHARE).toFixed(0)}% needed).${edge} Outline regions by hand instead.` };
+      if (method === 'whole') return { refused: `No baseline: less than ${(100 * MIN_END_SHARE).toFixed(0)}% of the body is pore-free solid (${(100 * endCount / bodyCount).toFixed(1)}%).${edge} Outline regions by hand with Draw region instead.`, method, scanEdgeMm };
+      return { method, scanEdgeMm, refused: `No baseline: the two ends of the part along its long axis are not pore-free (${(100 * endCount / bodyCount).toFixed(1)}% of the body qualifies, ${(100 * MIN_END_SHARE).toFixed(0)}% needed).${edge} Outline regions by hand with Draw region instead.` };
     }
     const mids = [], base = [];
     bins.forEach((list, b) => { if (list.length >= 50) { mids.push((b + 0.5) * DEPTH_BIN_MM); base.push(medianOf(list)); } });
@@ -307,7 +307,7 @@
     let threshold = settings.threshold;
     if (threshold === undefined) {
       threshold = ready.method === 'whole' ? valleyBetweenGroups(histogramCounts(excess, depth, w)) : findDip(excess, depth, w);
-      if (threshold === null) return { refused: 'Gray shows one group here, not two, so no zones are drawn. Outline regions by hand instead.', zones: null };
+      if (threshold === null) return { refused: 'Gray shows one group here, not two, so no zones are drawn. Outline regions by hand with Draw region instead.', zones: null };
     }
     const n = gray.length;
     const bright = new Uint8Array(n);

@@ -51,7 +51,8 @@
     $('draftPanel').hidden = !drawing;
     const hints = { crop: 'Drag a polygon around the sample on the main view, then save. Voxels outside it are excluded through the full depth of that view.',
       phantom: `Drag a polygon inside the phantom${state.phantomDraft ? ` (${state.phantomDraft.name}, ${state.phantomDraft.density_g_cm3} g/cm³)` : ''}, away from its edge, set the slices where it is solid, then save.` };
-    $('toolHintLong').textContent = state.tool === 'freehand' && hints[state.regionLabel] ? hints[state.regionLabel] : tool.hint;
+    const regionHint = 'Pick a label below, then drag a closed outline on the main view around the area to measure. Set the slices it spans, then Save; draw more, or press Done drawing. Each region\'s volume, porosity and gray (and density, when calibrated) appear in the step 3 region table.';
+    $('toolHintLong').textContent = state.tool === 'freehand' ? (hints[state.regionLabel] || regionHint) : tool.hint;
     $('types').hidden = !annotating;
     $('regionLabels').hidden = state.tool !== 'freehand' || state.regionLabel === 'crop' || state.regionLabel === 'phantom';
     $('reviewVoids').setAttribute('aria-pressed', String(state.tool === 'review'));
@@ -106,8 +107,8 @@
       const depth = CT.planeShape(d.plane, state.dims).depth;
       const phantom = state.regionLabel === 'phantom' ? state.phantomDraft : undefined;
       const record = R.makeRegion({ ...common, plane: d.plane, sliceFrom: crop ? 0 : Number($('rangeFrom').value), sliceTo: crop ? depth - 1 : Number($('rangeTo').value), label: state.regionLabel, voxelMm: state.voxelMm, dims: state.dims, phantom }, App.regionLabels());
-      App.saveRecord('regions', record);
       if (crop || phantom) { state.regionLabel = R.drawLabel(state.regionLabel, App.regionLabels()); state.phantomDraft = null; setTool('navigate'); }
+      App.saveRecord('regions', record);
       if (crop) App.cropChanged();
       else if (state.zones && state.zones.map) App.requestZones();
     } else {
@@ -453,6 +454,7 @@
     const measured = state.folder ? App.regionsOf(state.folder).filter((r) => r.label !== 'crop' && r.label !== 'phantom') : [];
     $('exportRegions').disabled = !measured.length;
     $('regionWrap').hidden = !measured.length;
+    $('regionRefNote').hidden = true; // shown below when regions exist without a reference
     const select = $('referenceRegion');
     const previous = state.referenceId;
     select.textContent = '';
@@ -475,7 +477,11 @@
     const fit = App.calibration(), calibrated = Boolean(fit && fit.ok);
     $('tableCalNote').hidden = !calibrated;
     if (calibrated) $('tableCalNote').textContent = calibrationNote(fit);
-    for (const h of ['Region', 'mm³', 'Gray', 'Matrix gray', 'Porosity (%)', 'Pores', 'Rel. density', 'g/cm³ (est.)', ...(calibrated ? ['Eq. density (g/cm³)'] : []), '']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
+    // Relative columns only once a reference is picked (step 3 sub-panel); n/a columns with no reason confused users.
+    const referenced = measured.some((r) => r.id === state.referenceId) && state.airGray !== null;
+    const estimated = referenced && Number.isFinite(state.referenceDensity);
+    $('regionRefNote').hidden = referenced;
+    for (const h of ['Region', 'mm³', 'Gray', 'Matrix gray', 'Porosity (%)', 'Pores', ...(referenced ? ['Rel. density'] : []), ...(estimated ? ['g/cm³ (est.)'] : []), ...(calibrated ? ['Eq. density (g/cm³)'] : []), '']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
     const fmt = (v, d) => (v === null || v === undefined ? 'n/a' : v.toFixed(d));
     for (const r of regionRows()) {
       const def = R.labelOf(r.label, App.regionLabels());
@@ -485,7 +491,7 @@
       name.style.textAlign = 'left';
       const dot = document.createElement('span'); dot.className = 'swatch'; dot.style.background = def.color;
       name.append(dot, def.label);
-      const cells = [fmt(r.stats.volume_mm3, 2), `${fmt(r.stats.gray_mean, 0)}±${fmt(r.stats.gray_sd, 0)}`, fmt(r.stats.matrix_gray_mean, 0), r.stats.pore_fraction === null ? 'n/a' : (100 * r.stats.pore_fraction).toFixed(2), r.stats.pore_count ?? 'n/a', fmt(r.density && r.density.relative, 3), fmt(r.density && r.density.g_cm3, 3)];
+      const cells = [fmt(r.stats.volume_mm3, 2), `${fmt(r.stats.gray_mean, 0)}±${fmt(r.stats.gray_sd, 0)}`, fmt(r.stats.matrix_gray_mean, 0), r.stats.pore_fraction === null ? 'n/a' : (100 * r.stats.pore_fraction).toFixed(2), r.stats.pore_count ?? 'n/a', ...(referenced ? [fmt(r.density && r.density.relative, 3)] : []), ...(estimated ? [fmt(r.density && r.density.g_cm3, 3)] : [])];
       if (calibrated) cells.push(App.densityText(fit, r.stats.matrix_gray_mean ?? r.stats.gray_mean));
       for (const c of cells) tr.insertCell().textContent = c;
       tr.insertCell().append(regionDelete(r));
@@ -678,8 +684,9 @@
 
   on('start', () => {
     renderAll();
-    let collapsed = false;
-    try { collapsed = localStorage.getItem(LEGEND_KEY) === '1'; } catch (e) { /* storage can be blocked; start expanded */ }
+    // Collapsed unless the viewer opened it last time: open, it pushes the step's results below the fold.
+    let collapsed = true;
+    try { collapsed = localStorage.getItem(LEGEND_KEY) !== '0'; } catch (e) { /* storage can be blocked; start collapsed */ }
     setLegendCollapsed(collapsed);
     $('legendToggle').addEventListener('click', () => setLegendCollapsed(!$('legend').classList.contains('collapsed')));
     const showFill = () => { $('fillValue').textContent = `${Math.round(state.fill * 100)} %`; };

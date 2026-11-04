@@ -23,7 +23,7 @@ button, select, input { font: inherit; }
 .muted { color: var(--muted); }
 .bad { color: var(--err); }
 
-.studio { height: 100%; display: grid; grid-template: 40px 34px minmax(0, 1fr) 28px / minmax(0, 1fr) 380px; grid-template-areas: "top top" "strip rail" "center rail" "status status"; }
+.studio { height: 100%; display: grid; grid-template: 40px 34px minmax(0, 1fr) 28px / minmax(0, 1fr) var(--rail-w, 380px); grid-template-areas: "top top" "strip rail" "center rail" "status status"; }
 .topbar { grid-area: top; display: flex; align-items: center; gap: 14px; padding: 0 max(14px, env(safe-area-inset-right, 0px)) 0 max(14px, env(safe-area-inset-left, 0px)); background: var(--bg-deep); border-bottom: 1px solid var(--line); min-width: 0; }
 .wordmark { font-family: var(--font-mono); font-weight: 700; font-size: 12px; letter-spacing: .12em; color: var(--fg-strong); white-space: nowrap; }
 .wordmark .cap { font-size: 16px; }
@@ -74,7 +74,7 @@ input[type=range] { accent-color: var(--accent); }
 .progress { height: 3px; background: var(--line-strong); }
 .progress div { height: 100%; width: 0; background: var(--accent); }
 
-.rail { grid-area: rail; background: var(--panel); border-left: 1px solid var(--line); display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.rail { grid-area: rail; position: relative; background: var(--panel); border-left: 1px solid var(--line); display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
 .steps { overflow-y: auto; overflow-x: hidden; min-height: 0; }
 .rail details { border-bottom: 1px solid var(--line); }
 .rail summary { padding: 9px 12px; cursor: pointer; user-select: none; font: 700 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-strong); display: flex; gap: 8px; align-items: center; }
@@ -202,7 +202,9 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 #skinButton { display: inline-flex; align-items: center; gap: 6px; }
 .skinmenu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 100; width: 270px; padding: 6px; display: grid; gap: 2px;
   background: var(--panel); border: 1px solid var(--line-control); border-radius: 10px; box-shadow: 0 14px 34px rgba(0, 0, 0, .4); }
-.skinmenu[hidden] { display: none; }
+/* The hidden attribute wins over every display rule (.row, .draftpanel, .setting set display). */
+[hidden] { display: none !important; }
+.calhead { margin: 6px 0 2px; font-weight: 600; }
 .skinmenuhead { margin: 4px 10px 6px; font-size: 11px; font-weight: 600; color: var(--muted); }
 html .studio .topbar .skinmenu button { all: unset; position: relative; display: grid; gap: 1px; padding: 7px 10px 7px 30px; border-radius: 7px; cursor: pointer; }
 html .studio .topbar .skinmenu button:hover, html .studio .topbar .skinmenu button:focus-visible { background: var(--warn-bg); }
@@ -277,7 +279,7 @@ html[data-skin="mac"] {
   --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif; --font-mono: var(--font-ui);
 }
 html[data-skin="mac"] body { background: var(--bg); }
-html[data-skin="mac"] .studio { grid-template-rows: 52px 42px minmax(0, 1fr) 26px; grid-template-columns: minmax(0, 1fr) 380px; }
+html[data-skin="mac"] .studio { grid-template-rows: 52px 42px minmax(0, 1fr) 26px; grid-template-columns: minmax(0, 1fr) var(--rail-w, 400px); }
 html[data-skin="mac"] .topbar { background: rgba(246, 246, 248, .94); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-bottom: 1px solid var(--line); padding-inline: 16px; gap: 10px; }
 html[data-skin="mac"] :is(button:not(.layer, .link, .jump), .filebtn) { background: #fff; color: var(--fg); border: 0; border-radius: 6px; padding: 4px 11px; font-weight: 500; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .2), 0 1px 1px rgba(0, 0, 0, .06); }
 html[data-skin="mac"] :is(button:not(.layer, .link, .jump), .filebtn):hover:not(:disabled) { background: #f5f5f7; }
@@ -300,9 +302,9 @@ html[data-skin="mac"] .panehead .mono { color: rgba(255, 255, 255, .5); }
 html[data-skin="mac"] .slicebar { background: #0b0b0c; accent-color: #8e8e93; }
 html[data-skin="mac"] .startup { align-self: center; max-height: 100%; overflow: auto; background: #fff; border-radius: 16px; padding: 30px 32px; box-shadow: 0 20px 50px rgba(0, 0, 0, .14), 0 0 0 .5px rgba(0, 0, 0, .1); }
 html[data-skin="mac"] .rail { background: rgba(250, 250, 252, .86); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%); border-left: 1px solid var(--line);
-  grid-template-columns: 54px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  grid-template-columns: 62px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
 html[data-skin="mac"] .stepbar { grid-column: 1; grid-row: 1 / -1; flex-direction: column; align-items: center; gap: 4px; padding: 12px 0; border-right: 1px solid var(--line); }
-html[data-skin="mac"] .rail .stepbar button { width: 38px; height: 38px; border-radius: 9px; }
+html[data-skin="mac"] .rail .stepbar button { width: 54px; padding: 6px 0 5px; border-radius: 9px; }
 html[data-skin="mac"] .rail .stepbar button:hover { background: rgba(0, 0, 0, .05); }
 html[data-skin="mac"] .rail .stepbar button[aria-current="true"] { background: rgba(0, 113, 227, .12); color: var(--accent); }
 html[data-skin="mac"] .rail .steps { grid-column: 2; grid-row: 1; }
@@ -331,23 +333,23 @@ html[data-skin="glass"] body { background: radial-gradient(900px 700px at 30% 20
 html[data-skin="glass"] .skinbackdrop { display: block; position: fixed; left: -8%; top: -8%; width: 116%; height: 116%; z-index: 0; pointer-events: none; filter: blur(46px) saturate(1.5) brightness(.72); opacity: .95; }
 html[data-skin="glass"] .studio { display: block; position: relative; z-index: 1; height: 100%; }
 html[data-skin="glass"] :is(.topbar, .strip, .rail, .statusbar, .skinmenu) { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 0; box-shadow: var(--glass-edge); }
-html[data-skin="glass"] .topbar { position: absolute; z-index: 20; top: 16px; left: 16px; right: 412px; height: 52px; border-radius: 26px; padding: 0 12px 0 16px; gap: 10px; }
+html[data-skin="glass"] .topbar { position: absolute; z-index: 20; top: 16px; left: 16px; right: calc(var(--rail-w, 380px) + 32px); height: 52px; border-radius: 26px; padding: 0 12px 0 16px; gap: 10px; }
 html[data-skin="glass"] .strip { position: absolute; top: 84px; left: 16px; width: 72px; height: auto; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; border-radius: 24px; }
 html[data-skin="glass"] .strip button { height: 40px; padding: 0; border-radius: 16px; font-size: 11.5px; }
 html[data-skin="glass"] .strip .toolhint { display: none; }
-html[data-skin="glass"] .center { position: absolute; top: 84px; left: 104px; right: 412px; bottom: 66px; background: transparent; gap: 14px; grid-template-rows: minmax(0, 1fr) 132px; }
+html[data-skin="glass"] .center { position: absolute; top: 84px; left: 104px; right: calc(var(--rail-w, 380px) + 32px); bottom: 66px; background: transparent; gap: 14px; grid-template-rows: minmax(0, 1fr) 132px; }
 html[data-skin="glass"] .pane { border-radius: 22px; overflow: hidden; box-shadow: 0 26px 70px rgba(0, 0, 0, .55), 0 0 0 1px rgba(255, 255, 255, .08); }
 html[data-skin="glass"] .panehead { background: rgba(0, 0, 0, .5); color: #fff; padding: 0 12px; }
 html[data-skin="glass"] .panehead .mono { color: rgba(255, 255, 255, .55); }
 html[data-skin="glass"] .slicebar { background: rgba(0, 0, 0, .55); accent-color: #fff; }
-html[data-skin="glass"] .rail { position: absolute; top: 16px; right: 16px; bottom: 16px; width: 380px; border-radius: 30px; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
-html[data-skin="glass"] .stepbar { grid-row: 1; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-html[data-skin="glass"] .rail .stepbar button { width: 34px; height: 34px; border-radius: 50%; color: rgba(255, 255, 255, .7); }
+html[data-skin="glass"] .rail { position: absolute; top: 16px; right: 16px; bottom: 16px; width: var(--rail-w, 380px); border-radius: 30px; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+html[data-skin="glass"] .stepbar { grid-row: 1; justify-content: space-between; gap: 2px; padding: 10px 10px; border-bottom: 1px solid var(--line); }
+html[data-skin="glass"] .rail .stepbar button { flex: 1 1 0; min-width: 0; padding: 5px 0 4px; border-radius: 12px; color: rgba(255, 255, 255, .7); }
 html[data-skin="glass"] .rail .stepbar button:hover { background: rgba(255, 255, 255, .1); }
 html[data-skin="glass"] .rail .stepbar button[aria-current="true"] { background: rgba(255, 255, 255, .24); color: #fff; }
 html[data-skin="glass"] .rail .steps { grid-row: 2; }
 html[data-skin="glass"] .legend { grid-row: 3; background: transparent; border-top: 1px solid var(--line); }
-html[data-skin="glass"] .statusbar { position: absolute; left: 104px; right: 412px; bottom: 16px; height: 36px; border-radius: 18px; padding: 0 16px; }
+html[data-skin="glass"] .statusbar { position: absolute; left: 104px; right: calc(var(--rail-w, 380px) + 32px); bottom: 16px; height: 36px; border-radius: 18px; padding: 0 16px; }
 html[data-skin="glass"] :is(button:not(.layer, .link, .jump), .filebtn) { background: rgba(255, 255, 255, .14); color: #fff; border: 0; border-radius: 999px; padding: 6px 14px; font-weight: 500; box-shadow: none; }
 html[data-skin="glass"] :is(button:not(.layer, .link, .jump), .filebtn):hover:not(:disabled) { background: rgba(255, 255, 255, .22); }
 html[data-skin="glass"] button.primary { background: rgba(255, 255, 255, .94); color: #000; font-weight: 600; }
@@ -401,10 +403,10 @@ html:is([data-skin="mac"], [data-skin="glass"]) .conn { flex: 1 1 0; min-width: 
 html:is([data-skin="mac"], [data-skin="glass"]) #saveState { overflow: hidden; text-overflow: ellipsis; }
 
 /* ===== Lab: the step bar too, one section at a time, in the lab's own colors ===== */
-html[data-skin="lab"] .studio { grid-template-columns: minmax(0, 1fr) 426px; } /* the step bar's 46 px on top of the rail's 380 */
-html[data-skin="lab"] .rail { grid-template-columns: 46px minmax(0, 1fr); }
+html[data-skin="lab"] .studio { grid-template-columns: minmax(0, 1fr) var(--rail-w, 440px); } /* the step bar's 58 px on top of the rail's 382 */
+html[data-skin="lab"] .rail { grid-template-columns: 58px minmax(0, 1fr); }
 html[data-skin="lab"] .stepbar { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0; grid-column: 1; grid-row: 1 / -1; background: var(--bg-deep); border-right: 1px solid var(--line); }
-html[data-skin="lab"] .rail .stepbar button { all: unset; position: relative; width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--radius); color: var(--muted); cursor: pointer; }
+html[data-skin="lab"] .rail .stepbar button { all: unset; position: relative; width: 52px; padding: 6px 0 5px; display: grid; justify-items: center; gap: 3px; border-radius: var(--radius); color: var(--muted); cursor: pointer; }
 html[data-skin="lab"] .rail .stepbar button:hover { color: var(--fg); background: rgba(255, 255, 255, .04); }
 html[data-skin="lab"] .rail .stepbar button:focus-visible { outline: 2px solid var(--accent); }
 html[data-skin="lab"] .rail .stepbar button[aria-current="true"] { color: var(--accent); background: var(--warn-bg); }
@@ -416,6 +418,17 @@ html[data-skin="lab"] .rail .steps > details:not([open]) { display: none; }
 html[data-skin="lab"] .rail .steps > details { border-bottom: 0; }
 html[data-skin="lab"] .rail .steps > details > summary { list-style: none; pointer-events: none; padding: 12px 12px 8px; }
 html[data-skin="lab"] .rail .steps > details > summary::-webkit-details-marker { display: none; }
+/* ===== Every look: step names, done dots, Next lines, the rail grip ===== */
+html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position: relative; gap: 3px; }
+.stepbar .stepname { display: block; font: 500 9.5px/1.1 var(--font-ui); letter-spacing: 0; text-transform: none; white-space: nowrap; }
+.rail .stepbar button[data-done]::after { content: ""; position: absolute; top: 3px; right: 6px; width: 6px; height: 6px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid currentColor; opacity: .45; }
+.rail .stepbar button[data-done="true"]::after { background: var(--live); border-color: var(--live); opacity: 1; }
+.nextrow { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.nextrow .nextlabel { font-weight: 600; }
+.nextrow .nextnote { color: var(--muted); font-size: 11px; }
+.railgrip { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 6; touch-action: none; }
+.railgrip:hover, .railgrip:active { background: linear-gradient(to right, transparent 2px, var(--accent) 2px, var(--accent) 3px, transparent 3px); }
+@media (max-width: 900px) { .railgrip { display: none; } }
 @media (max-width: 900px) {
   html[data-skin="lab"] .stepbar { flex-direction: row; justify-content: space-between; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--line); }
   html[data-skin="lab"] .rail .stepbar button[aria-current="true"]::before { left: 7px; right: 7px; top: auto; bottom: -6px; width: auto; height: 2px; }
@@ -549,16 +562,18 @@ html[data-skin="lab"] .rail .steps > details > summary::-webkit-details-marker {
           <label class="setting" id="zoneThresholdRow" hidden><span>High-gray threshold (gray offset)</span><span class="v mono" id="zoneThresholdValue"></span><input type="range" id="zoneThreshold" min="0.01" max="0.2" step="0.005"></label>
           <div class="tablewrap" id="zoneWrap" hidden><table id="zoneTable"></table></div>
           <div class="tablewrap" id="regionWrap" hidden><table id="regionTable"></table></div>
+          <p class="hint" id="regionRefNote" hidden>For a relative density per region, pick a reference under "Density relative to a reference region" below.</p>
           <p class="hint" id="tableCalNote" hidden></p>
           <details class="sub">
-            <summary>Relative density from a reference region</summary>
+            <summary>Density relative to a reference region (no phantoms)</summary>
             <div>
+              <p class="hint">Without phantoms, densities can be read relative to a part of this scan whose density you know or trust, for example a pore-free region of the solid. 1: draw that region with Draw region above. 2: pick it as the reference here. 3: optionally enter its density (g/cm³, from Archimedes or the datasheet). Every region in the table then gets a relative density (air 0, reference 1) and, with a density entered, an estimate in g/cm³. With phantoms outlined in step 5, use the equivalent-density column instead.</p>
               <div class="row">
                 <label>Reference <select id="referenceRegion"></select></label>
                 <label>Reference g/cm³ <input type="number" id="referenceDensity" step="0.01" min="0" placeholder="optional"></label>
               </div>
               <p class="hint mono" id="airNote"></p>
-              <p class="hint">Relative density: air 0, reference region 1. g/cm³ scales by the reference density entered; assumes equal mass attenuation for all phases and no beam-hardening correction.</p>
+              <p class="hint">Assumes equal mass attenuation for all phases and no beam-hardening correction.</p>
             </div>
           </details>
         </div>
@@ -603,8 +618,14 @@ html[data-skin="lab"] .rail .steps > details > summary::-webkit-details-marker {
             <button id="drawPhantom" disabled>Draw phantom</button>
           </div>
           <label class="pickrow" style="grid-template-columns:auto 1fr"><input type="checkbox" id="calAir" checked><span>Include air (0.0012 g/cm³ at the median gray outside the part)</span></label>
+          <p class="hint" id="calDemo" hidden></p>
           <p class="mono" id="calFit"></p>
           <p class="hint" id="calNote"></p>
+          <div id="calResultWrap" hidden>
+            <p class="calhead">Results for this scan (equivalent density)</p>
+            <div class="kv mono" id="calResults"></div>
+            <p class="hint" id="calWhere"></p>
+          </div>
           <div class="tablewrap" id="calWrap" hidden><table id="calTable"></table></div>
         </div>
       </details>
@@ -764,6 +785,7 @@ html[data-skin="lab"] .rail .steps > details > summary::-webkit-details-marker {
   const storage = (() => { try { return window.localStorage; } catch (e) { return null; } })();
   VBSkin.wireSettings({ doc: document, storage, button: document.getElementById('skinButton'), menu: document.getElementById('skinMenu') });
   VBSkin.wireStepBar({ doc: document, rail: document.getElementById('rail') });
+  VBSkin.wireRailResize({ doc: document, storage: (() => { try { return window.localStorage; } catch (e) { return null; } })(), rail: document.getElementById('rail'), win: window });
   VBSkin.wireBackdrop({ doc: document, source: () => document.querySelector('#paneXY .canvasbox canvas') });
 })();
 CTApp.start();</script>

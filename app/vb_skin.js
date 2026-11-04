@@ -3,8 +3,8 @@
    - mac: a light Mac inspector (system font, grouped lists, one step at a time);
    - glass: frosted panels floating on a blurred copy of the scan.
    Chosen by ?skin= in the address, else the viewer's last choice, else lab. The choice is a per-viewer convenience in
-   localStorage; when storage is blocked the page still works, it just forgets. Mac and glass show the rail one section at
-   a time through a step bar; lab keeps the accordion. */
+   localStorage; when storage is blocked the page still works, it just forgets. Every look shows the rail one section at a
+   time through the step bar. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.VBSkin = factory();
@@ -36,9 +36,42 @@
   };
   const SECTION_ICON = { step1: 'crop', step2: 'pores', step3: 'zones', step4: 'notes', step5: 'density', step6: 'cad', step7: 'filler', step8: 'wall', secScan: 'info' };
 
+  const SHORT = { step1: 'Crop', step2: 'Pores', step3: 'Zones', step4: 'Export', step5: 'Density', step6: 'CAD', step7: 'Filler', step8: 'Walls', secScan: 'Scan' };
+
   /** Step-bar items from the rail sections [{ id, title (summary text), open }]. */
   function navItems(sections) {
-    return sections.map((s) => ({ id: s.id, icon: SECTION_ICON[s.id] || 'dot', title: s.title.replace(/^\s*\d+\s*/, '').trim(), active: Boolean(s.open) }));
+    return sections.map((s) => {
+      const title = s.title.replace(/^\s*\d+\s*/, '').trim();
+      return { id: s.id, icon: SECTION_ICON[s.id] || 'dot', title, short: SHORT[s.id] || title, active: Boolean(s.open) };
+    });
+  }
+
+  /** Whether a step has a result, from its status tag ('optional', 'not run', 'running' and empty mean no);
+      null for scan information, which is not a step. */
+  function stepDone(id, tag) {
+    if (id === 'secScan') return null;
+    const t = (tag || '').trim();
+    return Boolean(t) && !['optional', 'not run', 'running'].includes(t);
+  }
+
+  // What usually follows each finished step; a step already done is not suggested again.
+  const NEXT = {
+    step1: [{ id: 'step2' }],
+    step2: [{ id: 'step5', note: 'only if phantoms are in the scan' }, { id: 'step3', note: 'zones and hand-drawn regions' }, { id: 'step4' }],
+    step3: [{ id: 'step4' }], step6: [{ id: 'step4' }], step7: [{ id: 'step4' }], step8: [{ id: 'step4' }],
+  };
+
+  /** Next steps to offer at the end of a finished step, given which steps are done ({ id: bool }). */
+  function nextFor(id, done) {
+    if (!done[id]) return [];
+    if (id === 'step5') return done.step2 ? [{ id: 'step3', note: 'densities per zone and region' }, { id: 'step4' }] : [{ id: 'step2', note: 'for the matrix and bulk densities' }];
+    return (NEXT[id] || []).filter((n) => !done[n.id]);
+  }
+
+  /** Rail width the viewer dragged to: at least 320 px, at most 60 % of the window; null when not a number. */
+  function clampRailWidth(px, viewport) {
+    if (!Number.isFinite(px)) return null;
+    return Math.round(Math.min(Math.max(px, 320), Math.max(320, 0.6 * viewport)));
   }
 
   /** Open state after picking one section: that one open, every other closed. */
@@ -73,7 +106,8 @@
     show();
   }
 
-  /** The step bar for the mac and glass looks: one button per rail section; picking one shows only that section. */
+  /** The step bar, in every look: one button per rail section (icon, short name, a dot once the step has a result);
+      picking one shows only that section. Each finished step ends with a Next line that opens the usual next step. */
   function wireStepBar({ doc, rail }) {
     const sections = [...rail.querySelectorAll('.steps > details')];
     const nav = doc.createElement('nav');
@@ -81,19 +115,84 @@
     // The summary text without its status tag; navItems drops the leading step number.
     const titleOf = (d) => [...d.querySelector('summary').childNodes].filter((n) => !(n.classList && n.classList.contains('tag'))).map((n) => n.textContent).join('');
     const items = navItems(sections.map((d) => ({ id: d.id, title: titleOf(d), open: d.open })));
-    nav.innerHTML = items.map((i) => `<button type="button" data-section="${i.id}" title="${i.title}" aria-label="${i.title}">${svg(i.icon)}</button>`).join('');
-    const refresh = () => { for (const b of nav.children) b.setAttribute('aria-current', String(doc.getElementById(b.dataset.section).open)); };
-    nav.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-section]');
-      if (!b) return;
-      const state = openOnly(sections.map((d) => d.id), b.dataset.section);
+    const byId = Object.fromEntries(items.map((i) => [i.id, i]));
+    nav.innerHTML = items.map((i) => `<button type="button" data-section="${i.id}" title="${i.title}" aria-label="${i.title}">${svg(i.icon)}<span class="stepname">${i.short}</span></button>`).join('');
+    const tagOf = (d) => { const t = d.querySelector('summary .tag'); return t ? t.textContent : ''; };
+    const nexts = new Map();
+    for (const d of sections) {
+      const body = d.querySelector(':scope > .body');
+      if (!body) continue;
+      const row = doc.createElement('div');
+      row.className = 'nextrow'; row.hidden = true;
+      body.append(row);
+      nexts.set(d.id, row);
+    }
+    const show = (id) => {
+      const state = openOnly(sections.map((d) => d.id), id);
       for (const d of sections) d.open = state[d.id];
       rail.querySelector('.steps').scrollTop = 0;
       refresh();
-    });
+    };
+    let shown = '';
+    function refresh() {
+      const done = Object.fromEntries(sections.map((d) => [d.id, stepDone(d.id, tagOf(d))]));
+      for (const b of nav.children) {
+        const id = b.dataset.section;
+        b.setAttribute('aria-current', String(doc.getElementById(id).open));
+        if (done[id] === null) b.removeAttribute('data-done'); else b.dataset.done = String(done[id]);
+        b.setAttribute('aria-label', `${byId[id].title}${done[id] ? ', done' : ''}`);
+      }
+      const key = JSON.stringify(done);
+      if (key === shown) return; // the Next lines change only with the done set
+      shown = key;
+      for (const [id, row] of nexts) {
+        const list = nextFor(id, done);
+        row.hidden = !list.length;
+        row.innerHTML = list.length ? `<span class="nextlabel">Next:</span>${list.map((n) => `<button type="button" data-next="${n.id}">${byId[n.id] ? byId[n.id].title : n.id}</button>${n.note ? `<span class="nextnote">${n.note}</span>` : ''}`).join('')}` : '';
+      }
+    }
+    nav.addEventListener('click', (e) => { const b = e.target.closest('[data-section]'); if (b) show(b.dataset.section); });
+    rail.addEventListener('click', (e) => { const b = e.target.closest('[data-next]'); if (b) show(b.dataset.next); });
     for (const d of sections) d.addEventListener('toggle', refresh);
+    // Status tags are set by each step's own code; watching them keeps the dots and Next lines current.
+    const watch = new MutationObserver(refresh);
+    for (const d of sections) { const t = d.querySelector('summary .tag'); if (t) watch.observe(t, { childList: true, characterData: true, subtree: true }); }
     rail.prepend(nav);
     refresh();
+  }
+
+  const WIDTH_KEY = 'voxelbench.railWidth';
+
+  /** A grip on the rail's left edge: drag to widen the rail (wide tables), double-click to reset; the width is kept
+      per viewer in localStorage and applied as --rail-w on the page. Hidden by CSS on narrow screens. */
+  function wireRailResize({ doc, storage, rail, win }) {
+    const root = doc.documentElement;
+    const set = (px) => { const w = clampRailWidth(px, win.innerWidth); if (w === null) root.style.removeProperty('--rail-w'); else root.style.setProperty('--rail-w', `${w}px`); return w; };
+    let saved = null;
+    try { saved = storage ? Number(storage.getItem(WIDTH_KEY)) || null : null; } catch (e) { saved = null; }
+    if (saved) set(saved);
+    const grip = doc.createElement('div');
+    grip.className = 'railgrip'; grip.title = 'Drag to resize the panel; double-click to reset';
+    grip.setAttribute('role', 'separator'); grip.setAttribute('aria-orientation', 'vertical');
+    rail.append(grip);
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const right = rail.getBoundingClientRect().right;
+      const move = (m) => set(right - m.clientX);
+      // Listened on the document, so the drag keeps going when the pointer leaves the thin grip.
+      const up = () => {
+        doc.removeEventListener('pointermove', move); doc.removeEventListener('pointerup', up);
+        const w = parseInt(root.style.getPropertyValue('--rail-w'), 10);
+        try { if (storage && w) storage.setItem(WIDTH_KEY, String(w)); } catch (err) { /* forgets the width */ }
+        win.dispatchEvent(new Event('resize')); // views refit their canvases
+      };
+      doc.addEventListener('pointermove', move); doc.addEventListener('pointerup', up);
+    });
+    grip.addEventListener('dblclick', () => {
+      root.style.removeProperty('--rail-w');
+      try { if (storage) storage.removeItem(WIDTH_KEY); } catch (e) { /* nothing kept */ }
+      win.dispatchEvent(new Event('resize'));
+    });
   }
 
   /** A small, live copy of the main slice behind the glass look, blurred by CSS, refreshed twice a second while visible. */
@@ -110,5 +209,5 @@
     }, 500);
   }
 
-  return { SKINS, SKIN_LABELS, pickSkin, navItems, openOnly, boot, wireSettings, wireStepBar, wireBackdrop };
+  return { SKINS, SKIN_LABELS, pickSkin, navItems, stepDone, nextFor, clampRailWidth, openOnly, boot, wireSettings, wireStepBar, wireRailResize, wireBackdrop };
 }));
