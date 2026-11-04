@@ -34,6 +34,7 @@
     for (const t of TOOLS.filter((x) => x.strip)) {
       const b = document.createElement('button');
       b.textContent = t.label;
+      b.dataset.tool = t.id; // lets a look give each tool an icon
       b.title = `${t.hint} Shortcut: ${t.mark}`;
       b.setAttribute('aria-pressed', String(state.tool === t.id));
       b.addEventListener('click', () => setTool(t.id));
