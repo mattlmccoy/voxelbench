@@ -1,7 +1,7 @@
 <title>VoxelBench</title>
 <meta name="description" content="Review and measure X-ray CT scans of polymer parts in the browser; scans never leave the computer.">
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&family=Montserrat:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&family=Montserrat:wght@500;600;700&display=swap">
 <style>
 /* Layout and tokens follow the FLIR Research Interface: top bar, tool strip, center views, right rail, status bar. */
 :root {
@@ -169,128 +169,191 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
   .statusbar .right { margin-left: 0; flex-wrap: wrap; }
 }
 
-/* ---------- Glass skin (html[data-skin="glass"], vb_skin.js). Same layout and numbers; lighter type, frosted panels
-   over a soft color field, light or dark with the system. Slices and the 3D view stay on black for reading CT. ---------- */
+/* ---------- Looks (vb_skin.js): lab (above, default), mac and glass. Same numbers and controls in each; mac and glass
+   show one rail section at a time through the step bar. Slices and the 3D view stay on black for reading CT. ---------- */
+.skinicon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: -3px; }
+.skinwrap { position: relative; }
+#skinButton { display: inline-flex; align-items: center; gap: 6px; }
+.skinmenu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 100; width: 270px; padding: 6px; display: grid; gap: 2px;
+  background: var(--panel); border: 1px solid var(--line-control); border-radius: 10px; box-shadow: 0 14px 34px rgba(0, 0, 0, .4); }
+.skinmenu[hidden] { display: none; }
+.skinmenuhead { margin: 4px 10px 6px; font-size: 11px; font-weight: 600; color: var(--muted); }
+html .studio .topbar .skinmenu button { all: unset; position: relative; display: grid; gap: 1px; padding: 7px 10px 7px 30px; border-radius: 7px; cursor: pointer; }
+html .studio .topbar .skinmenu button:hover, html .studio .topbar .skinmenu button:focus-visible { background: var(--warn-bg); }
+html .studio .topbar .skinmenu button[aria-checked="true"]::before { content: "✓"; position: absolute; left: 11px; top: 7px; color: var(--accent); font-weight: 700; }
+.skintitle { font-weight: 600; color: var(--fg-strong); }
+.skinnote { font-size: 11.5px; color: var(--muted); }
+.stepbar, .skinbackdrop { display: none; }
+
+/* Shared by mac and glass: a step bar, one section at a time, a large result, grouped lists. */
+html:is([data-skin="mac"], [data-skin="glass"]) body { font: 13px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+html:is([data-skin="mac"], [data-skin="glass"]) .mono { font-size: 12px; }
+html:is([data-skin="mac"], [data-skin="glass"]) table { font-family: var(--font-ui); font-size: 12px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .wordmark { display: inline-flex; align-items: center; gap: 0; text-transform: lowercase; font: 600 15px "Montserrat", var(--font-ui); letter-spacing: -.01em; }
+html:is([data-skin="mac"], [data-skin="glass"]) .wordmark .cap { text-transform: uppercase; font-size: inherit; }
+html:is([data-skin="mac"], [data-skin="glass"]) .wordmark::before { content: ""; width: 24px; height: 24px; border-radius: 7px; flex: none;
+  background: radial-gradient(circle at 42% 38%, #fff 0 9%, #b8c0ca 22%, #59616d 34%, transparent 36%), linear-gradient(145deg, #3d4350, #101217);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .2); margin-right: 9px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .topbar { position: relative; z-index: 20; } /* blur makes it a layer: keep its menu above the views */
+html:is([data-skin="mac"], [data-skin="glass"]) .crumb { color: var(--muted); font-weight: 400; }
+html:is([data-skin="mac"], [data-skin="glass"]) .stepbar { display: flex; }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { all: unset; display: grid; place-items: center; cursor: pointer; color: var(--muted); }
+html:is([data-skin="mac"], [data-skin="glass"]) .stepbar .skinicon { width: 19px; height: 19px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail .steps > details:not([open]) { display: none; }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail details { border-bottom: 0; }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail .steps > details > summary { list-style: none; pointer-events: none; font: 600 17px/1.25 var(--font-ui); letter-spacing: -.01em; text-transform: none; padding: 18px 18px 6px; color: var(--fg-strong); }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail summary::-webkit-details-marker { display: none; }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail .step > summary .num { display: none; }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail summary .tag { font: 500 12px var(--font-ui); color: var(--muted); }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail .body { padding: 4px 18px 20px; gap: 12px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .hint { font-size: 12px; line-height: 1.5; }
+html:is([data-skin="mac"], [data-skin="glass"]) .headline { font: 600 42px/1.05 "Montserrat", var(--font-ui); letter-spacing: -.03em; }
+html:is([data-skin="mac"], [data-skin="glass"]) .headline small { font: 400 12px/1.45 var(--font-ui); letter-spacing: 0; margin-top: 8px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .kv { gap: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 55%); font-family: var(--font-ui); font-size: 12.5px; border-radius: 12px; overflow: hidden; }
+html:is([data-skin="mac"], [data-skin="glass"]) .kv:empty { display: none; }
+html:is([data-skin="mac"], [data-skin="glass"]) .kv > * { padding: 8px 12px; border-top: 1px solid var(--line); }
+html:is([data-skin="mac"], [data-skin="glass"]) .kv > :nth-child(-n + 2) { border-top: 0; }
+html:is([data-skin="mac"], [data-skin="glass"]) .kv .v { color: var(--fg-strong); font-weight: 500; }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail .sub { border: 0; border-radius: 12px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail .sub > summary { list-style: none; display: flex; font: 500 13px var(--font-ui); padding: 10px 12px; color: var(--fg); }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail .sub > summary::after { content: "›"; margin-left: auto; color: var(--muted); font-size: 16px; line-height: 1; transition: transform .15s; }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail .sub[open] > summary::after { transform: rotate(90deg); }
+html:is([data-skin="mac"], [data-skin="glass"]) .rail .sub > div { padding: 2px 12px 12px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .tablewrap { border: 0; border-radius: 12px; }
+html:is([data-skin="mac"], [data-skin="glass"]) th { font-weight: 500; }
+html:is([data-skin="mac"], [data-skin="glass"]) :is(.notice, .error) { border-radius: 9px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .panehead { border-top: 0; }
+html:is([data-skin="mac"], [data-skin="glass"]) .panehead b { display: inline-flex; align-items: center; gap: 6px; font: 600 12px var(--font-ui); }
+html:is([data-skin="mac"], [data-skin="glass"]) .panehead b::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--plane); }
+html:is([data-skin="mac"], [data-skin="glass"]) .canvasnote { border-left: 0; border-radius: 9px; background: rgba(0, 0, 0, .6); color: #fff; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+html:is([data-skin="mac"], [data-skin="glass"]) .legend { max-height: 34vh; }
+html:is([data-skin="mac"], [data-skin="glass"]) .legendhead { font: 600 13px var(--font-ui); letter-spacing: 0; text-transform: none; padding: 12px 18px 6px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .legendhead button { font: 500 12px var(--font-ui); }
+html:is([data-skin="mac"], [data-skin="glass"]) .legendbody { padding: 0 18px 14px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .legendgroup { font: 600 11px var(--font-ui); }
+html:is([data-skin="mac"], [data-skin="glass"]) .layer .chip { border-radius: 4px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .layer .lname .count { font: 12px var(--font-ui); }
+html:is([data-skin="mac"], [data-skin="glass"]) .viewtoggle button:nth-of-type(1) { border-radius: 7px 0 0 7px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .viewtoggle button:nth-of-type(2) { border-radius: 0 7px 7px 0; }
+html:is([data-skin="mac"], [data-skin="glass"]) .statusbar { font: 11px var(--font-ui); color: var(--muted); }
+html:is([data-skin="mac"], [data-skin="glass"]) .startup h1 { font: 600 24px/1.2 var(--font-ui); letter-spacing: -.015em; }
+html:is([data-skin="mac"], [data-skin="glass"]) .startup p { line-height: 1.55; }
+html:is([data-skin="mac"], [data-skin="glass"]) .progress { height: 4px; border-radius: 4px; overflow: hidden; }
+
+/* ===== Mac: a light Mac app ===== */
+html[data-skin="mac"] {
+  color-scheme: light;
+  --bg: #ececf0; --bg-deep: #f6f6f8; --panel: #ffffff; --card: #ffffff; --card-shadow: 0 0 0 .5px rgba(0, 0, 0, .08), 0 1px 2px rgba(0, 0, 0, .05);
+  --line: rgba(0, 0, 0, .085); --line-strong: rgba(0, 0, 0, .14); --line-control: rgba(0, 0, 0, .16);
+  --fg: #1d1d1f; --fg-strong: #000; --muted: #6e6e73; --accent: #0071e3; --accent-ink: #fff; --live: #28cd41;
+  --warn-bg: rgba(0, 113, 227, .10); --err: #d70015; --err-bg: rgba(255, 59, 48, .10);
+  --plane-xy: #ff9500; --plane-xz: #32ade6; --plane-yz: #ff2d55; --image-bg: #000; --scrim: rgba(0, 0, 0, .55); --radius: 7px;
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif; --font-mono: var(--font-ui);
+}
+html[data-skin="mac"] body { background: var(--bg); }
+html[data-skin="mac"] .studio { grid-template-rows: 52px 42px minmax(0, 1fr) 26px; grid-template-columns: minmax(0, 1fr) 380px; }
+html[data-skin="mac"] .topbar { background: rgba(246, 246, 248, .94); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-bottom: 1px solid var(--line); padding-inline: 16px; gap: 10px; }
+html[data-skin="mac"] :is(button:not(.layer, .link, .jump), .filebtn) { background: #fff; color: var(--fg); border: 0; border-radius: 6px; padding: 4px 11px; font-weight: 500; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .2), 0 1px 1px rgba(0, 0, 0, .06); }
+html[data-skin="mac"] :is(button:not(.layer, .link, .jump), .filebtn):hover:not(:disabled) { background: #f5f5f7; }
+html[data-skin="mac"] button.primary { background: var(--accent); color: #fff; box-shadow: 0 1px 1px rgba(0, 0, 0, .12); }
+html[data-skin="mac"] button.primary:hover:not(:disabled) { background: #0077ed; }
+html[data-skin="mac"] button[aria-pressed="true"]:not(.layer) { background: rgba(0, 113, 227, .12); color: var(--accent); box-shadow: 0 0 0 .5px rgba(0, 113, 227, .45); }
+html[data-skin="mac"] :is(select, input[type=number], input[type=text]) { background: #fff; border: 1px solid rgba(0, 0, 0, .15); border-radius: 6px; padding: 3px 7px; color: var(--fg); }
+html[data-skin="mac"] :focus-visible { outline: 3px solid rgba(0, 113, 227, .38); outline-offset: 1px; }
+html[data-skin="mac"] .strip { background: var(--bg); border-bottom: 0; padding: 0 14px; gap: 0; }
+html[data-skin="mac"] .strip button { height: 26px; padding: 0 13px; border-radius: 0; background: rgba(0, 0, 0, .06); box-shadow: none; color: #3a3a3c; }
+html[data-skin="mac"] .strip button:first-of-type { border-radius: 7px 0 0 7px; }
+html[data-skin="mac"] .strip button:last-of-type { border-radius: 0 7px 7px 0; }
+html[data-skin="mac"] .strip button[aria-pressed="true"] { background: #fff; color: var(--fg); border-radius: 6px; box-shadow: 0 1px 2px rgba(0, 0, 0, .16), 0 0 0 .5px rgba(0, 0, 0, .08); }
+html[data-skin="mac"] .strip .toolhint { margin-left: 14px; }
+html[data-skin="mac"] .center { background: transparent; gap: 12px; padding: 0 12px 12px; }
+html[data-skin="mac"] .pane { border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0, 0, 0, .14), 0 0 0 .5px rgba(0, 0, 0, .25); }
+html[data-skin="mac"] .panehead { background: #0b0b0c; color: rgba(255, 255, 255, .88); }
+html[data-skin="mac"] .panehead b { color: #fff; }
+html[data-skin="mac"] .panehead .mono { color: rgba(255, 255, 255, .5); }
+html[data-skin="mac"] .slicebar { background: #0b0b0c; accent-color: #8e8e93; }
+html[data-skin="mac"] .startup { align-self: center; max-height: 100%; overflow: auto; background: #fff; border-radius: 16px; padding: 30px 32px; box-shadow: 0 20px 50px rgba(0, 0, 0, .14), 0 0 0 .5px rgba(0, 0, 0, .1); }
+html[data-skin="mac"] .rail { background: rgba(250, 250, 252, .86); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%); border-left: 1px solid var(--line);
+  grid-template-columns: 54px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+html[data-skin="mac"] .stepbar { grid-column: 1; grid-row: 1 / -1; flex-direction: column; align-items: center; gap: 4px; padding: 12px 0; border-right: 1px solid var(--line); }
+html[data-skin="mac"] .rail .stepbar button { width: 38px; height: 38px; border-radius: 9px; }
+html[data-skin="mac"] .rail .stepbar button:hover { background: rgba(0, 0, 0, .05); }
+html[data-skin="mac"] .rail .stepbar button[aria-current="true"] { background: rgba(0, 113, 227, .12); color: var(--accent); }
+html[data-skin="mac"] .rail .steps { grid-column: 2; grid-row: 1; }
+html[data-skin="mac"] .legend { grid-column: 2; grid-row: 2; background: transparent; border-top: 1px solid var(--line); }
+html[data-skin="mac"] :is(.kv, .rail .sub, .tablewrap) { background: var(--card); box-shadow: var(--card-shadow); }
+html[data-skin="mac"] th { background: #f6f6f8; }
+html[data-skin="mac"] .draftpanel { background: rgba(0, 113, 227, .07); border-bottom: 1px solid var(--line); }
+html[data-skin="mac"] .viewtoggle button[aria-pressed="true"] { background: var(--accent); color: #fff; box-shadow: none; }
+html[data-skin="mac"] .statusbar { background: var(--bg-deep); border-top: 1px solid var(--line); }
+html[data-skin="mac"] .dot.live { box-shadow: none; }
+html[data-skin="mac"] .skinmenu { background: rgba(255, 255, 255, .94); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); border: 0; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .15), 0 12px 32px rgba(0, 0, 0, .18); }
+
+/* ===== Glass: frosted panels floating on a blurred copy of the scan ===== */
 html[data-skin="glass"] {
   color-scheme: dark;
-  --bg: #0a0e14; --bg-deep: rgba(255, 255, 255, .045); --panel: transparent; --field: rgba(255, 255, 255, .06);
-  --glass: rgba(24, 29, 38, .52); --glass-strong: rgba(18, 22, 30, .74); --glass-edge: rgba(255, 255, 255, .10); --glass-hi: rgba(255, 255, 255, .08);
-  --glass-shadow: 0 18px 40px rgba(0, 0, 0, .35); --hover: rgba(255, 255, 255, .10); --control-shadow: none;
-  --line: rgba(255, 255, 255, .07); --line-strong: rgba(255, 255, 255, .12); --line-control: rgba(255, 255, 255, .16);
-  --fg: #e3e7ee; --fg-strong: #ffffff; --muted: #98a2b3; --accent: #0a84ff; --accent-ink: #ffffff; --accent-glow: rgba(10, 132, 255, .35);
-  --live: #30d158; --warn: #ffd60a; --warn-tint: rgba(255, 214, 10, .12); --warn-bg: rgba(10, 132, 255, .16); --err: #ff453a; --err-bg: rgba(255, 69, 58, .14);
-  --plane-xy: #ff9f0a; --plane-xz: #64d2ff; --plane-yz: #ff6482;
-  --image-bg: #000; --scrim: rgba(10, 14, 20, .55); --radius: 9px; --radius-lg: 18px;
-  --mesh: radial-gradient(1100px 760px at 8% -12%, rgba(10, 132, 255, .24), transparent 62%),
-    radial-gradient(900px 680px at 104% 6%, rgba(100, 210, 255, .13), transparent 60%),
-    radial-gradient(1000px 700px at 60% 118%, rgba(255, 159, 10, .10), transparent 60%);
-  --font-ui: "Montserrat", system-ui, -apple-system, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --bg: #07090c; --bg-deep: rgba(255, 255, 255, .06); --panel: rgba(36, 40, 48, .62); --card: rgba(255, 255, 255, .075);
+  --line: rgba(255, 255, 255, .09); --line-strong: rgba(255, 255, 255, .16); --line-control: rgba(255, 255, 255, .2);
+  --fg: rgba(255, 255, 255, .9); --fg-strong: #fff; --muted: rgba(255, 255, 255, .6); --accent: #fff; --accent-ink: #000; --live: #30d158;
+  --warn-bg: rgba(255, 255, 255, .16); --err: #ff6961; --err-bg: rgba(255, 69, 58, .18);
+  --plane-xy: #ff9f0a; --plane-xz: #64d2ff; --plane-yz: #ff6482; --image-bg: #000; --scrim: rgba(0, 0, 0, .5); --radius: 999px;
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif; --font-mono: var(--font-ui);
+  --glass: rgba(255, 255, 255, .085); --glass-blur: blur(40px) saturate(180%);
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, .26), inset 0 0 0 1px rgba(255, 255, 255, .09), 0 22px 54px rgba(0, 0, 0, .38);
 }
-@media (prefers-color-scheme: light) {
-  html[data-skin="glass"] {
-    color-scheme: light;
-    --bg: #eef1f6; --bg-deep: rgba(255, 255, 255, .55); --field: rgba(255, 255, 255, .94); --control-shadow: 0 1px 2px rgba(15, 23, 42, .10);
-    --glass: rgba(255, 255, 255, .58); --glass-strong: rgba(255, 255, 255, .80); --glass-edge: rgba(255, 255, 255, .85); --glass-hi: rgba(255, 255, 255, .95);
-    --glass-shadow: 0 18px 44px rgba(31, 45, 72, .14); --hover: rgba(15, 23, 42, .06);
-    --line: rgba(15, 23, 42, .08); --line-strong: rgba(15, 23, 42, .14); --line-control: rgba(15, 23, 42, .20);
-    --fg: #1f2633; --fg-strong: #0b1018; --muted: #5d6779; --accent: #007aff; --accent-glow: rgba(0, 122, 255, .28);
-    --live: #34c759; --warn: #b07800; --warn-tint: rgba(255, 204, 0, .16); --warn-bg: rgba(0, 122, 255, .10); --err: #d70015; --err-bg: rgba(255, 59, 48, .10);
-    --plane-xy: #ff9500; --plane-xz: #32ade6; --plane-yz: #ff2d55; --scrim: rgba(0, 0, 0, .5);
-    --mesh: radial-gradient(1100px 760px at 6% -14%, rgba(0, 122, 255, .16), transparent 62%),
-      radial-gradient(900px 680px at 106% 4%, rgba(90, 200, 250, .18), transparent 60%),
-      radial-gradient(1000px 720px at 58% 120%, rgba(255, 149, 0, .12), transparent 60%);
-  }
-}
-html[data-skin="glass"] body { background: var(--mesh), var(--bg); background-attachment: fixed; font: 13px/1.5 var(--font-ui); -webkit-font-smoothing: antialiased; font-feature-settings: "tnum" 1; }
-/* A faint grain keeps the color field from banding and gives the glass something to diffuse. */
-html[data-skin="glass"] body::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .06; mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
-html[data-skin="glass"] .studio { position: relative; padding: 10px; gap: 10px; grid-template-rows: 48px 40px minmax(0, 1fr) 32px; grid-template-columns: minmax(0, 1fr) 396px; }
-html[data-skin="glass"] :is(.topbar, .strip, .rail, .statusbar) {
-  background: var(--glass); -webkit-backdrop-filter: blur(28px) saturate(170%); backdrop-filter: blur(28px) saturate(170%);
-  border: 1px solid var(--glass-edge); border-radius: var(--radius-lg); box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow);
-}
-html[data-skin="glass"] .topbar { padding-inline: 16px; gap: 12px; }
-html[data-skin="glass"] .rail { overflow: hidden; }
-html[data-skin="glass"] .wordmark { font: 700 13px var(--font-ui); letter-spacing: .2em; }
-html[data-skin="glass"] .wordmark .cap { font-size: inherit; color: var(--accent); }
-html[data-skin="glass"] .crumb { font-weight: 500; color: var(--muted); }
-html[data-skin="glass"] .mono, html[data-skin="glass"] table { font-family: var(--font-mono); }
+html[data-skin="glass"] body { background: radial-gradient(900px 700px at 30% 20%, #27303e, transparent 62%), radial-gradient(900px 700px at 80% 92%, #1b2830, transparent 60%), var(--bg); color: var(--fg); }
+html[data-skin="glass"] .skinbackdrop { display: block; position: fixed; left: -8%; top: -8%; width: 116%; height: 116%; z-index: 0; pointer-events: none; filter: blur(46px) saturate(1.5) brightness(.72); opacity: .95; }
+html[data-skin="glass"] .studio { display: block; position: relative; z-index: 1; height: 100%; }
+html[data-skin="glass"] :is(.topbar, .strip, .rail, .statusbar, .skinmenu) { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 0; box-shadow: var(--glass-edge); }
+html[data-skin="glass"] .topbar { position: absolute; z-index: 20; top: 16px; left: 16px; right: 412px; height: 52px; border-radius: 26px; padding: 0 12px 0 16px; gap: 10px; }
+html[data-skin="glass"] .strip { position: absolute; top: 84px; left: 16px; width: 72px; height: auto; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; border-radius: 24px; }
+html[data-skin="glass"] .strip button { height: 40px; padding: 0; border-radius: 16px; font-size: 11.5px; }
+html[data-skin="glass"] .strip .toolhint { display: none; }
+html[data-skin="glass"] .center { position: absolute; top: 84px; left: 104px; right: 412px; bottom: 66px; background: transparent; gap: 14px; grid-template-rows: minmax(0, 1fr) 132px; }
+html[data-skin="glass"] .pane { border-radius: 22px; overflow: hidden; box-shadow: 0 26px 70px rgba(0, 0, 0, .55), 0 0 0 1px rgba(255, 255, 255, .08); }
+html[data-skin="glass"] .panehead { background: rgba(0, 0, 0, .5); color: #fff; padding: 0 12px; }
+html[data-skin="glass"] .panehead .mono { color: rgba(255, 255, 255, .55); }
+html[data-skin="glass"] .slicebar { background: rgba(0, 0, 0, .55); accent-color: #fff; }
+html[data-skin="glass"] .rail { position: absolute; top: 16px; right: 16px; bottom: 16px; width: 380px; border-radius: 30px; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+html[data-skin="glass"] .stepbar { grid-row: 1; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+html[data-skin="glass"] .rail .stepbar button { width: 34px; height: 34px; border-radius: 50%; color: rgba(255, 255, 255, .7); }
+html[data-skin="glass"] .rail .stepbar button:hover { background: rgba(255, 255, 255, .1); }
+html[data-skin="glass"] .rail .stepbar button[aria-current="true"] { background: rgba(255, 255, 255, .24); color: #fff; }
+html[data-skin="glass"] .rail .steps { grid-row: 2; }
+html[data-skin="glass"] .legend { grid-row: 3; background: transparent; border-top: 1px solid var(--line); }
+html[data-skin="glass"] .statusbar { position: absolute; left: 104px; right: 412px; bottom: 16px; height: 36px; border-radius: 18px; padding: 0 16px; }
+html[data-skin="glass"] :is(button:not(.layer, .link, .jump), .filebtn) { background: rgba(255, 255, 255, .14); color: #fff; border: 0; border-radius: 999px; padding: 6px 14px; font-weight: 500; box-shadow: none; }
+html[data-skin="glass"] :is(button:not(.layer, .link, .jump), .filebtn):hover:not(:disabled) { background: rgba(255, 255, 255, .22); }
+html[data-skin="glass"] button.primary { background: rgba(255, 255, 255, .94); color: #000; font-weight: 600; }
+html[data-skin="glass"] button.primary:hover:not(:disabled) { background: #fff; }
+html[data-skin="glass"] button[aria-pressed="true"]:not(.layer) { background: rgba(255, 255, 255, .3); color: #fff; }
+html[data-skin="glass"] :is(select, input[type=number], input[type=text]) { background: rgba(0, 0, 0, .28); border: 1px solid rgba(255, 255, 255, .14); border-radius: 9px; padding: 4px 8px; color: #fff; }
+html[data-skin="glass"] :focus-visible { outline: 2px solid rgba(255, 255, 255, .7); outline-offset: 2px; }
+html[data-skin="glass"] :is(.kv, .rail .sub, .tablewrap) { background: var(--card); }
+html[data-skin="glass"] .kv .v { color: #fff; }
+html[data-skin="glass"] .setting .v { color: #fff; }
+html[data-skin="glass"] th { background: rgba(24, 27, 33, .82); color: var(--muted); }
+html[data-skin="glass"] .draftpanel { background: rgba(255, 255, 255, .08); border-bottom: 1px solid var(--line); }
+html[data-skin="glass"] .notice { background: rgba(255, 214, 10, .14); color: #ffd60a; }
+html[data-skin="glass"] .viewtoggle button[aria-pressed="true"] { background: rgba(255, 255, 255, .92); color: #000; }
+html[data-skin="glass"] .startup { align-self: center; justify-self: center; max-height: 100%; overflow: auto; background: rgba(255, 255, 255, .09); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border-radius: 30px; padding: 32px 34px; box-shadow: var(--glass-edge); }
+html[data-skin="glass"] .skinmenu { background: rgba(40, 44, 52, .6); border-radius: 18px; }
+html[data-skin="glass"] .studio .topbar .skinmenu button { border-radius: 12px; }
+html[data-skin="glass"] .dot.live { box-shadow: 0 0 8px rgba(48, 209, 88, .7); }
 
-html[data-skin="glass"] button, html[data-skin="glass"] .filebtn { border-radius: 999px; padding: 5px 13px; border: 1px solid var(--line-control); background: var(--field); box-shadow: var(--control-shadow); transition: background .15s, border-color .15s, box-shadow .15s, transform .1s; }
-html[data-skin="glass"] button:hover:not(:disabled) { background: var(--hover); border-color: var(--line-strong); }
-html[data-skin="glass"] button:active:not(:disabled) { transform: scale(.98); }
-html[data-skin="glass"] :is(button.primary, .filebtn) { background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 600; box-shadow: 0 6px 16px var(--accent-glow); }
-html[data-skin="glass"] :is(button.primary, .filebtn):hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
-html[data-skin="glass"] button[aria-pressed="true"] { background: var(--warn-bg); border-color: var(--accent); color: var(--accent); }
-html[data-skin="glass"] :is(select, input[type=number], input[type=text]) { background: var(--field); border: 1px solid var(--line-control); border-radius: 8px; padding: 4px 8px; }
-html[data-skin="glass"] :focus-visible { outline: 3px solid var(--accent-glow); outline-offset: 1px; }
-html[data-skin="glass"] .strip { padding: 0 10px; gap: 6px; }
-html[data-skin="glass"] .strip button { height: 28px; }
-
-html[data-skin="glass"] .center { background: transparent; gap: 10px; }
-html[data-skin="glass"] .pane { border-radius: 16px; overflow: hidden; border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow); }
-html[data-skin="glass"] .panehead { background: var(--glass-strong); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-top: 0; color: var(--fg); padding: 0 10px; }
-html[data-skin="glass"] .panehead b { font: 600 12px var(--font-ui); letter-spacing: .02em; display: inline-flex; align-items: center; gap: 6px; }
-html[data-skin="glass"] .panehead b::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--plane); box-shadow: 0 0 8px var(--plane); }
-html[data-skin="glass"] .slicebar { background: var(--glass-strong); }
-html[data-skin="glass"] .canvasnote { background: var(--scrim); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 0; border-radius: 10px; color: #fff; padding: 6px 10px; }
-html[data-skin="glass"] .startup { align-self: center; max-height: 100%; overflow: auto; background: var(--glass-strong); -webkit-backdrop-filter: blur(34px) saturate(170%); backdrop-filter: blur(34px) saturate(170%);
-  border: 1px solid var(--glass-edge); border-radius: 26px; box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow); padding: 30px 32px; gap: 14px; max-width: 680px; }
-html[data-skin="glass"] .startup h1 { font: 600 27px/1.2 var(--font-ui); letter-spacing: -.01em; }
-html[data-skin="glass"] .startup p { line-height: 1.6; }
-html[data-skin="glass"] .progress { height: 4px; border-radius: 4px; overflow: hidden; }
-
-html[data-skin="glass"] .rail details { border-bottom: 1px solid var(--line); }
-html[data-skin="glass"] .rail summary { font: 600 13px var(--font-ui); letter-spacing: 0; text-transform: none; padding: 12px 16px; }
-html[data-skin="glass"] .rail summary:hover { background: var(--hover); }
-html[data-skin="glass"] .rail summary .tag { font: 500 11px var(--font-ui); }
-html[data-skin="glass"] .rail .step > summary .num { width: 22px; height: 22px; border: 0; background: var(--hover); font: 600 11px var(--font-ui); color: var(--muted); }
-html[data-skin="glass"] .rail .step[open] > summary .num { background: var(--accent); color: var(--accent-ink); box-shadow: 0 4px 12px var(--accent-glow); }
-html[data-skin="glass"] .rail .body { padding: 2px 16px 16px; gap: 10px; }
-html[data-skin="glass"] .rail details[open] > .body { animation: vb-rise .22s ease-out; }
-html[data-skin="glass"] .rail .sub { border: 1px solid var(--line); border-radius: 12px; background: var(--bg-deep); }
-html[data-skin="glass"] .rail .sub > summary { font: 500 12.5px var(--font-ui); padding: 8px 10px; }
-html[data-skin="glass"] .headline { font: 600 24px/1.2 var(--font-ui); letter-spacing: -.01em; }
-html[data-skin="glass"] .headline small { font: 500 12px var(--font-ui); margin-top: 2px; }
-html[data-skin="glass"] .kv .v { color: var(--fg-strong); }
-html[data-skin="glass"] .setting .v { color: var(--accent); }
-html[data-skin="glass"] .hint { line-height: 1.55; }
-html[data-skin="glass"] .tablewrap { border: 1px solid var(--line); border-radius: 12px; }
-html[data-skin="glass"] th { background: var(--glass-strong); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); font-weight: 500; }
-html[data-skin="glass"] :is(th, td) { padding: 4px 8px; }
-html[data-skin="glass"] .draftpanel { border-bottom: 1px solid var(--line); background: var(--warn-bg); padding: 12px 16px; }
-html[data-skin="glass"] .notice { background: var(--warn-tint); color: var(--warn); border-radius: 10px; }
-html[data-skin="glass"] .error { border-radius: 10px; }
-
-html[data-skin="glass"] .legend { background: transparent; border-top: 1px solid var(--line-strong); max-height: 32vh; } /* the open step gets the room */
-html[data-skin="glass"] .legendhead { font: 600 12.5px var(--font-ui); letter-spacing: 0; text-transform: none; padding: 10px 16px 6px; }
-html[data-skin="glass"] .legendbody { padding: 0 16px 12px; }
-html[data-skin="glass"] .legendgroup { font: 600 11px var(--font-ui); letter-spacing: .04em; }
-html[data-skin="glass"] .layer .chip { border-radius: 4px; }
-html[data-skin="glass"] .viewtoggle button { border-radius: 0; }
-html[data-skin="glass"] .viewtoggle button:nth-of-type(1) { border-radius: 999px 0 0 999px; }
-html[data-skin="glass"] .viewtoggle button:nth-of-type(2) { border-radius: 0 999px 999px 0; border-left: 0; }
-html[data-skin="glass"] .viewtoggle button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-html[data-skin="glass"] .legend.collapsed .layer:hover::after, html[data-skin="glass"] .legend.collapsed .layer:focus-visible::after { background: var(--glass-strong); border-radius: 10px; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
-html[data-skin="glass"] .statusbar { font-size: 11px; color: var(--muted); padding-inline: 16px; }
-html[data-skin="glass"] .statusbar button { padding: 0 10px; height: 22px; line-height: 20px; }
-html[data-skin="glass"] * { scrollbar-width: thin; scrollbar-color: var(--line-control) transparent; }
-
-/* One soft entrance: panels settle in, top to bottom. */
-/* Position only, never opacity: a page that is hidden or captured before the animation runs still shows everything. */
-@keyframes vb-rise { from { transform: translateY(6px); } to { transform: none; } }
-html[data-skin="glass"] :is(.topbar, .strip, .center, .rail, .statusbar) { animation: vb-rise .45s cubic-bezier(.2, .7, .2, 1) both; }
-html[data-skin="glass"] .strip { animation-delay: .04s; }
-html[data-skin="glass"] .center { animation-delay: .08s; }
-html[data-skin="glass"] .rail { animation-delay: .12s; }
-html[data-skin="glass"] .statusbar { animation-delay: .16s; }
-@media (prefers-reduced-motion: reduce) { html[data-skin="glass"] *, html[data-skin="glass"] *::before { animation: none !important; transition: none !important; } }
 @media (max-width: 900px) {
-  html[data-skin="glass"] .studio { padding: 8px; gap: 8px; grid-template-rows: repeat(5, auto); grid-template-columns: minmax(0, 1fr); }
-  html[data-skin="glass"] .startup { padding: 22px 18px; border-radius: 20px; align-self: start; }
+  html:is([data-skin="mac"], [data-skin="glass"]) .studio { display: grid; padding: 8px; gap: 8px; grid-template-rows: repeat(5, auto); grid-template-columns: minmax(0, 1fr); }
+  html:is([data-skin="mac"], [data-skin="glass"]) :is(.topbar, .strip, .center, .rail, .statusbar) { position: static; inset: auto; width: auto; height: auto; }
+  html:is([data-skin="mac"], [data-skin="glass"]) .center { grid-template: 380px repeat(3, 240px) / minmax(0, 1fr); padding: 0; }
+  html:is([data-skin="mac"], [data-skin="glass"]) .strip { flex-direction: row; flex-wrap: wrap; }
+  html:is([data-skin="mac"], [data-skin="glass"]) .rail { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; border-radius: 18px; }
+  html:is([data-skin="mac"], [data-skin="glass"]) .stepbar { grid-row: 1; grid-column: 1; flex-direction: row; justify-content: space-between; padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--line); }
+  html:is([data-skin="mac"], [data-skin="glass"]) :is(.rail .steps, .legend) { grid-column: 1; grid-row: auto; }
+  html:is([data-skin="mac"], [data-skin="glass"]) .startup { align-self: start; padding: 22px 18px; }
+  html[data-skin="mac"] .topbar, html[data-skin="mac"] .statusbar { border-radius: 12px; }
 }
+@media (prefers-reduced-motion: reduce) { html:is([data-skin="mac"], [data-skin="glass"]) * { transition: none !important; } }
 </style>
 <script src="vb_skin.js"></script>
 <script>VBSkin.boot({ doc: document, storage: (() => { try { return window.localStorage; } catch (e) { return null; } })(), url: location.search });</script>
@@ -304,7 +367,7 @@ html[data-skin="glass"] .statusbar { animation-delay: .16s; }
     <label class="filebtn">Open project<input type="file" id="projectFile" accept=".json,application/json"></label>
     <button id="saveProject" hidden title="Save regions, annotations and runs to a file kept next to the scan">Save project</button>
     <span class="mono muted projectnote" id="projectNote" role="status"></span>
-    <button id="skinToggle" type="button">Glass look</button>
+    <span class="skinwrap"><button id="skinButton" type="button" title="Appearance: Lab, Mac or Glass"><svg class="skinicon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.3"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M3.4 12.6l1.3-1.3M11.3 4.7l1.3-1.3"/></svg><span>Appearance</span></button><div class="skinmenu" id="skinMenu" role="menu" hidden></div></span>
     <span class="conn mono" role="status"><span class="dot" id="dbDot"></span><span id="saveState"></span></span>
   </header>
 
@@ -623,5 +686,11 @@ html[data-skin="glass"] .statusbar { animation-delay: .16s; }
 <script src="ct_sheet.js"></script>
 <script src="ct_sheetpages.js"></script>
 <script src="ct_sheetexport.js"></script>
-<script>VBSkin.wire({ doc: document, storage: (() => { try { return window.localStorage; } catch (e) { return null; } })(), button: document.getElementById('skinToggle') });
+<script>
+(() => {
+  const storage = (() => { try { return window.localStorage; } catch (e) { return null; } })();
+  VBSkin.wireSettings({ doc: document, storage, button: document.getElementById('skinButton'), menu: document.getElementById('skinMenu') });
+  VBSkin.wireStepBar({ doc: document, rail: document.getElementById('rail') });
+  VBSkin.wireBackdrop({ doc: document, source: () => document.querySelector('#paneXY .canvasbox canvas') });
+})();
 CTApp.start();</script>
