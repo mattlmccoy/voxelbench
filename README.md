@@ -30,7 +30,8 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
   saved runs; batch runs over every scan in a folder with one summary CSV; view bookmarks; named setting presets.
 - Exports: pore, region, zone, CAD-deviation, filler, wall and batch tables (CSV), a slice image (PNG) and a review sheet (PDF).
 
-Every reported number carries a provenance line: the voxel size it was computed at, any binning, the calibration
+Every quantity is checked against an independent Python (scipy) reference on the same scans; see
+[docs/REFERENCE.md](docs/REFERENCE.md). Every reported number carries a provenance line: the voxel size it was computed at, any binning, the calibration
 status and the VoxelBench version.
 
 ## Start

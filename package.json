@@ -6,6 +6,7 @@
   "private": true,
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "test:local": "NODE_OPTIONS=--max-old-space-size=12000 node --test tests/local/*.test.js"
+    "test:local": "NODE_OPTIONS=--max-old-space-size=12000 node --test tests/local/*.test.js",
+    "reference": "node tools/reference/export_cases.js .reference && python3 tools/reference/vb_reference.py .reference"
   }
 }
