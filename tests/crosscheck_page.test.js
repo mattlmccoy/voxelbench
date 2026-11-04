@@ -101,3 +101,12 @@ test('masks that barely overlap suggest a flipped export or another slice order'
   assert.match(r.insights.join(' '), /flipped or in another slice order/);
   assert.doesNotMatch(M.crosscheckRead(cmp(), 'Dragonfly').insights.join(' '), /flipped/);
 });
+
+test('a near-perfect Dice keeps its digits, and a zero difference has no sign', () => {
+  const r = M.crosscheckRead(cmp({ a: { voxels: 11340707, percent: 5.2536318 }, b: { voxels: 11340701, percent: 5.2536291 }, dice: 0.99999956 }), 'Dragonfly');
+  const row = (k) => r.rows.find((x) => x[0] === k)[1];
+  assert.equal(row('Dice'), '0.9999996');
+  assert.equal(row('Difference'), '0.000 points');
+  assert.match(r.insights[0], /Dice 0\.9999996/);
+  assert.equal(M.crosscheckRead(cmp({ dice: 1 }), 'Dragonfly').rows.find((x) => x[0] === 'Dice')[1], '1 (identical)');
+});

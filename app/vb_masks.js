@@ -263,13 +263,17 @@
   const n0 = (v) => Math.round(v).toLocaleString('en-US');
 
   /** Rows and plain-language causes for a comparison of VoxelBench (a) with another tool (b). */
+  /** Dice to read: exact 1 says so; within 1e-4 of 1 keeps seven digits, so near-identical never shows as 1. */
+  const diceText = (d) => (d === 1 ? '1 (identical)' : d >= 0.9999 ? d.toFixed(7) : d.toFixed(4));
+
   function crosscheckRead(c, other) {
     const diff = c.b.percent - c.a.percent;
+    const diffText = Math.abs(diff) < 0.0005 ? '0.000' : `${diff >= 0 ? '+' : ''}${diff.toFixed(3)}`;
     const rows = [['VoxelBench porosity', `${c.a.percent.toFixed(3)} %`], [`${other} porosity`, `${c.b.percent.toFixed(3)} %`],
-      ['Difference', `${diff >= 0 ? '+' : ''}${diff.toFixed(3)} points`], ['Dice', c.dice === null ? 'n/a' : c.dice.toFixed(4)],
+      ['Difference', `${diffText} points`], ['Dice', c.dice === null ? 'n/a' : diceText(c.dice)],
       ['Pore voxels in both', n0(c.both_voxels)], ['Only VoxelBench', n0(c.only_a.voxels)], [`Only ${other}`, n0(c.only_b.voxels)]];
     if (c.dice === null) return { rows, insights: ['Neither mask has any pore voxels.'] };
-    const d = c.dice.toFixed(4);
+    const d = diceText(c.dice);
     const insights = [c.dice >= AGREE ? `The masks agree (Dice ${d}): the two tools mark the same voxels as pores.`
       : c.dice >= CLOSE ? `The masks are close (Dice ${d}) but not the same; the causes are below.` : `The masks disagree (Dice ${d}); the causes are below.`];
     if (c.dice < FLIPPED) insights.push('The masks barely overlap: the export may be flipped or in another slice order. Check that the first page of the mask matches the scan\'s first file, the right way up.');
