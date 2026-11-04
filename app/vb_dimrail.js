@@ -26,9 +26,10 @@
     $('dimWrap').hidden = !lines.length;
     const table = $('dimTable');
     table.textContent = '';
+    table.style.width = '100%';
     if (!lines.length) return;
     const head = table.insertRow();
-    for (const h of ['Line', 'Nominal (mm)', '− / + tol (mm)']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
+    for (const h of ['Line', 'Nominal (mm)', '− / + tol (mm)']) { const th = document.createElement('th'); th.textContent = h; if (h === 'Line') th.style.textAlign = 'left'; head.append(th); }
     let checked = 0, passed = 0;
     for (const a of lines) {
       const c = CT.dimensionCheck(a.length_mm, a.nominal_mm, a.tol_minus_mm ?? 0, a.tol_plus_mm ?? 0);
@@ -37,7 +38,9 @@
       const name = tr.insertCell();
       name.textContent = a.note || `${a.plane} ${a.slice}`;
       name.title = name.textContent;
-      Object.assign(name.style, { maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' });
+      // The name takes the room the inputs leave and ends in "…" (width 100 % with max-width 0), so the table never runs
+      // past the rail, whatever the look's cell padding or the rail's width.
+      Object.assign(name.style, { width: '100%', maxWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' });
       const field = (key, title, width) => {
         const input = document.createElement('input');
         input.type = 'text'; input.inputMode = 'decimal'; input.style.width = width; input.title = title; // no spinner: the value stays readable in a narrow rail

@@ -65,4 +65,12 @@ page 1; with the density calibration, the Dragonfly comparison and the saved reg
 - `app/ct_sheetfindings.js` draws it; the captions that pointed to "page 2" now name the slice page.
 - Verified on Sample 2 (pores, a region, walls, the Dragonfly stand-in): Findings on page 2 of 4, page 1 points to
   the slices on page 3, the rainbow page is 5 of 5 and points to page 3; rail and sheet show the same 8 pore and 3 wall
-  reads. The calibration section is covered by unit tests only (no phantoms on Sample 2).
+  reads. Calibration section then checked on the phantom demo scan: rods outlined, solid matrix 1.007 g/cm³ (truth
+  1.008), bulk 0.982, Archimedes 0.981, matching the step 5 panel; phantoms are not listed as saved regions.
+
+## Follow-up: dimensions table width (2026-11-04)
+
+At the default rail the Mac look ran the table 6 px past its box (fixed 110 px name column, wider Mac cell padding).
+The name column now takes the width the inputs leave and ends in "…" (`width: 100%`, `max-width: 0`). Checked in all
+three looks: fits at the default rail and at phone width; at the 320 px minimum rail it scrolls inside its own box,
+as the other wide tables do.
