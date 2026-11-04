@@ -36,19 +36,20 @@
     const h = sheet.histogram;
     if (h) {
       const centers = h.volume_mm3.map((_, k) => 100 * (h.low + (k + 0.5) * h.step)), v = h.volume_mm3.map((x) => x / 1000);
-      const th = 100 * state.zones.threshold;
+      // Zones may never have run, or been refused: then there is no saved threshold to draw.
+      const th = state.zones && state.zones.threshold != null ? 100 * state.zones.threshold : null;
       const a2 = G.axes(ctx, { x: x0 + hw + gap, y: y + 0.6, w: hw, h: 1.3 }, { xlim: [-30, 30], ylim: [0, Math.max(...v) * 1.08] });
-      G.step(a2, centers, v, 100 * h.step, { fills: [{ keep: (x) => x >= th, color: '#ff8ad8', alpha: 0.55 }, { keep: (x) => x <= -8, color: '#6e8cff', alpha: 0.45 }] });
-      G.vline(a2, th);
+      G.step(a2, centers, v, 100 * h.step, { fills: [...(th !== null ? [{ keep: (x) => x >= th, color: '#ff8ad8', alpha: 0.55 }] : []), { keep: (x) => x <= -8, color: '#6e8cff', alpha: 0.45 }] });
+      if (th !== null) G.vline(a2, th);
       if (sheet.automaticThreshold != null) G.vline(a2, 100 * sheet.automaticThreshold, { dash: [4, 2.5] });
       G.vline(a2, -8, { dash: [1.2, 2] });
       G.frame(a2, { xlabel: 'Gray offset from end baseline (%)', ylabel: 'Volume per 1 % bin (cm³)', letter: 'b', letterAt: 'tl', xticks: [-30, -20, -10, 0, 10, 20, 30] });
-      G.legend(ctx, [{ label: 'Saved threshold', kind: 'line', color: '#000' }, { label: 'Histogram minimum', kind: 'dash', color: '#000' }, { label: 'Low-gray cutoff', kind: 'dot', color: '#000' }], { x: a2.box.x + a2.box.w / 2, y: y + 0.28, align: 'center' }, { size: 7 });
+      G.legend(ctx, [...(th !== null ? [{ label: 'Saved threshold', kind: 'line', color: '#000' }] : []), { label: 'Histogram minimum', kind: 'dash', color: '#000' }, { label: 'Low-gray cutoff', kind: 'dot', color: '#000' }], { x: a2.box.x + a2.box.w / 2, y: y + 0.28, align: 'center' }, { size: 7 });
     }
     const mid = sheet.sweep.find((s) => s.parameter === 'poreThreshold' && s.value === sheet.midpoint);
     const all = [base.all_void_percent, ...sheet.sweep.map((s) => s.all_void_percent)];
     const span = (p) => { const vals = [state.settings[p], ...sheet.sweep.filter((s) => s.parameter === p).map((s) => s.value)]; return `${Math.min(...vals)} to ${Math.max(...vals)}`; };
-    S.caption(ctx, S.MARGIN, y + 2.42, `(a) Total porosity against pore threshold, other parameters at saved values; circle: saved threshold (${state.settings.poreThreshold}), ${f2(base.all_void_percent)} %.${mid ? ` At the air-matrix midpoint (${Math.round(sheet.airGray)} and ${Math.round(sheet.solidGray)}; threshold ${sheet.midpoint}, ISO 50): ${f2(mid.all_void_percent)} %.` : ''} Over the sweep (pore threshold ${span('poreThreshold')}, mask threshold ${span('bodyThreshold')}; smoothing not swept in the app): ${Math.min(...all).toFixed(1)} to ${Math.max(...all).toFixed(1)} %.${h ? ` (b) Distribution of gray offset over the sample volume at least 1 mm below the surface, ${f2(sheet.coarseVoxelMm)} mm grid; gray offset is the local matrix gray relative to ${window.CTZones.baselineText(state.zones && state.zones.method, state.zones && state.zones.axis)}. Shaded pink: high-gray zone, above the saved threshold; dashed: histogram minimum; shaded blue: low-gray zone, below −8 %.` : ''}`);
+    S.caption(ctx, S.MARGIN, y + 2.42, `(a) Total porosity against pore threshold, other parameters at saved values; circle: saved threshold (${state.settings.poreThreshold}), ${f2(base.all_void_percent)} %.${mid ? ` At the air-matrix midpoint (${Math.round(sheet.airGray)} and ${Math.round(sheet.solidGray)}; threshold ${sheet.midpoint}, ISO 50): ${f2(mid.all_void_percent)} %.` : ''} Over the sweep (pore threshold ${span('poreThreshold')}, mask threshold ${span('bodyThreshold')}; smoothing not swept in the app): ${Math.min(...all).toFixed(1)} to ${Math.max(...all).toFixed(1)} %.${h ? ` (b) Distribution of gray offset over the sample volume at least 1 mm below the surface, ${f2(sheet.coarseVoxelMm)} mm grid; gray offset is the local matrix gray relative to ${window.CTZones.baselineText(state.zones && state.zones.method, state.zones && state.zones.axis)}. ${state.zones && state.zones.threshold != null ? 'Shaded pink: high-gray zone, above the saved threshold' : 'Zones were not segmented, so no threshold is drawn'}; dashed: histogram minimum; shaded blue: low-gray zone, below −8 %.` : ''}`);
     y += 3.3;
     S.heading(ctx, S.MARGIN, y, 'Dimensions');
     const e = sheet.extents;

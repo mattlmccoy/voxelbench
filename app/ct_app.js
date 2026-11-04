@@ -497,16 +497,30 @@ window.CTApp = (function () {
     return s;
   }
 
+  // The generated test scans. The dense band has 0.1 mm voxels so its pore-free ends are deep enough for a zone baseline.
+  const DEMOS = {
+    scan: () => window.VBSynthetic.makeScan({}),
+    dense: () => window.VBSynthetic.makeScan({ denseBand: true, voxelMm: 0.1 }),
+    phantoms: () => window.VBSynthetic.makeScan({ phantoms: true }),
+    filler: () => window.VBSynthetic.makeScan({ filler: true }),
+    cad: () => { state.cadDemo = { name: 'synthetic_part.stl', buffer: window.VBSynthetic.partStl() }; return window.VBSynthetic.makePart({ scale: 0.97, bendMm: 0.12 }); },
+  };
+
+  /** Opens a generated test scan; returns its known answers (truth). */
+  function openDemo(kind) {
+    const demo = DEMOS[kind]();
+    openFiles(demo.files);
+    return demo.truth;
+  }
+
   function start() {
     $('folder').addEventListener('change', (e) => openFiles(e.target.files));
     $('saveProject').addEventListener('click', saveProject);
-    $('trySynthetic').addEventListener('click', () => openFiles(window.VBSynthetic.makeScan({}).files));
-    $('trySyntheticPhantoms').addEventListener('click', () => openFiles(window.VBSynthetic.makeScan({ phantoms: true }).files));
-    $('trySyntheticFiller').addEventListener('click', () => openFiles(window.VBSynthetic.makeScan({ filler: true }).files));
-    $('trySyntheticCad').addEventListener('click', () => {
-      state.cadDemo = { name: 'synthetic_part.stl', buffer: window.VBSynthetic.partStl() };
-      openFiles(window.VBSynthetic.makePart({ scale: 0.97, bendMm: 0.12 }).files);
-    });
+    $('trySynthetic').addEventListener('click', () => openDemo('scan'));
+    $('trySyntheticDense').addEventListener('click', () => openDemo('dense'));
+    $('trySyntheticPhantoms').addEventListener('click', () => openDemo('phantoms'));
+    $('trySyntheticFiller').addEventListener('click', () => openDemo('filler'));
+    $('trySyntheticCad').addEventListener('click', () => openDemo('cad'));
     $('projectFile').addEventListener('change', (e) => { if (e.target.files[0]) openProject(e.target.files[0]); e.target.value = ''; });
     connectStore();
     renderSaveState();
@@ -540,5 +554,5 @@ window.CTApp = (function () {
     emit('wallChanged');
   }
 
-  return { sampleNow, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
+  return { sampleNow, openDemo, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
 }());
