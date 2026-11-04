@@ -44,9 +44,10 @@
     if (pores && Number.isFinite(part.porosityPercent) && part.porosityPercent > 0) insights.push(porosityInsight(100 * stats.pore_fraction, part.porosityPercent));
     if (Number.isFinite(stats.matrix_gray_mean) && Number.isFinite(part.matrixGray) && Number.isFinite(part.airGray) && part.matrixGray !== part.airGray) insights.push(grayInsight(stats.matrix_gray_mean, part));
     if (stats.voxels < SMALL_VOXELS) insights.push(`Small region (${n0(stats.voxels)} voxels): treat the numbers as rough.`);
-    if (!pores) insights.push('Segment pores (step 2) to get the porosity inside it.');
-    if (!d) insights.push('Outline phantoms in step 5 to read density in g/cm³.');
-    return { title, rows, insights };
+    const todo = [];
+    if (!pores) todo.push('Segment pores (step 2) to get the porosity inside it.');
+    if (!d) todo.push('Outline phantoms in step 5 to read density in g/cm³.');
+    return { title, rows, insights: [...insights, ...todo], todo };
   }
 
   /** A measurement: its length, and against its nominal (check = CT.dimensionCheck) when one is entered. */

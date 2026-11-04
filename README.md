@@ -38,6 +38,9 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
 - "What this shows" in every step: the step's result read in words (one dominant void or spread porosity, voids
   gathering near the surface, a zone's porosity against the baseline, over- or undersize against CAD, clustered
   filler, aligned fibers, walls at the resolution limit) with what to check next.
+- The review sheet (PDF) carries the same reads on a Findings page after page 1, together with the saved regions, the
+  Dragonfly comparison and the density calibration, and lists the steps not run, so a missing section is never read
+  as a clean result.
 - Dragonfly 3D cross-check in the page (step 4): download the kit, load Dragonfly's pore mask, read Dice and the
   causes of any difference; see docs/DRAGONFLY_CROSSCHECK.md.
 - A result card for every mark: save a region, outline, point or measurement (or click a saved one on the image) and

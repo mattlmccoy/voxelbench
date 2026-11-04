@@ -6,9 +6,9 @@
   const K = () => App.CTSheet, PG = () => App.CTSheetPages;
   const f2 = (v) => v.toFixed(2);
 
-  function pageThree(sheet, summary, sample) {
+  function pageThree(sheet, summary, sample, page) {
     const S = K(), { canvas, ctx } = S.newPage();
-    S.header(ctx, sample, 3);
+    S.header(ctx, sample, page);
     const x0 = S.MARGIN + 0.62, gap = 0.85, full = S.CONTENT_W - 0.67, hw = (full - gap) / 2;
     let y = 0.85;
     S.heading(ctx, S.MARGIN, y, 'Pore size distribution');
@@ -91,12 +91,16 @@
     await new Promise((r) => setTimeout(r, 30));
     const renders = App.sheetRenders(sheet);
     const rainbow = state.view === 'rainbow';
-    const sample = { ...PG().sampleText(), pages: rainbow ? 4 : 3 };
     const summary = P.summarize(state.pores, state.bodyMm3, state.rejected);
     say('Review sheet: drawing pages.');
     await new Promise((r) => setTimeout(r, 30));
-    const pages = [PG().pageOne(sheet, renders, summary, sample), PG().pageTwo(sheet, sample), pageThree(sheet, summary, sample)];
-    if (rainbow) pages.push(PG().pageRainbow(sheet, sample, 4));
+    // The Findings follow page 1; how many pages they take sets the numbers of the pages after them.
+    const laid = App.CTSheetFindings.lay();
+    const at = window.VBFindings.sheetPages(laid.length, rainbow);
+    const sample = { ...PG().sampleText(), pages: at.total, slicesPage: at.slices };
+    const pages = [PG().pageOne(sheet, renders, summary, sample), ...App.CTSheetFindings.draw(laid, sample, at.findings),
+      PG().pageTwo(sheet, sample, at.slices), pageThree(sheet, summary, sample, at.data)];
+    if (rainbow) pages.push(PG().pageRainbow(sheet, sample, at.rainbow));
     state.lastSheetPages = pages;
     const pdf = new window.jspdf.jsPDF({ unit: 'in', format: 'letter', orientation: 'portrait', compress: true });
     pages.forEach((c, k) => {

@@ -41,6 +41,9 @@ test('a region card says what to run when numbers are missing, and warns on smal
   assert.equal(row(bare, 'Porosity'), undefined);
   assert.match(bare.insights.join(' '), /Segment pores \(step 2\)/);
   assert.match(bare.insights.join(' '), /phantoms in step 5/);
+  // the to-do hints are also named apart, so the review sheet can leave them out
+  assert.deepEqual(bare.todo, bare.insights.filter((t) => /Segment pores|phantoms in step 5/.test(t)));
+  assert.equal(bare.todo.length, 2);
   assert.match(F.regionCard({ title: 'R', stats: stats({ voxels: 400 }), part, fit }).insights.join(' '), /Small region \(400 voxels\)/);
   const empty = F.regionCard({ title: 'R', stats: stats({ voxels: 0 }), part, fit });
   assert.deepEqual(empty.rows, []);

@@ -9,6 +9,7 @@
   const SMALL_MM3 = 0.01; // pores under this count as small in the comparison (as in tools/crosscheck)
   const OTHER = 'Dragonfly';
   let last = null; // { result, files, at } of the last comparison, for the JSON save
+  const keep = (v) => { last = v; state.crosscheck = v ? { result: v.result, other: OTHER } : null; }; // also for the review sheet
   let busy = false;
 
   const say = (t) => { $('dfStatus').textContent = t; };
@@ -22,7 +23,7 @@
   }
 
   function clearResult(note) {
-    last = null;
+    keep(null);
     $('dfResult').hidden = true;
     if (note) say(note);
   }
@@ -83,7 +84,7 @@
       say('Comparing the masks');
       const transfer = [mask.runs.offsets.buffer, mask.runs.start.buffer, mask.runs.end.buffer];
       const reply = await App.callWorker('crosscheck', { runs: mask.runs, rejected: [...state.rejected], bodyMm3: state.bodyMm3, smallMm3: SMALL_MM3 }, transfer);
-      last = { result: reply.result, files: mask.files, at: new Date().toISOString(), voxelMm: mask.voxelMm };
+      keep({ result: reply.result, files: mask.files, at: new Date().toISOString(), voxelMm: mask.voxelMm });
       show(reply.result, mask.voxelMm);
       const turned = reply.result.orientation ? ' The mask was turned back to the scan\'s orientation first (see below).' : '';
       say(`Compared with ${mask.files.length === 1 ? mask.files[0] : `${mask.files.length} files`}.${turned}`);

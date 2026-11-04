@@ -52,3 +52,17 @@ for the page):
 
 The card follows the numbers when pores, the calibration or the record change, and closes when its mark is deleted.
 Verified in the browser in all three looks and at phone width (the card docks at the bottom).
+
+## Follow-up: insights in the review sheet (2026-11-04)
+
+The PDF had the numbers but none of the reads, and nothing from steps 6 to 8. Poll picks: a Findings page right after
+page 1; with the density calibration, the Dragonfly comparison and the saved regions.
+
+- `app/vb_findings.js` (unit-tested): the step insights (now also the source for the rail's "What this shows"
+  boxes, so the two cannot drift), the sections in step order, the steps not run, the text layout (an item never
+  splits across pages; a heading never ends a page) and the page numbers after it.
+- Region cards name their to-do hints apart (`todo`), so the sheet leaves out "outline phantoms" and "segment pores".
+- `app/ct_sheetfindings.js` draws it; the captions that pointed to "page 2" now name the slice page.
+- Verified on Sample 2 (pores, a region, walls, the Dragonfly stand-in): Findings on page 2 of 4, page 1 points to
+  the slices on page 3, the rainbow page is 5 of 5 and points to page 3; rail and sheet show the same 8 pore and 3 wall
+  reads. The calibration section is covered by unit tests only (no phantoms on Sample 2).

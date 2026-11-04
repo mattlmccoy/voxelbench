@@ -43,7 +43,7 @@
       .concat(bins.map((b, k) => ({ label: b.label, kind: 'patch', color: renders.sizeColors[k], alpha: 0.7 })));
     G.legend(ctx, items, { x: S.MARGIN + 2 * w + gap - 0.06, y: 1.55 + 1.95 - 0.06, align: 'right', valign: 'bottom' }, { size: 6.5, columns: 1, title: 'ESD' });
     const count = bins.reduce((t, b) => t + b.count, 0), share = bins.reduce((t, b) => t + b.volume_share, 0);
-    S.caption(ctx, S.MARGIN, 3.58, `(a) Sample mask surface, 35 % opacity, with the section planes of page 2: XY at z = ${f2(c.z * v)} mm, XZ at y = ${f2(c.y * v)} mm. Arrows: scan axes, 8 mm. (b) Pores with ESD ≥ ${sheet.surfaceEdgesMm[0]} mm as surfaces: ${count.toLocaleString('en-US')} of ${kept.length.toLocaleString('en-US')} pores, ${Math.round(100 * share)} % of pore volume; 2 to 4 mm at 50 % opacity, ≥ 4 mm at 32 %. Pores below ${sheet.surfaceEdgesMm[0]} mm as centroid markers, colored by ESD bin. Sample shell at 15 % opacity with its silhouette outlined.`);
+    S.caption(ctx, S.MARGIN, 3.58, `(a) Sample mask surface, 35 % opacity, with the section planes of page ${sample.slicesPage}: XY at z = ${f2(c.z * v)} mm, XZ at y = ${f2(c.y * v)} mm. Arrows: scan axes, 8 mm. (b) Pores with ESD ≥ ${sheet.surfaceEdgesMm[0]} mm as surfaces: ${count.toLocaleString('en-US')} of ${kept.length.toLocaleString('en-US')} pores, ${Math.round(100 * share)} % of pore volume; 2 to 4 mm at 50 % opacity, ≥ 4 mm at 32 %. Pores below ${sheet.surfaceEdgesMm[0]} mm as centroid markers, colored by ESD bin. Sample shell at 15 % opacity with its silhouette outlined.`);
 
     S.heading(ctx, S.MARGIN, 4.2, 'Pore distribution, top view');
     const { nx, ny } = sheet.coarseDims, cv = sheet.coarseVoxelMm;
@@ -58,7 +58,7 @@
     ctx.save(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1 / 72; ctx.strokeRect(cb.x, cb.y, cb.w, cb.h); ctx.restore();
     for (const t of [0, 5, 10, 15, 20, 25]) G.text(ctx, cb.x + cb.w + 0.05, cb.y + ph - (t / 25) * ph, String(t), { size: 8.5, base: 'middle' });
     G.text(ctx, cb.x + cb.w + 0.38, cb.y + ph / 2, 'Column porosity (%)', { size: 9, align: 'center', rotate: -Math.PI / 2 });
-    S.caption(ctx, S.MARGIN, box.y + ph + 0.48, `(c) Column porosity: total pore thickness divided by sample thickness along scan z at each (x, y), ${f2(cv)} mm grid. Columns thinner than ${sheet.minColumnMm} mm are blank. Dashed line: XZ section of page 2 (y = ${f2(c.y * v)} mm).`);
+    S.caption(ctx, S.MARGIN, box.y + ph + 0.48, `(c) Column porosity: total pore thickness divided by sample thickness along scan z at each (x, y), ${f2(cv)} mm grid. Columns thinner than ${sheet.minColumnMm} mm are blank. Dashed line: XZ section of page ${sample.slicesPage} (y = ${f2(c.y * v)} mm).`);
 
     const half = 3.3, y = box.y + ph + 1.05;
     S.heading(ctx, S.MARGIN, y, 'Porosity');
@@ -79,9 +79,9 @@
     return canvas;
   }
 
-  function pageTwo(sheet, sample) {
+  function pageTwo(sheet, sample, page) {
     const S = K(), { canvas, ctx } = S.newPage();
-    S.header(ctx, sample, 2);
+    S.header(ctx, sample, page);
     S.heading(ctx, S.MARGIN, 0.75, 'Orthogonal slices: pore segmentation and gray-value zones');
     const items = [['Pores, AR ≤ 2.5', 1], ['Pores, AR > 2.5', 2], ['Pores at FOV edge', 3], ['Low-density regions', 4], ['High-gray zone', 5], ['Low-gray zone', 6]]
       .map(([label, k]) => ({ label, kind: 'patch', color: `rgb(${S.CLASS_RGB[k].join(',')})`, alpha: k > 4 ? 0.6 : 1 }));
@@ -120,7 +120,7 @@
     return canvas;
   }
 
-  // Added when the rainbow view is on at export: the page 2 slices under turbo, classes as outlines.
+  // Added when the rainbow view is on at export: the section slices under turbo, classes as outlines.
   function pageRainbow(sheet, sample, page) {
     const S = K(), { canvas, ctx } = S.newPage();
     S.header(ctx, sample, page);
@@ -155,7 +155,7 @@
     [0, 0.25, 0.5, 0.75, 1].forEach((t) => G.text(ctx, bx + t * bw, y + 0.3, String(Math.round(state.window.low + t * (state.window.high - state.window.low))), { size: 7.5, weight: 'normal', align: 'center' }));
     G.text(ctx, S.PAGE[0] / 2, y + 0.5, 'Gray value (uncalibrated)', { size: 8, align: 'center' });
     y += 0.75;
-    S.caption(ctx, S.MARGIN, y, `Same sections as page 2. Gray value on the turbo color map, window ${state.window.low} to ${state.window.high}; gray below ${state.window.low} (air) is black. Each section is smoothed in-plane with a Gaussian, σ = ${window.CTDisplay.SMOOTH_SIGMA} voxels (${(1000 * window.CTDisplay.SMOOTH_SIGMA * v).toFixed(0)} µm), for display only; segmentation and every reported value use the unsmoothed data and the pore settings. (a), (c) Outlines of segmented pores and low-density regions. (b), (d) Outlines of gray-value zones on a ${f2(sheet.coarseVoxelMm)} mm grid.`);
+    S.caption(ctx, S.MARGIN, y, `Same sections as page ${sample.slicesPage}. Gray value on the turbo color map, window ${state.window.low} to ${state.window.high}; gray below ${state.window.low} (air) is black. Each section is smoothed in-plane with a Gaussian, σ = ${window.CTDisplay.SMOOTH_SIGMA} voxels (${(1000 * window.CTDisplay.SMOOTH_SIGMA * v).toFixed(0)} µm), for display only; segmentation and every reported value use the unsmoothed data and the pore settings. (a), (c) Outlines of segmented pores and low-density regions. (b), (d) Outlines of gray-value zones on a ${f2(sheet.coarseVoxelMm)} mm grid.`);
     return canvas;
   }
 
