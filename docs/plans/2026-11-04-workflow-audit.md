@@ -36,3 +36,19 @@ F8 to F11 were chosen by poll on 2026-11-04 (all four recommended options).
 - Browser, synthetic phantom scan, Lab, Mac and Glass at 1440 × 900 and 375 × 812 (the static build): no `hidden` element shows; the step names fit their buttons; no sideways page scroll; the rail drag widens and resets in each look.
 - Phantom flow: Rod A 0.50 and Rod B 1.40 plus air give a 3-point line, R² 1.0000; step 5 shows the solid matrix at 1.007 g/cm³ (synthetic truth 1.008) and bulk 0.983 g/cm³ at 2.45 % pores; the status bar reads "≈ 0.987 g/cm³ eq." at the cursor.
 - Reference flow: one drawn region picked as reference at 1.01 g/cm³ gives relative 0.999 and 1.009 g/cm³ in the region table.
+
+## Follow-up: result cards (2026-11-04, after "we need a lot more feedback")
+
+Drawing gave no visible result: the toolbar Outline recorded only an area in the step 4 list, and Draw region put a
+row in the step 3 table, often off-screen. Now every saved mark, and any saved mark clicked on the image in Move
+mode, opens a card over the main view (`app/vb_feedback.js` for the numbers and insights, unit-tested; `app/vb_cardrail.js`
+for the page):
+
+- region: volume, gray, porosity, pores inside, solid gray, equivalent density; porosity and solid gray compared
+  with the whole part; what to run when a number is missing; a warning under 1,000 voxels;
+- outline: its area and voxel count, and the same numbers on its one slice, with a pointer to Draw region for 3-D;
+- point: gray, equivalent density and the pore it sits in;
+- measurement: length, and with a nominal the band, the deviation and pass or fail.
+
+The card follows the numbers when pores, the calibration or the record change, and closes when its mark is deleted.
+Verified in the browser in all three looks and at phone width (the card docks at the bottom).

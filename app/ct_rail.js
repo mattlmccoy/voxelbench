@@ -6,10 +6,10 @@
   const AXIS = { XY: 'z', XZ: 'y', YZ: 'x' };
   const TABLE_ROWS = 200;
   const TOOLS = [
-    { id: 'navigate', mark: 'N', label: 'Move', strip: true, hint: 'Click: set the slice crosshair. Drag: pan. Scroll or arrow keys: change slice (Shift: 10). Ctrl+scroll: zoom. Click a thumbnail to enlarge it.' },
-    { id: 'point', mark: 'P', label: 'Point', strip: true, hint: 'Click a point, add an optional note, press Enter to save.' },
+    { id: 'navigate', mark: 'N', label: 'Move', strip: true, hint: 'Click: set the slice crosshair (click a saved mark to see what it measured). Drag: pan. Scroll or arrow keys: change slice (Shift: 10). Ctrl+scroll: zoom. Click a thumbnail to enlarge it.' },
+    { id: 'point', mark: 'P', label: 'Point', strip: true, hint: 'Click a point, add an optional note, press Enter to save. Its card shows the gray (and density, when calibrated) at that voxel.' },
     { id: 'caliper', mark: 'C', label: 'Measure', strip: true, hint: 'Click two points to measure length, press Enter to save.' },
-    { id: 'polygon', mark: 'G', label: 'Outline', strip: true, hint: 'Click vertices; click the first vertex or press Enter to close. Backspace removes the last vertex.' },
+    { id: 'polygon', mark: 'G', label: 'Outline', strip: true, hint: 'Marks a feature on this slice: click vertices; click the first vertex or press Enter to close (Backspace removes the last one). Its card shows the area and the gray and porosity on this slice; to measure through several slices, use Draw region in step 3.' },
     { id: 'freehand', mark: 'D', label: 'Freehand', hint: 'Drag on the main view to draw a polygon, then save.' },
     { id: 'review', mark: 'R', label: 'Reject pores', hint: 'Click a pore to reject it; click again to restore. Rejected pores stay in the export, flagged.' },
   ];
@@ -109,10 +109,13 @@
       const record = R.makeRegion({ ...common, plane: d.plane, sliceFrom: crop ? 0 : Number($('rangeFrom').value), sliceTo: crop ? depth - 1 : Number($('rangeTo').value), label: state.regionLabel, voxelMm: state.voxelMm, dims: state.dims, phantom }, App.regionLabels());
       if (crop || phantom) { state.regionLabel = R.drawLabel(state.regionLabel, App.regionLabels()); state.phantomDraft = null; setTool('navigate'); }
       App.saveRecord('regions', record);
+      if (!crop && !phantom) emit('markSaved', { collection: 'regions', id: record.id });
       if (crop) App.cropChanged();
       else if (state.zones && state.zones.map) App.requestZones();
     } else {
-      App.saveRecord('annotations', CT.makeAnnotation({ ...common, dims: state.dims, voxelMm: state.voxelMm, window: { ...state.window }, plane: d.plane, slice: d.slice, kind: d.kind, type: state.type }));
+      const annotation = CT.makeAnnotation({ ...common, dims: state.dims, voxelMm: state.voxelMm, window: { ...state.window }, plane: d.plane, slice: d.slice, kind: d.kind, type: state.type });
+      App.saveRecord('annotations', annotation);
+      emit('markSaved', { collection: 'annotations', id: annotation.id });
     }
     state.draft = null;
     $('note').value = '';
@@ -498,6 +501,7 @@
       tr.addEventListener('click', () => {
         const mid = Math.round((r.slice_from + r.slice_to) / 2);
         emit('jump', CT.voxelOf(r.plane, mid, Math.round(r.points[0].col), Math.round(r.points[0].row)));
+        emit('showCard', { collection: 'regions', id: r.id });
       });
     }
   }
@@ -615,7 +619,7 @@
       jump.append(title, where);
       if (a.note) { const n = document.createElement('span'); n.textContent = a.note; jump.append(n); }
       if (state.unsaved.has(a.id)) { const s = document.createElement('span'); s.className = 'bad'; s.textContent = 'Not saved yet'; jump.append(s); }
-      jump.addEventListener('click', () => emit('jump', a.voxels[0]));
+      jump.addEventListener('click', () => { emit('jump', a.voxels[0]); emit('showCard', { collection: 'annotations', id: a.id }); });
       const del = document.createElement('button');
       del.textContent = state.deleting === a.id ? 'Confirm' : 'Delete';
       del.addEventListener('click', () => {

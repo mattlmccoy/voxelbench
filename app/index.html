@@ -205,6 +205,23 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 /* The hidden attribute wins over every display rule (.row, .draftpanel, .setting set display). */
 [hidden] { display: none !important; }
 .calhead { margin: 6px 0 2px; font-weight: 600; }
+/* The result card: what a mark measured, over the top right of the main view. */
+.resultcard { position: absolute; top: 30px; right: 10px; z-index: 15; width: min(320px, 46%); max-height: calc(100% - 240px); min-height: 0; overflow: auto; padding: 12px 14px; display: grid; gap: 8px;
+  background: var(--panel); color: var(--fg); border: 1px solid var(--line-strong, var(--line)); border-radius: var(--radius, 6px); box-shadow: 0 12px 32px rgba(0, 0, 0, .35); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
+.resultcard .rchead { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+.resultcard .rchead b { display: block; font-size: 13px; }
+.resultcard .rcsub { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.resultcard #rcClose { font-size: 18px; line-height: 1; padding: 0 2px; }
+.resultcard .rcinsights { margin: 0; padding-left: 16px; display: grid; gap: 4px; font-size: 12px; line-height: 1.4; }
+.resultcard.arrive { animation: rcarrive .35s ease-out; }
+@keyframes rcarrive { from { transform: translateY(-6px) scale(.98); box-shadow: 0 0 0 2px var(--accent); } to { transform: none; } }
+html[data-skin="mac"] .resultcard { background: rgba(255, 255, 255, .92); border-radius: 14px; box-shadow: 0 16px 40px rgba(0, 0, 0, .16), 0 0 0 .5px rgba(0, 0, 0, .12); border: 0; }
+html[data-skin="glass"] .resultcard { background: rgba(40, 44, 52, .55); border-radius: 22px; border: 1px solid rgba(255, 255, 255, .16); -webkit-backdrop-filter: blur(40px) saturate(160%); backdrop-filter: blur(40px) saturate(160%); }
+@media (max-width: 900px) { .resultcard { position: fixed; top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 45vh; z-index: 40; } }
+@media (prefers-reduced-motion: reduce) { .resultcard.arrive { animation: none; } }
+.resultcard .kv { grid-template-columns: minmax(0, auto) minmax(0, 1fr); }
+html:is([data-skin="mac"], [data-skin="glass"]) .resultcard .kv { grid-template-columns: minmax(0, auto) minmax(0, 1fr); font-size: 12px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .resultcard .kv > * { padding: 5px 10px; }
 .skinmenuhead { margin: 4px 10px 6px; font-size: 11px; font-weight: 600; color: var(--muted); }
 html .studio .topbar .skinmenu button { all: unset; position: relative; display: grid; gap: 1px; padding: 7px 10px 7px 30px; border-radius: 7px; cursor: pointer; }
 html .studio .topbar .skinmenu button:hover, html .studio .topbar .skinmenu button:focus-visible { background: var(--warn-bg); }
@@ -459,6 +476,12 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
   <nav class="strip" id="strip" aria-label="Tools"></nav>
 
   <main class="center" id="center">
+    <aside class="resultcard" id="resultCard" hidden aria-live="polite" aria-label="What the mark measured">
+      <div class="rchead"><div><b id="rcTitle"></b><span class="rcsub" id="rcSub"></span></div><button id="rcClose" class="link" aria-label="Close the card">×</button></div>
+      <div class="kv mono" id="rcRows"></div>
+      <ul class="rcinsights" id="rcInsights"></ul>
+      <div class="row"><button id="rcJump">Show it</button><button id="rcStep"></button></div>
+    </aside>
     <div class="startup" id="startup">
       <h1>Open a scan folder to begin</h1>
       <p>Select a folder of scan folders, or one scan folder. Slices are read in this browser; no image data leaves this computer (the browser may label this an upload). Regions, annotations and results are kept in a project file you save, or in the shared database when this page runs on claude.ai.</p>
@@ -548,7 +571,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
           <p class="hint">Segments zones by gray offset: local matrix gray relative to the pore-free ends of the long axis at equal depth below the surface. Gray value reflects bulk attenuation, not composition.</p>
           <div class="row">
             <button class="primary" id="draftZones" disabled>Segment zones</button>
-            <button id="drawRegion" disabled>Draw region</button>
+            <button id="drawRegion" disabled title="Outline an area and the slices it spans; it is measured in 3-D (volume, porosity, gray, density)">Draw region</button>
           </div>
           <details class="sub">
             <summary>Region labels</summary>
@@ -750,6 +773,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
 <script src="vb_store.js"></script>
 <script src="vb_volume.js"></script>
 <script src="vb_calibration.js"></script>
+<script src="vb_feedback.js"></script>
 <script src="ct_display.js"></script>
 <script src="ct_pores.js"></script>
 <script src="ct_regions.js"></script>
@@ -768,6 +792,7 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
 <script src="ct_model.js"></script>
 <script src="ct_rail.js"></script>
 <script src="vb_calrail.js"></script>
+<script src="vb_cardrail.js"></script>
 <script src="vb_cadrail.js"></script>
 <script src="vb_cad3d.js"></script>
 <script src="vb_fillerrail.js"></script>

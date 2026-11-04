@@ -434,6 +434,7 @@
     if (state.tool === 'navigate') {
       state.cursor = CT.voxelOf(v.plane, slice, place.hit.col, place.hit.row);
       requestDraw();
+      emit('pickAt', { plane: v.plane, slice, col: place.hit.col, row: place.hit.row }); // a saved mark there opens its card
       return;
     }
     if (state.tool === 'review') {

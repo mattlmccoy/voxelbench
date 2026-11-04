@@ -34,6 +34,9 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
   `?skin=glass` in the address also picks one; the choice is remembered in this browser. In every look a step bar
   shows one step at a time, with a green dot on each step that has a result and a Next line at the end of a finished
   step; drag the panel's left edge to widen it for wide tables (double-click to reset).
+- A result card for every mark: save a region, outline, point or measurement (or click a saved one on the image) and
+  a card over the view shows what it measured, compared with the whole part (porosity, solid gray, density), what to
+  run for a missing number, and, for a measurement with a nominal, pass or fail.
 
 Every quantity is checked against an independent Python (scipy) reference on the same scans; see
 [docs/REFERENCE.md](docs/REFERENCE.md). Porosity can be cross-checked against Dragonfly 3D voxel by voxel; see
