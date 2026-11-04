@@ -29,6 +29,8 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
 - Lab workflow: measured lengths checked against a nominal and tolerance band; a before/after table of two scans'
   saved runs; batch runs over every scan in a folder with one summary CSV; view bookmarks; named setting presets.
 - Exports: pore, region, zone, CAD-deviation, filler, wall and batch tables (CSV), a slice image (PNG) and a review sheet (PDF).
+- Two looks: the original dark Lab look (default) and a Glass look (Montserrat, frosted panels, light or dark with the
+  system). Switch with the button in the top bar, or open the page with `?skin=glass`; the choice is remembered in this browser.
 
 Every quantity is checked against an independent Python (scipy) reference on the same scans; see
 [docs/REFERENCE.md](docs/REFERENCE.md). Porosity can be cross-checked against Dragonfly 3D voxel by voxel; see
