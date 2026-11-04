@@ -54,7 +54,7 @@ window.CTApp = (function () {
       file: `${state.projectDirty ? 'Project file (unsaved changes)' : state.projectFile ? `Project file saved (${state.projectFile})` : 'No project file yet'} · ${counts}`,
       unavailable: `Not saving: ${state.dbDetail}`,
     }[state.dbState];
-    $('saveState').textContent = text + unsaved;
+    $('saveState').textContent = text + unsaved; $('saveState').title = text + unsaved;
     const good = (state.dbState === 'connected' || (state.dbState === 'file' && state.projectFile && !state.projectDirty)) && !state.unsaved.size;
     $('dbDot').className = `dot ${good ? 'live' : state.dbState === 'connecting' || state.dbState === 'file' ? 'warn' : 'err'}`;
     $('saveProject').hidden = !state.store;

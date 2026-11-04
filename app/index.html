@@ -399,8 +399,9 @@ html[data-skin="glass"] .center { left: 116px; }
 html[data-skin="glass"] .statusbar { left: 116px; }
 /* The toolbar gives up the save status before the scan name. */
 html:is([data-skin="mac"], [data-skin="glass"]) .crumb { flex: 0 1 auto; min-width: 9ch; }
-html:is([data-skin="mac"], [data-skin="glass"]) .conn { flex: 1 1 0; min-width: 0; justify-content: flex-end; overflow: hidden; }
-html:is([data-skin="mac"], [data-skin="glass"]) #saveState { overflow: hidden; text-overflow: ellipsis; }
+/* Every look: the save status gives way first when the top bar is short of room (it keeps its full text as a tooltip). */
+.conn { flex: 1 1 0; min-width: 0; justify-content: flex-end; overflow: hidden; }
+#saveState { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ===== Lab: the step bar too, one section at a time, in the lab's own colors ===== */
 html[data-skin="lab"] .studio { grid-template-columns: minmax(0, 1fr) var(--rail-w, 440px); } /* the step bar's 58 px on top of the rail's 382 */
