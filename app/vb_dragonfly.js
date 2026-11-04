@@ -85,7 +85,8 @@
       const reply = await App.callWorker('crosscheck', { runs: mask.runs, rejected: [...state.rejected], bodyMm3: state.bodyMm3, smallMm3: SMALL_MM3 }, transfer);
       last = { result: reply.result, files: mask.files, at: new Date().toISOString(), voxelMm: mask.voxelMm };
       show(reply.result, mask.voxelMm);
-      say(`Compared with ${mask.files.length === 1 ? mask.files[0] : `${mask.files.length} files`}.`);
+      const turned = reply.result.orientation ? ' The mask was turned back to the scan\'s orientation first (see below).' : '';
+      say(`Compared with ${mask.files.length === 1 ? mask.files[0] : `${mask.files.length} files`}.${turned}`);
     } catch (e) {
       say(`Could not compare: ${e.message}`);
     } finally { busy = false; render(); }

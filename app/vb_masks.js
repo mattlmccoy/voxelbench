@@ -162,6 +162,47 @@
     return total;
   }
 
+  /** A run set mirrored along x, y and/or z (flip = { x, y, z } booleans): how an export written the other way up, or
+      with its slices in reverse order, is brought back to the scan's orientation. */
+  function flipRuns(r, { nx, ny, nz }, flip) {
+    const offsets = new Int32Array(nz * ny + 1), start = new Int32Array(r.start.length), end = new Int32Array(r.end.length);
+    let k = 0;
+    for (let z = 0; z < nz; z++) {
+      for (let y = 0; y < ny; y++) {
+        const src = (flip.z ? nz - 1 - z : z) * ny + (flip.y ? ny - 1 - y : y), a = r.offsets[src], b = r.offsets[src + 1];
+        offsets[z * ny + y] = k;
+        if (flip.x) for (let i = b - 1; i >= a; i--, k++) { start[k] = nx - r.end[i]; end[k] = nx - r.start[i]; }
+        else for (let i = a; i < b; i++, k++) { start[k] = r.start[i]; end[k] = r.end[i]; }
+      }
+    }
+    offsets[nz * ny] = k;
+    return { offsets, start, end };
+  }
+
+  /** Dice of two run sets over every step-th slice: a quick score for choosing an orientation. */
+  function overlapScore(a, b, { ny, nz }, step) {
+    let both = 0, na = 0, nb = 0;
+    for (let z = 0; z < nz; z += step) {
+      for (let row = z * ny; row < (z + 1) * ny; row++) {
+        for (let i = a.offsets[row]; i < a.offsets[row + 1]; i++) { na += a.end[i] - a.start[i]; both += overlapInRow(b, row, a.start[i], a.end[i]); }
+        for (let i = b.offsets[row]; i < b.offsets[row + 1]; i++) nb += b.end[i] - b.start[i];
+      }
+    }
+    return na + nb ? (2 * both) / (na + nb) : 0;
+  }
+
+  const FLIPS = [false, true].flatMap((z) => [false, true].flatMap((y) => [false, true].map((x) => ({ x, y, z }))));
+
+  /** The flip of b that overlaps a best on every step-th slice; the scan's own orientation wins a tie. */
+  function bestOrientation(a, b, dims, step) {
+    let best = null;
+    for (const flip of FLIPS) {
+      const score = overlapScore(a, flip.x || flip.y || flip.z ? flipRuns(b, dims, flip) : b, dims, step);
+      if (!best || score > best.score) best = { flip, score };
+    }
+    return best;
+  }
+
   /** 6-connected components of a run set: label per run (1..count) and sizes[label] in voxels. */
   function labelRuns(runs, { ny }) {
     const n = runs.start.length, parent = new Int32Array(n), rows = runs.offsets.length - 1;
@@ -272,9 +313,12 @@
     const rows = [['VoxelBench porosity', `${c.a.percent.toFixed(3)} %`], [`${other} porosity`, `${c.b.percent.toFixed(3)} %`],
       ['Difference', `${diffText} points`], ['Dice', c.dice === null ? 'n/a' : diceText(c.dice)],
       ['Pore voxels in both', n0(c.both_voxels)], ['Only VoxelBench', n0(c.only_a.voxels)], [`Only ${other}`, n0(c.only_b.voxels)]];
+    const o = c.orientation, flipped = o && (o.x || o.y || o.z);
+    const how = flipped ? [o.x || o.y ? `flipped in ${[o.x && 'x', o.y && 'y'].filter(Boolean).join(' and ')}` : '', o.z ? 'slices reversed' : ''].filter(Boolean).join(', ') : '';
+    if (flipped) rows.push(['Mask orientation', how]);
     if (c.dice === null) return { rows, insights: ['Neither mask has any pore voxels.'] };
     const d = diceText(c.dice);
-    const insights = [c.dice >= AGREE ? `The masks agree (Dice ${d}): the two tools mark the same voxels as pores.`
+    const insights = [...(flipped ? [`${other}'s mask was ${how}, against the scan; it was compared turned back. Exporting it in the scan's orientation avoids the guess.`] : []),c.dice >= AGREE ? `The masks agree (Dice ${d}): the two tools mark the same voxels as pores.`
       : c.dice >= CLOSE ? `The masks are close (Dice ${d}) but not the same; the causes are below.` : `The masks disagree (Dice ${d}); the causes are below.`];
     if (c.dice < FLIPPED) insights.push('The masks barely overlap: the export may be flipped or in another slice order. Check that the first page of the mask matches the scan\'s first file, the right way up.');
     const total = c.only_a.voxels + c.only_b.voxels;
@@ -291,5 +335,5 @@
     return { rows, insights };
   }
 
-  return { writeMaskTiff, readMaskPages, eachMaskPage, regionSlice, poreSlice, runsSlice, maskRuns, runsBuilder, labelRuns, compareMasks, compareRuns, crosscheckRead, kitInfo };
+  return { writeMaskTiff, readMaskPages, eachMaskPage, regionSlice, poreSlice, runsSlice, maskRuns, runsBuilder, labelRuns, compareMasks, compareRuns, crosscheckRead, kitInfo, flipRuns, overlapScore, bestOrientation };
 }));

@@ -20,7 +20,8 @@ There are two runs:
 layout below. After the Dragonfly runs, press **Load Dragonfly mask** in the same panel and pick the exported mask
 (one multi-page TIFF, or every slice file): the panel shows both porosities, Dice, the causes of the difference in
 words, and the largest pores only one tool found (click one to see it). **Save comparison (JSON)** keeps the record.
-Load the matched mask and the independent mask in turn.
+Load the matched mask and the independent mask in turn. If the mask was exported upside down or with its slices in reverse order, the page notices (the
+masks barely overlap as loaded), tries every flip, compares with the one that fits, and says which it undid.
 
 **From the command line (any computer with Node.js).** The scan needs a saved VoxelBench run: set the crop and
 settings in the page, then save the run.

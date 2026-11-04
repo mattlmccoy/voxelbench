@@ -110,3 +110,35 @@ test('a near-perfect Dice keeps its digits, and a zero difference has no sign', 
   assert.match(r.insights[0], /Dice 0\.9999996/);
   assert.equal(M.crosscheckRead(cmp({ dice: 1 }), 'Dragonfly').rows.find((x) => x[0] === 'Dice')[1], '1 (identical)');
 });
+
+// An asymmetric pore set, so every flip lands somewhere else.
+const ODD = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [5, 2, 1], [4, 2, 1]];
+const flipVox = ([x, y, z], f) => [f.x ? DIMS.nx - 1 - x : x, f.y ? DIMS.ny - 1 - y : y, f.z ? DIMS.nz - 1 - z : z];
+
+test('flipping runs along x, y or z matches flipping the voxels', () => {
+  for (const f of [{ x: true, y: false, z: false }, { x: false, y: true, z: false }, { x: false, y: false, z: true }, { x: true, y: true, z: true }]) {
+    assert.deepEqual(M.flipRuns(runs(ODD), DIMS, f), runs(ODD.map((v) => flipVox(v, f))), JSON.stringify(f));
+  }
+});
+
+test('the quick overlap score is the Dice of the sampled slices', () => {
+  assert.equal(M.overlapScore(runs(ODD), runs(ODD), DIMS, 1), 1);
+  assert.equal(M.overlapScore(runs(ODD), runs([[3, 2, 0]]), DIMS, 1), 0);
+  assert.equal(M.overlapScore(runs(ODD), runs(ODD), DIMS, 2), 1); // slice 0 only: still identical there
+});
+
+test('the best orientation undoes a flipped export, and the scan orientation wins a tie', () => {
+  const f = { x: false, y: true, z: true };
+  const best = M.bestOrientation(runs(ODD), runs(ODD.map((v) => flipVox(v, f))), DIMS, 1);
+  assert.deepEqual(best.flip, f);
+  assert.equal(best.score, 1);
+  assert.deepEqual(M.bestOrientation(runs(ODD), runs(ODD), DIMS, 1).flip, { x: false, y: false, z: false });
+});
+
+test('the read names an orientation the page had to undo', () => {
+  const r = M.crosscheckRead(cmp({ orientation: { x: false, y: true, z: true } }), 'Dragonfly');
+  assert.equal(r.rows.find((x) => x[0] === 'Mask orientation')[1], 'flipped in y, slices reversed');
+  assert.match(r.insights[0], /Dragonfly's mask was flipped in y, slices reversed, against the scan; it was compared turned back/);
+  assert.equal(M.crosscheckRead(cmp(), 'Dragonfly').rows.find((x) => x[0] === 'Mask orientation'), undefined);
+  assert.equal(M.crosscheckRead(cmp({ orientation: { x: false, y: false, z: false } }), 'Dragonfly').rows.find((x) => x[0] === 'Mask orientation'), undefined);
+});

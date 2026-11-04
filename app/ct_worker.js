@@ -6,6 +6,7 @@ const MODEL_DOWNSAMPLE = 2;
 const COARSE_STEP = 2; // binned voxels per coarse cell: 4 full voxels, about 0.16 mm at 40 um
 const MESH_FACTOR = 2; // full voxels per cell of the 3D void surfaces, about 0.08 mm at 40 um
 let vol = null, body = null, bodyKey = '', smoothed = null, smoothedSigma = null, pending = null, pores = null, smoother = null;
+const ORIENTATION_RETRY_BELOW = 0.5, ORIENTATION_STEP = 8; // Dice under which the cross-check tries other orientations; slices sampled
 let poreCoarse = null; // detectPores' coarse result: its interior minus edge zone is where pore voxels are counted
 let coarse = null, voidShare = null, zoneReady = null, airGray = null, patchLabels = null, solidGray = null;
 
@@ -58,7 +59,17 @@ function crosscheck({ type, runs, rejected, bodyMm3, smallMm3 }) {
   const count = (r) => { let n = 0; for (let k = 0; k < r.start.length; k++) n += r.end[k] - r.start[k]; return n; };
   if (type === 'regionRuns') return { region, pores: ours, regionVoxels: count(region), poreVoxels: count(ours) };
   say('Cross-check: comparing the masks');
-  return { result: M.compareRuns({ a: ours, b: runs, region, dims: full, voxelMm: vol.voxelMm, bodyMm3, smallMm3 }) };
+  const compare = (b) => M.compareRuns({ a: ours, b, region, dims: full, voxelMm: vol.voxelMm, bodyMm3, smallMm3 });
+  const result = compare(runs);
+  if (result.dice === null || result.dice >= ORIENTATION_RETRY_BELOW) return { result };
+  // Barely any overlap: the export may be flipped or in reverse slice order. Score all eight orientations on every
+  // ORIENTATION_STEP-th slice and compare in full the one that fits clearly better.
+  say('Cross-check: the masks barely overlap; trying the mask flipped and reversed');
+  const best = M.bestOrientation(ours, runs, full, ORIENTATION_STEP);
+  const asIs = M.overlapScore(ours, runs, full, ORIENTATION_STEP);
+  if (!(best.flip.x || best.flip.y || best.flip.z) || best.score <= Math.max(asIs, ORIENTATION_RETRY_BELOW)) return { result: { ...result, orientation_scores: { as_is: asIs, best: best.score } } };
+  say('Cross-check: comparing the mask turned back');
+  return { result: { ...compare(M.flipRuns(runs, full, best.flip)), orientation: best.flip, orientation_scores: { as_is: asIs, best: best.score } } };
 }
 
 function sendPatches() {
