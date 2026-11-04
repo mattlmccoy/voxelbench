@@ -43,7 +43,7 @@ the scan folder to the Dragonfly computer.
 
 ## 2. Matched run in Dragonfly
 
-1. **Import the scan.** Import all of its TIFF files in file-name order (the order in `kit.json` `scan_files`). In the
+1. **Import the scan.** Import all of its TIFF files ordered by the number in the file name (the first and last are in `kit.json` `scan_files`). In the
    data properties, check that the spacing is `voxel_mm` in x, y **and z**, and set z if it is missing.
 2. **Import `region/`** as a second image. Its size has to match the scan's. Make an ROI from it by **range, 255 to 255**
    **(confirm)** and name it `Region`.

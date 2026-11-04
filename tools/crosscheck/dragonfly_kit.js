@@ -5,6 +5,7 @@
    Spec and protocol: docs/plans/2026-11-03-dragonfly-crosscheck.md, docs/DRAGONFLY_CROSSCHECK.md. */
 const fs = require('node:fs');
 const path = require('node:path');
+const CT = require('../../app/ct_core.js');
 const H = require('../headless_run.js');
 const M = require('./masks.js');
 
@@ -57,7 +58,7 @@ function main([scan, runPath, out]) {
   if (!scan || !runPath || !out) throw new Error('usage: node tools/crosscheck/dragonfly_kit.js <scan-folder> <saved-run.json> <out-dir>');
   const parsed = JSON.parse(fs.readFileSync(runPath, 'utf8'));
   const run = parsed.data || parsed;
-  const scanFiles = fs.readdirSync(scan).filter((n) => /\.tiff?$/i.test(n)).sort(); // the order readStack uses
+  const scanFiles = CT.sliceOrder(fs.readdirSync(scan)); // the order readStack uses
   const a = H.analyze(H.readStack(scan), run, { patches: false });
   const info = writeKit(buildKit(a), out, { scanFiles });
   const v = info.voxelbench;

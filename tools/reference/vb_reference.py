@@ -12,6 +12,7 @@ Exit code 0 when every check is inside its tolerance, 1 otherwise.
 from __future__ import annotations
 
 import json
+import re
 import logging
 import sys
 from dataclasses import dataclass
@@ -42,7 +43,9 @@ class Check:
 
 def read_scan(folder: Path) -> tuple[np.ndarray, float]:
     """The stack (z, y, x) as uint16 and the voxel size in mm from the TIFF resolution tags (pixels per cm)."""
-    names = sorted(p for p in folder.iterdir() if p.suffix.lower() in (".tif", ".tiff"))
+    # By the number in the name, the order the page and the JavaScript tools use (CT.sliceOrder).
+    natural = lambda p: [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", p.name)]
+    names = sorted((p for p in folder.iterdir() if p.suffix.lower() in (".tif", ".tiff") and not p.name.startswith(".")), key=natural)
     with tifffile.TiffFile(names[0]) as t:
         num, den = t.pages[0].tags["XResolution"].value
     voxel_mm = 10.0 / (num / den)

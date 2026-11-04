@@ -22,7 +22,7 @@ const ZONE_THRESHOLDS = [0.02, 0.03, 0.04, 0.05, 0.06, 0.075, 0.09, 0.11];
 const log = (text) => { if (require.main === module) console.log(`[${new Date().toISOString().slice(11, 19)}] ${text}`); };
 
 function readStack(folder) {
-  const names = fs.readdirSync(folder).filter((n) => /\.tiff?$/i.test(n)).sort();
+  const names = CT.sliceOrder(fs.readdirSync(folder)); // the page's order (CT.groupStacks)
   let voxelMm = null, width = 0, height = 0;
   const slices = names.map((n) => {
     const b = fs.readFileSync(path.join(folder, n));
