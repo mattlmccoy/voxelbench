@@ -4,6 +4,7 @@
   'use strict';
   const CT = window.CT, P = window.CTPores, K = window.VBConnectivity;
   const { state, $, on } = App;
+  let hint = null; // the explanation, put back after an input error is fixed
   const num = (id) => { const t = $(id).value.trim(); return t === '' ? null : Number(t); };
 
   /** The comparison for the open sample, or null without a measurement or segmentation. */
@@ -36,10 +37,11 @@
     const density = num('archDensity'), solid = num('archSolid');
     if (density === null && solid === null) { App.saveSample({ archimedes: null }); return; }
     if (!(density > 0) || !(solid > 0)) { $('archHint').textContent = 'Enter both densities in g/cm³ (numbers above 0), or clear both to remove the measurement.'; return; }
+    if (hint !== null) $('archHint').textContent = hint;
     App.saveSample({ archimedes: { density_g_cm3: density, solid_g_cm3: solid, method: $('archMethod').value, saved_at: new Date().toISOString() } });
   }
 
-  on('start', () => $('archSave').addEventListener('click', save));
+  on('start', () => { hint = $('archHint').textContent; $('archSave').addEventListener('click', save); });
   for (const e of ['loaded', 'recordsChanged']) on(e, () => { renderForm(); renderLine(); });
   on('poresChanged', renderLine);
   App.archimedesNow = archimedesNow;
