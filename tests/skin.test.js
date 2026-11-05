@@ -106,3 +106,30 @@ test('bootMode sets data-mode from storage and the system, even when storage thr
   assert.equal(K.bootMode({ doc, storage: { getItem: () => { throw new Error('blocked'); } }, win }), 'dark');
   assert.equal(attrs['data-mode'], 'dark');
 });
+
+// A tiny element tree: closest() walks up through tag names and data attributes, as the browser does.
+const node = (tag, data = {}, parent = null) => ({ tagName: tag.toUpperCase(), dataset: data, parentNode: parent,
+  closest(sel) { for (let n = this; n; n = n.parentNode) if (sel === 'button' ? n.tagName === 'BUTTON' : false) return n; return null; } });
+const tree = () => {
+  const html = node('html', { skin: 'lab', mode: 'dark' }); // the page itself carries data-skin and data-mode
+  const menu = node('div', {}, html);
+  menu.contains = (n) => { for (let m = n; m; m = m.parentNode) if (m === menu) return true; return false; };
+  const mac = node('button', { skin: 'mac' }, menu), macTitle = node('span', {}, mac);
+  const light = node('button', { mode: 'light' }, menu);
+  const head = node('p', {}, menu);
+  const outside = node('button', { skin: 'glass' }, html);
+  return { menu, macTitle, light, head, outside };
+};
+
+test('a click on a look in the menu picks that look, though the page itself carries data-mode', () => {
+  const t = tree();
+  assert.deepEqual(K.menuPick(t.macTitle, t.menu), { skin: 'mac' });
+});
+
+test('a click on a mode picks the mode; a heading or anything outside the menu picks nothing', () => {
+  const t = tree();
+  assert.deepEqual(K.menuPick(t.light, t.menu), { mode: 'light' });
+  assert.equal(K.menuPick(t.head, t.menu), null);
+  assert.equal(K.menuPick(t.outside, t.menu), null);
+  assert.equal(K.menuPick(null, t.menu), null);
+});

@@ -391,7 +391,7 @@ html[data-skin="glass"] .notice { background: var(--g-notice); color: var(--g-no
 html[data-skin="glass"] .viewtoggle button[aria-pressed="true"] { background: var(--g-primary); color: var(--g-primary-ink); }
 html[data-skin="glass"] .startup { align-self: center; justify-self: center; max-height: 100%; overflow: auto; background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
   border-radius: 30px; padding: 32px 34px; box-shadow: var(--glass-edge); }
-html[data-skin="glass"] .skinmenu { background: var(--g-sheet); border-radius: 18px; }
+html[data-skin="glass"] .skinmenu { background: var(--g-menu); border-radius: 18px; } /* near solid: inside the blurred bar its own blur has nothing to blur (Chrome), so a see-through sheet showed the page through it */
 html[data-skin="glass"] .studio .topbar .skinmenu button { border-radius: 12px; }
 html[data-skin="glass"] .dot.live { box-shadow: 0 0 8px rgba(48, 209, 88, .7); }
 
@@ -504,7 +504,7 @@ html[data-skin="glass"] {
   --g-fill: rgba(255, 255, 255, .14); --g-fill-hover: rgba(255, 255, 255, .22); --g-pressed: rgba(255, 255, 255, .3);
   --g-primary: rgba(255, 255, 255, .94); --g-primary-ink: #000; --g-primary-hover: #fff;
   --g-field: rgba(0, 0, 0, .28); --g-field-line: rgba(255, 255, 255, .14); --g-focus: rgba(255, 255, 255, .7);
-  --g-th: rgba(24, 27, 33, .82); --g-sheet: rgba(40, 44, 52, .6); --g-notice: rgba(255, 214, 10, .14); --g-notice-ink: #ffd60a;
+  --g-th: rgba(24, 27, 33, .82); --g-sheet: rgba(40, 44, 52, .6); --g-menu: rgba(36, 40, 47, .97); --g-notice: rgba(255, 214, 10, .14); --g-notice-ink: #ffd60a;
   --g-glow-a: #27303e; --g-glow-b: #1b2830;
 }
 html[data-skin="glass"][data-mode="light"] {
@@ -518,7 +518,7 @@ html[data-skin="glass"][data-mode="light"] {
   --g-fill: rgba(0, 0, 0, .06); --g-fill-hover: rgba(0, 0, 0, .1); --g-pressed: rgba(0, 0, 0, .14);
   --g-primary: #1d1d1f; --g-primary-ink: #fff; --g-primary-hover: #000;
   --g-field: rgba(255, 255, 255, .7); --g-field-line: rgba(0, 0, 0, .14); --g-focus: rgba(0, 0, 0, .5);
-  --g-th: rgba(244, 246, 249, .92); --g-sheet: rgba(255, 255, 255, .78); --g-notice: rgba(255, 204, 0, .2); --g-notice-ink: #7a5d00;
+  --g-th: rgba(244, 246, 249, .92); --g-sheet: rgba(255, 255, 255, .78); --g-menu: rgba(250, 251, 253, .97); --g-notice: rgba(255, 204, 0, .2); --g-notice-ink: #7a5d00;
   --g-glow-a: #dce4f0; --g-glow-b: #e6eef0;
 }
 html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) saturate(1.2) brightness(1.6); opacity: .35; }

@@ -115,19 +115,18 @@
     button.setAttribute('aria-haspopup', 'menu'); button.setAttribute('aria-expanded', 'false');
     button.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; button.setAttribute('aria-expanded', String(!menu.hidden)); show(); });
     menu.addEventListener('click', (e) => {
-      const m = e.target.closest('[data-mode]');
-      if (m) {
-        try { if (storage) storage.setItem(MODE_KEY, m.dataset.mode); } catch (err) { /* forgets the choice */ }
-        doc.documentElement.setAttribute('data-mode', resolveMode(m.dataset.mode, systemDark(win)));
+      const pick = menuPick(e.target, menu);
+      if (!pick) return;
+      if (pick.mode) {
+        try { if (storage) storage.setItem(MODE_KEY, pick.mode); } catch (err) { /* forgets the choice */ }
+        doc.documentElement.setAttribute('data-mode', resolveMode(pick.mode, systemDark(win)));
         show();
         doc.dispatchEvent(new CustomEvent('vbskin', { detail: 'mode' }));
         return;
       }
-      const b = e.target.closest('[data-skin]');
-      if (!b) return;
-      write(storage, apply(doc, b.dataset.skin));
+      write(storage, apply(doc, pick.skin));
       show(); close();
-      doc.dispatchEvent(new CustomEvent('vbskin', { detail: b.dataset.skin }));
+      doc.dispatchEvent(new CustomEvent('vbskin', { detail: pick.skin }));
     });
     doc.addEventListener('click', (e) => { if (!menu.hidden && !menu.contains(e.target)) close(); });
     doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) { close(); button.focus(); } });
@@ -244,5 +243,14 @@
     new win.ResizeObserver(() => { doc.documentElement.style.setProperty('--topbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`); }).observe(bar);
   }
 
-  return { SKINS, SKIN_LABELS, MODES, pickMode, resolveMode, bootMode, wireTopbarHeight, pickSkin, navItems, stepDone, nextFor, clampRailWidth, openOnly, boot, wireSettings, wireStepBar, wireRailResize, wireBackdrop };
+  /** What a click in the Appearance menu chose: the button under the click, and only one inside the menu. Searching
+      up for [data-mode] or [data-skin] instead would reach <html>, which carries both. */
+  function menuPick(target, menu) {
+    const b = target && target.closest ? target.closest('button') : null;
+    if (!b || !menu.contains(b)) return null;
+    if (b.dataset.mode) return { mode: b.dataset.mode };
+    if (b.dataset.skin) return { skin: b.dataset.skin };
+    return null;
+  }
+  return { SKINS, SKIN_LABELS, MODES, pickMode, resolveMode, bootMode, wireTopbarHeight, pickSkin, navItems, stepDone, nextFor, clampRailWidth, openOnly, boot, wireSettings, wireStepBar, wireRailResize, wireBackdrop, menuPick };
 }));
