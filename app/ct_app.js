@@ -1,9 +1,10 @@
 /* Shared state, loading, the worker, and the database. Drawing lives in ct_views.js, ct_model.js and ct_rail.js. */
 window.CTApp = (function () {
   'use strict';
-  const CT = window.CT, P = window.CTPores, R = window.CTRegions, V = window.VBStore, VB = window.VBVolume;
+  const CT = window.CT, P = window.CTPores, R = window.CTRegions, V = window.VBStore, VB = window.VBVolume, O = window.VBOrient;
   const $ = (id) => document.getElementById(id);
   const READ_CONCURRENCY = 8;
+  const ORIENT_HEADROOM = 1.5; // times the load budget, for a scan and its leveled copy together
   const WINDOW_SAMPLE_STEP = 8;
   const BIN = 2;
 
@@ -112,6 +113,14 @@ window.CTApp = (function () {
     return CT.sampleRecord(state.folder, state.samples, {}, pending && pending._collection === 'samples' ? pending : null);
   }
 
+  /** The orientation saved for a sample (native voxels), or null for scan axes. */
+  function savedOrientation(folder) {
+    const pending = state.unsaved.get(folder);
+    return CT.sampleRecord(folder, state.samples, {}, pending && pending._collection === 'samples' ? pending : null).orientation || null;
+  }
+  // The scan and its leveled copy are both in memory while it is built: they share 1.5 times the load budget.
+  const orientLimit = () => ORIENT_HEADROOM * VB.budgetBytes(navigator.userAgent, location.search);
+
   function saveSample(changes) {
     const pending = state.unsaved.get(state.folder);
     saveRecord('samples', CT.sampleRecord(state.folder, state.samples, changes, pending && pending._collection === 'samples' ? pending : null));
@@ -189,8 +198,13 @@ window.CTApp = (function () {
 
   const unsavedOf = (collection) => [...state.unsaved.values()].filter((r) => r._collection === collection);
   // Records are kept on the grid they were drawn on and shown on the grid now loaded (CT.toGrid).
-  const annotationsOf = (folder) => [...state.annotations.values(), ...unsavedOf('annotations')].filter((a) => a.sample.folder === folder).map((a) => CT.toGrid(a, state.binFactor));
-  const regionsOf = (folder) => [...state.regions.values(), ...unsavedOf('regions')].filter((r) => r.sample.folder === folder).map((r) => CT.toGrid(r, state.binFactor));
+  // Marks are 2-D outlines in the frame they were drawn in, so only those of the scan's present orientation are shown.
+  const marksOf = (collection, folder) => [...state[collection].values(), ...unsavedOf(collection)].filter((r) => r.sample.folder === folder);
+  const inFrame = (r) => window.VBOrient.sameFrame(r, state.orientId);
+  const annotationsOf = (folder) => marksOf('annotations', folder).filter(inFrame).map((a) => CT.toGrid(a, state.binFactor));
+  const regionsOf = (folder) => marksOf('regions', folder).filter(inFrame).map((r) => CT.toGrid(r, state.binFactor));
+  /** How many of this scan's marks were drawn in another orientation (hidden until the scan is back in it). */
+  const hiddenMarks = (folder) => [...marksOf('annotations', folder), ...marksOf('regions', folder)].filter((r) => !inFrame(r)).length;
   const cropsOf = (folder) => regionsOf(folder).filter((r) => r.label === 'crop');
   const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `a${Date.now()}${Math.floor(Math.random() * 1e9)}`);
 
@@ -212,7 +226,7 @@ window.CTApp = (function () {
     const token = ++state.loadToken;
     if (worker) { worker.terminate(); worker = null; }
     for (const c of calls.values()) c.reject(new Error('Another scan was opened.')); calls.clear();
-    Object.assign(state, { slices: null, folder: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null });
+    Object.assign(state, { slices: null, folder: null, stack, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null });
     $('startup').hidden = false;
     showError('');
     emit('samplesChanged');
@@ -227,10 +241,12 @@ window.CTApp = (function () {
       }
     };
     // The first slice sets the shape; the binning factor is chosen, and said, before the rest is read.
-    let shape, f, slices, nativeMid = null;
+    let shape, f, slices, nativeMid = null, saved = null, orient = null, dims, circle;
     try {
       shape = await parse(0);
-      f = VB.planBinning({ width: shape.width, height: shape.height, depth: n }, VB.budgetBytes(navigator.userAgent, location.search));
+      saved = savedOrientation(stack.folder);
+      f = saved ? O.planOrientedBinning({ width: shape.width, height: shape.height, depth: n }, saved.dims, orientLimit())
+        : VB.planBinning({ width: shape.width, height: shape.height, depth: n }, VB.budgetBytes(navigator.userAgent, location.search));
       const groups = Math.floor(n / f), mid = Math.floor(n / 2);
       const binning = f > 1 ? ` at ${f}× binning (${Math.round(1000 * shape.voxelMm * f)} µm voxels) to fit memory` : '';
       slices = new Array(groups);
@@ -252,6 +268,18 @@ window.CTApp = (function () {
         }
       };
       await Promise.all(Array.from({ length: READ_CONCURRENCY }, reader));
+      dims = { nx: Math.floor(shape.width / f), ny: Math.floor(shape.height / f), nz: slices.length };
+      // The circle is fitted on a native slice, then scaled to the binned grid.
+      const c = CT.fitCircle(nativeMid || slices[slices.length >> 1], nativeMid ? shape.width : dims.nx, nativeMid ? shape.height : dims.ny);
+      circle = c && nativeMid ? { cx: c.cx / f, cy: c.cy / f, r: c.r / f } : c;
+      if (saved && token === state.loadToken) {
+        // A leveled scan is rebuilt in the part's frame; the original is dropped once that is done.
+        orient = O.onGrid(saved, f);
+        slices = await O.resamplePaced({ slices, dims, circle, orient, pause: () => new Promise((r) => { setTimeout(r, 0); }), every: 8,
+          onProgress: (k, total) => { bar.firstElementChild.style.width = `${(100 * k) / total}%`; $('openerText').textContent = `Leveling ${stack.folder} in the part's frame: slice ${k} of ${total}.`; } });
+        dims = { ...orient.dims };
+        circle = null;
+      }
     } catch (e) {
       if (token !== state.loadToken) return;
       state.loading = null;
@@ -269,11 +297,11 @@ window.CTApp = (function () {
     state.binFactor = f;
     state.nativeVoxelMm = shape.voxelMm;
     state.native = null;
-    state.dims = { nx: Math.floor(shape.width / f), ny: Math.floor(shape.height / f), nz: slices.length };
+    state.dims = dims;
     state.voxelMm = shape.voxelMm * f;
-    // The circle is fitted on a native slice, then scaled to the binned grid.
-    const c = CT.fitCircle(nativeMid || slices[slices.length >> 1], nativeMid ? shape.width : state.dims.nx, nativeMid ? shape.height : state.dims.ny);
-    state.circle = c && nativeMid ? { cx: c.cx / f, cy: c.cy / f, r: c.r / f } : c;
+    state.circle = circle; // null for a leveled scan: there, gray 0 marks outside the scan
+    state.orientation = orient;
+    state.orientId = O.orientId(saved);
     state.cursor = { x: state.dims.nx >> 1, y: state.dims.ny >> 1, z: state.dims.nz >> 1 };
     const auto = CT.autoWindow(slices, state.dims, WINDOW_SAMPLE_STEP);
     state.autoWindow = { low: auto.low, high: auto.high };
@@ -295,6 +323,7 @@ window.CTApp = (function () {
     try {
       const saved = await state.store.getRun(state.folder);
       if (!saved) return;
+      if (!O.sameFrame(saved, state.orientId)) { projectNote('The saved run was made with the scan in another orientation, so its settings and rejections were not restored.'); return; }
       if (saved.settings) state.settings = { ...P.DEFAULT_SETTINGS, ...saved.settings };
       // Rejections are voxel positions on the grid the run was saved on; voxel-count settings stay as saved.
       const savedGrid = saved.bin_factor || 1;
@@ -446,7 +475,7 @@ window.CTApp = (function () {
       if (!data.refused) state.zoneThreshold = data.threshold;
       emit('statusText', data.refused ? 'Zone segmentation failed' : 'Zones segmented');
       emit('poresChanged');
-    } else if (data.type === 'regionRuns' || data.type === 'crosscheck') {
+    } else if (data.type === 'regionRuns' || data.type === 'crosscheck' || data.type === 'partMask') {
       const call = calls.get(data.id);
       if (call) { calls.delete(data.id); call.resolve(data); }
     } else if (data.type === 'wall') {
@@ -475,7 +504,7 @@ window.CTApp = (function () {
       if (mine('pores') && state.porePhase === 'running') { state.porePhase = 'error'; emit('statusText', data.message); emit('poresChanged'); }
       if (mine('sheet') && state.onSheetError) { state.onSheetError(new Error(data.message)); state.onSheet = null; state.onSheetError = null; } // the export would wait forever
       if (step === 'zones') emit('statusText', `Zones: ${data.message}`);
-      if (step === 'crosscheck') { for (const c of calls.values()) c.reject(new Error(data.message)); calls.clear(); }
+      if (step === 'crosscheck' || step === 'orient') { for (const c of calls.values()) c.reject(new Error(data.message)); calls.clear(); }
     }
   }
 
@@ -570,5 +599,5 @@ window.CTApp = (function () {
     emit('wallChanged');
   }
 
-  return { sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration };
+  return { sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, hiddenMarks, orientLimit, cropOutlines, savedOrientation };
 }());

@@ -4,6 +4,8 @@
   'use strict';
   const CT = window.CT, P = window.CTPores, D = window.CTSheetData, G = window.CTPlot;
   const { state } = App;
+  // A leveled scan's axes are the part's own (long axis x, thinnest z), so the axis names say which.
+  const axisWord = () => (state.orientation ? 'Part' : 'Scan');
   const K = () => App.CTSheet;
   const f2 = (v) => v.toFixed(2), f1 = (v) => v.toFixed(1);
   const sign = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)} %`;
@@ -52,7 +54,7 @@
     const ax = G.axes(ctx, box, { xlim: [0, nx * cv], ylim: [ny * cv, 0] });
     ctx.save(); ctx.strokeStyle = S.PLANE_COLOR.XZ; ctx.lineWidth = 1.6 / 72; ctx.setLineDash([5 / 72, 3 / 72]);
     ctx.beginPath(); ctx.moveTo(box.x, ax.fy(c.y * v)); ctx.lineTo(box.x + pw, ax.fy(c.y * v)); ctx.stroke(); ctx.restore();
-    G.frame(ax, { xlabel: 'Scan x (mm)', ylabel: 'Scan y (mm)', letter: 'c', letterAt: 'tl', xticks: D.niceTicks(0, nx * cv, 6), yticks: D.niceTicks(0, ny * cv, 6) });
+    G.frame(ax, { xlabel: `${axisWord()} x (mm)`, ylabel: `${axisWord()} y (mm)`, letter: 'c', letterAt: 'tl', xticks: D.niceTicks(0, nx * cv, 6), yticks: D.niceTicks(0, ny * cv, 6) });
     const cb = { x: box.x + pw + 0.15, y: box.y, w: 0.14, h: ph };
     for (let k = 0; k < 100; k++) { ctx.fillStyle = `rgb(${D.magmaR(1 - k / 99).join(',')})`; ctx.fillRect(cb.x, cb.y + (k * ph) / 100, cb.w, ph / 100 + 0.002); }
     ctx.save(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1 / 72; ctx.strokeRect(cb.x, cb.y, cb.w, cb.h); ctx.restore();
@@ -115,8 +117,8 @@
     G.frame(a1, { ylabel: 'Porosity (%)', letter: 'e', xticklabels: false });
     const a2 = G.axes(ctx, { x: x0, y: y + 1.38, w: full, h: 1.0 }, { xlim, ylim: [1500, 2300] });
     G.line(a2, xs, pr.gray.filter((_, k) => use[k]), { color: '#1b5fc1' });
-    G.frame(a2, { xlabel: 'Scan x (mm)', ylabel: 'Matrix gray value\n(uncalibrated)', letter: 'f' });
-    S.caption(ctx, S.MARGIN, y + 2.82, `(e) Porosity per ${f2(sheet.coarseVoxelMm)} mm slab normal to scan x: pore volume / sample mask volume in the slab. (f) Mean matrix gray value per slab, pores and pore edges excluded. Values fall at both ends where slabs hold mostly sample surface.`);
+    G.frame(a2, { xlabel: `${axisWord()} x (mm)`, ylabel: 'Matrix gray value\n(uncalibrated)', letter: 'f' });
+    S.caption(ctx, S.MARGIN, y + 2.82, `(e) Porosity per ${f2(sheet.coarseVoxelMm)} mm slab normal to ${axisWord().toLowerCase()} x: pore volume / sample mask volume in the slab. (f) Mean matrix gray value per slab, pores and pore edges excluded. Values fall at both ends where slabs hold mostly sample surface.`);
     return canvas;
   }
 

@@ -210,6 +210,11 @@ onmessage = ({ data }) => {
     } else if (data.type === 'wall') {
       if (ensureBody(data.settings, data.crops)) sendModel();
       postMessage({ type: 'wall', id: data.id, ...self.VBWall.wallReport(body.filled, vol.dims, vol.bin, vol.voxelMm) });
+    } else if (data.type === 'partMask') {
+      // The sample mask, for leveling the part; a copy, so the worker keeps its own.
+      if (ensureBody(data.settings, data.crops)) sendModel();
+      const mask = body.filled.slice();
+      postMessage({ type: 'partMask', id: data.id, mask, dims: vol.dims, bin: vol.bin }, [mask.buffer]);
     } else if (data.type === 'regionRuns' || data.type === 'crosscheck') {
       if (!pores || !poreCoarse) throw new Error('Segment pores first: the cross-check compares against that segmentation.');
       postMessage({ type: data.type, id: data.id, ...crosscheck(data) });

@@ -318,6 +318,7 @@ test('errorStep sends a worker error to the step whose request failed', () => {
   assert.equal(CT.errorStep('sheet'), 'sheet');
   assert.equal(CT.errorStep('regionRuns'), 'crosscheck');
   assert.equal(CT.errorStep('crosscheck'), 'crosscheck');
+  assert.equal(CT.errorStep('partMask'), 'orient');
   assert.equal(CT.errorStep(undefined), null, 'unknown: every waiting step');
 });
 

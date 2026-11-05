@@ -108,12 +108,14 @@
       const phantom = state.regionLabel === 'phantom' ? state.phantomDraft : undefined;
       const record = R.makeRegion({ ...common, plane: d.plane, sliceFrom: crop ? 0 : Number($('rangeFrom').value), sliceTo: crop ? depth - 1 : Number($('rangeTo').value), label: state.regionLabel, voxelMm: state.voxelMm, dims: state.dims, phantom }, App.regionLabels());
       if (crop || phantom) { state.regionLabel = R.drawLabel(state.regionLabel, App.regionLabels()); state.phantomDraft = null; setTool('navigate'); }
+      if (state.orientId) record.orientation = state.orientId; // drawn in the leveled frame
       App.saveRecord('regions', record);
       if (!crop && !phantom) emit('markSaved', { collection: 'regions', id: record.id });
       if (crop) App.cropChanged();
       else if (state.zones && state.zones.map) App.requestZones();
     } else {
       const annotation = CT.makeAnnotation({ ...common, dims: state.dims, voxelMm: state.voxelMm, window: { ...state.window }, plane: d.plane, slice: d.slice, kind: d.kind, type: state.type });
+      if (state.orientId) annotation.orientation = state.orientId;
       App.saveRecord('annotations', annotation);
       emit('markSaved', { collection: 'annotations', id: annotation.id });
     }
@@ -186,7 +188,7 @@
     const { nx, ny, nz } = state.dims;
     const rows = [['Sample', sampleLabel(s)], ['Voxels', `${nx} × ${ny} × ${nz}`], ['Grid', CT.gridText(state.binFactor)],
       ['Voxel', `${(state.voxelMm * 1000).toFixed(2)} µm, isotropic assumed (${state.binFactor > 1 ? `${state.binFactor}× the TIFF resolution tag` : 'TIFF resolution tag'})`],
-      ['FOV diameter', state.circle ? `${(2 * state.circle.r * state.voxelMm).toFixed(1)} mm` : 'not found'], ['Gray window', `${state.window.low} to ${state.window.high}, uncalibrated`]];
+      ['FOV diameter', state.circle ? `${(2 * state.circle.r * state.voxelMm).toFixed(1)} mm` : state.orientation ? 'leveled scan: gray 0 is outside it' : 'not found'], ['Gray window', `${state.window.low} to ${state.window.high}, uncalibrated`]];
     for (const [k, v] of rows) {
       const a = document.createElement('span'); a.textContent = k;
       const b = document.createElement('span'); b.className = 'v'; b.textContent = v;
@@ -651,7 +653,7 @@
     const chunks = E.poreChunks(state.pores, state.rejected);
     const context = runContext();
     const rows = regionRows();
-    const run = { schema: 2, created_at: new Date().toISOString(), ...context, voxel_mm: state.voxelMm, stack_shape: state.dims, bin_factor: state.binFactor, chunk_count: chunks.length, rejected_voxels: state.rejectedVoxels,
+    const run = { schema: 2, created_at: new Date().toISOString(), ...context, voxel_mm: state.voxelMm, stack_shape: state.dims, bin_factor: state.binFactor, orientation: state.orientId || null, leveled: state.orientId ? App.savedOrientation(state.folder) : null, chunk_count: chunks.length, rejected_voxels: state.rejectedVoxels,
       crops: App.cropsOf(state.folder).map((c) => ({ plane: c.plane, points: c.points })), air_gray: state.airGray, reference_region: state.referenceId || null,
       reference_density_assumed: Number.isFinite(state.referenceDensity) ? state.referenceDensity : null,
       regions: rows.map((r) => ({ id: r.id, label: r.label, plane: r.plane, slice_from: r.slice_from, slice_to: r.slice_to, note: r.note, stats: r.stats, density: r.density })),

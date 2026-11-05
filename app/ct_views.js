@@ -190,7 +190,7 @@
   // once that file has been read; XZ and YZ always stay binned.
   function nativeFor(v, slice) {
     const f = state.binFactor;
-    if (f < 2 || v.plane !== 'XY' || !isMain(v) || v.scale <= 1) return null;
+    if (f < 2 || state.orientation || v.plane !== 'XY' || !isMain(v) || v.scale <= 1) return null; // native files are in scan axes
     const i = slice * f + (f >> 1);
     if (state.native && state.native.index === i) return state.native;
     if (v.pending !== i) {
@@ -420,7 +420,7 @@
     const p = CT.voxelOf(v.plane, currentSlice(v.plane), hit.col, hit.row);
     const gray = state.slices[p.z][p.y * state.dims.nx + p.x];
     const mm = (n) => (n * state.voxelMm).toFixed(2);
-    const outside = !CT.insideCircle(state.circle, p.x, p.y);
+    const outside = state.orientation ? gray === 0 : !CT.insideCircle(state.circle, p.x, p.y);
     const id = state.runs ? P.poreIdAt(state.runs, state.dims, p.x, p.y, p.z) : 0;
     const pore = id ? state.byId.get(id) : null;
     const patch = state.patchLabels ? coarseAt(state.patchLabels, state.patchGrid, p) : 0;

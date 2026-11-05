@@ -41,6 +41,11 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
 - The review sheet (PDF) carries the same reads on a Findings page after page 1, together with the saved regions, the
   Dragonfly comparison and the density calibration, and lists the steps not run, so a missing section is never read
   as a clean result.
+- Level a part scanned at an angle (Scan information > Orientation): Level the part finds the part's axes from its
+  sample mask (long axis to x, thinnest direction up), three previews follow the tilt and turn sliders, Flip over and
+  Turn 90°, and Apply rebuilds the scan in the part's frame (nearest neighbor, so every gray value is a measured one).
+  The orientation is saved with the sample; marks stay with the frame they were drawn in. See
+  docs/plans/2026-11-05-reorient.md.
 - Dragonfly 3D cross-check in the page (step 4): download the kit, load Dragonfly's pore mask, read Dice and the
   causes of any difference; see docs/DRAGONFLY_CROSSCHECK.md.
 - A result card for every mark: save a region, outline, point or measurement (or click a saved one on the image) and

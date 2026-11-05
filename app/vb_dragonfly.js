@@ -17,8 +17,9 @@
   const settingsUsed = () => state.poreRunSettings || state.settings;
 
   function render() {
-    const ready = Boolean(state.folder && state.pores && !busy);
+    const ready = Boolean(state.folder && state.pores && !busy && !state.orientation);
     $('dfKit').disabled = !ready; $('dfLoad').disabled = !ready;
+    if (state.orientation && !busy) { say('The cross-check works in scan axes: use Back to scan axes (Scan information > Orientation) first.'); return; }
     if (!state.pores && !busy) say(state.folder ? 'Segment pores (step 2) first: the kit and the comparison use that segmentation.' : '');
   }
 
