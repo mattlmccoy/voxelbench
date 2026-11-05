@@ -46,6 +46,8 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
   Turn 90°, and Apply rebuilds the scan in the part's frame (nearest neighbor, so every gray value is a measured one).
   The orientation is saved with the sample; marks stay with the frame they were drawn in. See
   docs/plans/2026-11-05-reorient.md.
+- The sample envelope is closed with a ball (Segmentation parameters > Mask closing shape), so open porosity does not
+  change with the part's angle in the scanner. Runs saved before 2026-11-05 used a box and keep it when reopened.
 - Dragonfly 3D cross-check in the page (step 4): download the kit, load Dragonfly's pore mask, read Dice and the
   causes of any difference; see docs/DRAGONFLY_CROSSCHECK.md.
 - A result card for every mark: save a region, outline, point or measurement (or click a saved one on the image) and

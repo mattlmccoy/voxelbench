@@ -55,3 +55,11 @@ test('a kit written to disk compares with its own pore mask at Dice 1, and refus
     assert.throws(() => Cmp.compareWithKit(dir, path.join(dir, 'voxelbench_pores')), /slices/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('the kit records how the sample envelope was closed (round or box), since it sets the counting region', () => {
+  const M2 = require('../app/vb_masks.js');
+  const base = { dims: { nx: 4, ny: 4, nz: 4 }, voxelMm: 0.04, bin: 2, bodyMm3: 1, porosityPercent: 1, voidCount: 1, rejectedCount: 0, poreVoxels: 1, regionVoxels: 10 };
+  const s = { poreThreshold: 1300, fineSigma: 1, margin: 2, minVolumeMm3: 0.0005, bodyThreshold: 1400, closeRadius: 8 };
+  assert.equal(M2.kitInfo({ ...base, settings: { ...s, closeShape: 'ball' } }).settings.closeShape, 'ball');
+  assert.equal(M2.kitInfo({ ...base, settings: s }).settings.closeShape, 'box');
+});

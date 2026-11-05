@@ -59,19 +59,35 @@ def block_mean(vol: np.ndarray, b: int = BIN) -> np.ndarray:
     return v.reshape(nz, b, ny, b, nx, b).mean(axis=(1, 3, 5))
 
 
+FACE = ndi.generate_binary_structure(3, 1)  # the 6 face neighbors
+OPEN_ITERATIONS = 2
+
+
 def ball(r: int) -> np.ndarray:
     z, y, x = np.ogrid[-r:r + 1, -r:r + 1, -r:r + 1]
     return x * x + y * y + z * z <= r * r
 
 
 def sample_mask(binned: np.ndarray, fov: np.ndarray, s: dict) -> np.ndarray:
-    """Solid where the smoothed binned gray exceeds the body threshold inside the FOV, closed by a ball of the closing
-    radius (padded by edge values, so the stack ends do not erode it) and with interior holes filled."""
+    """Solid where the smoothed binned gray exceeds the body threshold inside the FOV, its largest piece after a light
+    opening, closed by a ball of the closing
+    radius, or a cube for runs saved before the round closing (closeShape missing or "box"), padded by edge values so
+    the stack ends do not erode it, and with interior holes filled."""
     solid = (ndi.gaussian_filter(binned, s["sigma"]) > s["bodyThreshold"]) & fov
+    # The part, as VoxelBench defines it: opened by two face-neighbor steps (the stack faces erode), then the largest
+    # face-connected piece, so loose grains and holder pieces beside it are not part of its envelope.
+    opened = ndi.binary_dilation(ndi.binary_erosion(solid, FACE, iterations=OPEN_ITERATIONS, border_value=0), FACE, iterations=OPEN_ITERATIONS)
+    labels, count = ndi.label(opened, FACE)
+    if count:
+        sizes = np.bincount(labels.ravel())
+        sizes[0] = 0
+        solid = labels == sizes.argmax()
+    del labels, opened
     r = int(s["closeRadius"])
     if r > 0:
         padded = np.pad(solid, r, mode="edge")
-        solid = ndi.binary_closing(padded, structure=ball(r))[r:-r, r:-r, r:-r]
+        shape = ball(r) if s.get("closeShape", "box") == "ball" else np.ones((2 * r + 1,) * 3, dtype=bool)
+        solid = ndi.binary_closing(padded, structure=shape)[r:-r, r:-r, r:-r]
     return ndi.binary_fill_holes(solid)
 
 

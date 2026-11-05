@@ -297,6 +297,18 @@
       wrap.append(name, value, input);
       host.append(wrap);
     }
+    // The envelope's closing shape: round by default; runs saved before 2026-11-05 used a box and keep it.
+    const wrap = document.createElement('label');
+    wrap.className = 'setting';
+    const name = document.createElement('span');
+    name.textContent = 'Mask closing shape';
+    const pick = document.createElement('select');
+    pick.id = 'set_closeShape';
+    for (const [v, t] of [['ball', 'round (same in every direction)'], ['box', 'box (runs before 2026-11-05)']]) { const o = document.createElement('option'); o.value = v; o.textContent = t; pick.append(o); }
+    pick.value = state.settings.closeShape === 'ball' ? 'ball' : 'box';
+    pick.addEventListener('change', () => { state.settings.closeShape = pick.value; $('poreStatus').textContent = 'Parameters changed. Press Segment pores to apply.'; });
+    wrap.append(name, document.createElement('span'), pick);
+    host.append(wrap);
   }
 
   function renderPoreSummary() {

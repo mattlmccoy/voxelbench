@@ -12,7 +12,7 @@ const D = require('../../app/vb_deviation.js');
 const K = require('../../app/vb_connectivity.js');
 const H = require('../headless_run.js');
 
-const SETTINGS = { poreThreshold: 1350 };
+const SETTINGS = { poreThreshold: 1350, closeShape: 'ball' }; // today's default closing, stated: a headless run without it replays the old box
 
 async function writeScan(dir, files) {
   fs.mkdirSync(dir, { recursive: true });
@@ -47,7 +47,7 @@ async function main() {
   if (!out) throw new Error('usage: node tools/reference/export_cases.js <out-dir> [scan-folder]');
   fs.mkdirSync(out, { recursive: true });
   if (real) {
-    const run = { settings: {} };
+    const run = { settings: { closeShape: 'ball' } }; // the page's defaults
     const a = H.analyze(H.readStack(real), run, { patches: false });
     fs.writeFileSync(path.join(out, 'real.json'), JSON.stringify({ folder: path.resolve(real), js: results(a) }));
     return;

@@ -33,7 +33,7 @@ needs about 7 GB of memory in Python.
 |---|---|---|
 | Porosity | Smoothed full-resolution gray below the pore threshold inside the margin-eroded sample mask, 26-connected components of at least the minimum volume | VoxelBench vs reference < 5 % relative (10 % on a real scan); reference vs truth < 10 % |
 | Open / closed porosity | 6-connected low binned gray joined to voxels next to the outside of the mask | < 0.2 percentage points (0.5 on a real scan) |
-| Sample mask | Smoothed binned gray above the body threshold, closed by a ball, holes filled | < 5 % (real scan) |
+| Sample mask | Smoothed binned gray above the body threshold, opened by two face steps, its largest face-connected piece, closed by a ball (a cube for runs saved before the round closing), holes filled | < 5 % (real scan) |
 | Filler | Robust detection threshold, halfway measurement threshold from the median peak, 26-connected labels, covariance per particle | Count within 10 %, volume within 15 %, fibers within 2, direction within 5° |
 | Wall thickness | 2 × the largest distance-transform value − ½ voxel (the synthetic cylinder's diameter) | Within 2 analysis voxels |
 | CAD deviation at the true pose | Trilinear sampling along the nominal normals, nearest fall through the level into air joined to the outside | Median within 0.01 mm; > 90 % of shared points within 0.02 mm |
@@ -41,14 +41,14 @@ needs about 7 GB of memory in Python.
 The CAD check reuses VoxelBench's iso level and measurement points; the sampling, the air mask and the crossing
 search are the reference's own.
 
-## Results (synthetic, 2026-11-03)
+## Results (synthetic, 2026-11-05, round closing)
 
 | Quantity | Truth | VoxelBench | Reference |
 |---|---|---|---|
-| Porosity | 2.755 % | 2.614 % | 2.613 % |
-| Open porosity | 0 % | 0 % | 0 % |
+| Porosity | 2.755 % | 2.601 % | 2.613 % |
+| Open porosity | 0 % | 0.07 % | 0 % |
 | Filler particles | 70 | 70 | 70 |
-| Filler volume | 0.656 % | 0.583 % | 0.590 % |
+| Filler volume | 0.656 % | 0.584 % | 0.590 % |
 | Fibers | 20 | 20 | 20 (directions 0.04° apart) |
 | Cylinder wall | 3.84 mm | 3.68 mm | 3.68 mm |
 | CAD median deviation | | 0.0092 mm | 0.0092 mm (all shared points within 0.02 mm) |
@@ -56,3 +56,8 @@ search are the reference's own.
 Both sides read the porosity, the filler volume and the wall about 4 to 11 % low against truth. The smoothing
 shrinks small features and the sample mask edge sits inside the true surface, so this is the definition's bias,
 not a disagreement between the two.
+
+**The closing shape (2026-11-05).** VoxelBench closed the sample mask with a cube until 2026-11-05 and with a ball
+since; the reference follows whichever the run records. A cube reaches √3 times farther along its diagonals, so its
+envelope, and the open porosity measured against it, changed with the part's angle to the voxel grid. With the ball,
+the synthetic case's open porosity reads 0.07 % (truth 0): a few pores just under the surface now touch the envelope.

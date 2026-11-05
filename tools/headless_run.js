@@ -59,7 +59,7 @@ function detect({ vol, dims, voxelMm, settings, crops, smoothed }) {
     runs record none and used the end baseline). */
 function analyze({ slices, voxelMm, dims }, run, { patches: withPatches = true, zoneBaseline } = {}) {
   const crops = run.crops || [];
-  const settings = { ...P.DEFAULT_SETTINGS, ...run.settings };
+  const settings = P.savedSettings(run.settings); // a run from before the round closing keeps its box
   const circle = CT.fitCircle(slices[dims.nz >> 1], dims.nx, dims.ny);
   const vol = P.binVolume(slices, dims, BIN, circle);
   log('Smoothing at full resolution');

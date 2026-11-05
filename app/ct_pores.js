@@ -9,7 +9,7 @@
   'use strict';
 
   const OPEN_ITERATIONS = 2;
-  const DEFAULT_SETTINGS = { sigma: 1, bodyThreshold: 1400, closeRadius: 8, margin: 2, poreThreshold: 1300, neck: 3, fineSigma: 1, minVolumeMm3: 0.0005, maxElongation: 2.5 };
+  const DEFAULT_SETTINGS = { sigma: 1, bodyThreshold: 1400, closeRadius: 8, closeShape: 'ball', margin: 2, poreThreshold: 1300, neck: 3, fineSigma: 1, minVolumeMm3: 0.0005, maxElongation: 2.5 };
   const MAX_GROW_ROUNDS = 200;
 
   const binnedToFull = (i, bin) => i * bin + (bin - 1) / 2;
@@ -218,6 +218,57 @@
   /** Cube erosion. Past the stack edge counts as set, so the edge itself does not erode. */
   const boxErode = (mask, dims, radius) => invert(boxDilate(invert(mask), dims, radius));
 
+  const FAR = 1e9;
+  /** One line of the squared distance transform (Felzenszwalb and Huttenlocher): d[q] = min over p of (q-p)² + f[p]. */
+  function distanceLine(f, n, d, v, z) {
+    let k = 0;
+    v[0] = 0; z[0] = -Infinity; z[1] = Infinity;
+    for (let q = 1; q < n; q++) {
+      let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+      while (s <= z[k]) { k--; s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); }
+      k++; v[k] = q; z[k] = s; z[k + 1] = Infinity;
+    }
+    k = 0;
+    for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; d[q] = (q - v[k]) ** 2 + f[v[k]]; }
+  }
+  /** Squared Euclidean distance (voxels²) from each voxel to the nearest voxel whose mask value is target, one axis at
+      a time; voxels outside the stack never count as target. */
+  function squaredDistance(mask, dims, target) {
+    const out = new Float32Array(mask.length);
+    for (let i = 0; i < mask.length; i++) out[i] = (mask[i] ? 1 : 0) === target ? 0 : FAR;
+    const longest = Math.max(dims.nx, dims.ny, dims.nz);
+    const f = new Float64Array(longest), d = new Float64Array(longest), v = new Int32Array(longest), z = new Float64Array(longest + 1);
+    for (let axis = 0; axis < 3; axis++) {
+      forLines(dims, axis, (start, stride, len) => {
+        for (let i = 0; i < len; i++) f[i] = out[start + i * stride];
+        distanceLine(f, len, d, v, z);
+        for (let i = 0; i < len; i++) out[start + i * stride] = Math.min(d[i], FAR);
+      });
+    }
+    return out;
+  }
+  /** Dilation by a ball of the radius (voxels within it of the mask, x² + y² + z² ≤ r²). */
+  function ballDilate(mask, dims, radius) {
+    const d = squaredDistance(mask, dims, 1), out = new Uint8Array(mask.length), r2 = radius * radius;
+    for (let i = 0; i < out.length; i++) if (d[i] <= r2) out[i] = 1;
+    return out;
+  }
+  /** Erosion by a ball of the radius; the stack edge does not erode, as with the box. */
+  function ballErode(mask, dims, radius) {
+    const d = squaredDistance(mask, dims, 0), out = new Uint8Array(mask.length), r2 = radius * radius;
+    for (let i = 0; i < out.length; i++) if (mask[i] && d[i] > r2) out[i] = 1;
+    return out;
+  }
+  /** Closing (dilate, then erode) by a ball (default) or, for settings saved before 2026-11-05, a box. A box reaches
+      √3 times farther along its diagonals, so its closing depends on how the part sits in the voxel grid. */
+  function closeMask(mask, dims, radius, shape) {
+    if (radius <= 0) return mask.slice();
+    return shape === 'ball' ? ballErode(ballDilate(mask, dims, radius), dims, radius) : boxErode(boxDilate(mask, dims, radius), dims, radius);
+  }
+  /** Settings read back from a saved run, bookmark or preset: those saved before the round closing have no closeShape
+      and were made with the box, so they keep it and reproduce their numbers. */
+  const savedSettings = (saved) => ({ ...DEFAULT_SETTINGS, closeShape: 'box', ...saved });
+
   // Diamond (6-neighbor) erosion, repeated; past the stack edge counts as empty.
   function erodeSteps(mask, { nx, ny, nz }, steps) {
     let src = mask;
@@ -358,7 +409,7 @@
     for (let l = 1; l <= count; l++) if (sizes[l] > sizes[biggest]) biggest = l;
     const main = new Uint8Array(n);
     if (biggest) for (let i = 0; i < n; i++) if (labels[i] === biggest) main[i] = 1;
-    const closed = boxErode(boxDilate(main, dims, settings.closeRadius), dims, settings.closeRadius);
+    const closed = closeMask(main, dims, settings.closeRadius, settings.closeShape);
     const filled = fillHoles(closed, dims);
     if (crop) for (let i = 0; i < n; i++) if (!crop[i]) filled[i] = 0;
     return { smoothed, filled };
@@ -733,6 +784,6 @@
     return { positions: positions.slice(0, used), indices: indices.slice(0, written) };
   }
 
-  return { DEFAULT_SETTINGS, binnedToFull, fullToBinned, binVolume, gaussian, createSliceSmoother, label, boxDilate, boxErode, fillHoles, rasterPolygon, cropMask, planeCropKeep, buildBody,
+  return { DEFAULT_SETTINGS, savedSettings, binnedToFull, fullToBinned, binVolume, gaussian, createSliceSmoother, label, boxDilate, boxErode, ballDilate, ballErode, closeMask, fillHoles, rasterPolygon, cropMask, planeCropKeep, buildBody,
     elongation, detectPores, fineDetect, poreIdAt, planePoreIds, firstVoxelOf, runsToBinned, summarize, rejectedAfterRerun, downsampleMask, surfaceNets };
 }));

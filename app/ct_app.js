@@ -324,7 +324,7 @@ window.CTApp = (function () {
       const saved = await state.store.getRun(state.folder);
       if (!saved) return;
       if (!O.sameFrame(saved, state.orientId)) { projectNote('The saved run was made with the scan in another orientation, so its settings and rejections were not restored.'); return; }
-      if (saved.settings) state.settings = { ...P.DEFAULT_SETTINGS, ...saved.settings };
+      if (saved.settings) state.settings = P.savedSettings(saved.settings); // a run from before the round closing keeps its box
       // Rejections are voxel positions on the grid the run was saved on; voxel-count settings stay as saved.
       const savedGrid = saved.bin_factor || 1;
       if (saved.rejected_voxels) state.rejectedVoxels = CT.toGrid({ voxels: saved.rejected_voxels, bin_factor: savedGrid }, state.binFactor).voxels;

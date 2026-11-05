@@ -377,3 +377,44 @@ test('planeCropKeep accepts frozen records and matches the outline on every view
   assert.equal(cache.size, 1);
   assert.equal(P.planeCropKeep([], 'XY', 0, dims, cache), null);
 });
+
+// The sample envelope is closed with a ball, so it does not depend on how the part sits in the voxel grid.
+test('ballDilate and ballErode use a ball of the given radius, and the stack edge does not erode', () => {
+  const { d, a } = grid(9, 9, 9, (x, y, z) => x === 4 && y === 4 && z === 4);
+  const dil = P.ballDilate(a, d, 2);
+  assert.equal(dil.reduce((s, v) => s + v, 0), 33); // integer points with x²+y²+z² ≤ 4
+  assert.equal(dil[idx(d, 2, 4, 4)], 1);
+  assert.equal(dil[idx(d, 2, 2, 4)], 0); // offset (2, 2, 0): inside the cube of radius 2, outside the ball
+  assert.equal(P.ballErode(dil, d, 2).reduce((s, v) => s + v, 0), 1);
+  const full = new Uint8Array(729).fill(1);
+  assert.equal(P.ballErode(full, d, 3).reduce((s, v) => s + v, 0), 729);
+});
+
+// A plate with parallel slots 10 voxels wide, either along y or turned 45° about z, closed with radius 4. A ball
+// fills gaps up to 8 wide in any direction, so neither plate's slots fill; a box reaches r·√2 across a diagonal slot,
+// so it fills the turned slots and not the straight ones.
+function slotted(turned) {
+  const n = 64, h = 16;
+  return grid(n, n, h, (x, y, z) => {
+    if (z < 2 || z > 13 || x < 2 || x > n - 3 || y < 2 || y > n - 3) return false;
+    if (z < 6) return true; // the base under the slots
+    const u = turned ? (x + y) / Math.SQRT2 : x;
+    return ((u % 16) + 16) % 16 >= 10; // slots 10 wide, ribs 6 wide
+  });
+}
+const share = (closed, raw) => closed.reduce((s, v) => s + v, 0) / raw.reduce((s, v) => s + v, 0);
+
+test('the round closing fills the same share of a slotted plate straight or turned 45°; the box does not', () => {
+  const a = slotted(false), b = slotted(true);
+  const ball = (m) => P.closeMask(m.a, m.d, 4, 'ball'), box = (m) => P.closeMask(m.a, m.d, 4, 'box');
+  assert.ok(Math.abs(share(ball(a), a.a) - share(ball(b), b.a)) < 0.05, `ball ${share(ball(a), a.a)} vs ${share(ball(b), b.a)}`);
+  assert.ok(share(box(b), b.a) - share(box(a), a.a) > 0.3, `box ${share(box(a), a.a)} vs ${share(box(b), b.a)}`);
+});
+
+test('the envelope is round by default; settings saved before the round closing keep the box they were made with', () => {
+  assert.equal(P.DEFAULT_SETTINGS.closeShape, 'ball');
+  assert.equal(P.savedSettings({ sigma: 2 }).closeShape, 'box');
+  assert.equal(P.savedSettings({ sigma: 2 }).sigma, 2);
+  assert.equal(P.savedSettings({ closeShape: 'ball' }).closeShape, 'ball');
+  assert.equal(P.savedSettings({}).poreThreshold, P.DEFAULT_SETTINGS.poreThreshold);
+});

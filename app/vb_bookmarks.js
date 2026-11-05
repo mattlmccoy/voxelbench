@@ -46,7 +46,7 @@
   function applyPreset() {
     const p = state.presets.get($('presetSelect').value);
     if (!p) return;
-    state.settings = { ...P.DEFAULT_SETTINGS, ...p.settings };
+    state.settings = P.savedSettings(p.settings);
     emit('settingsApplied');
     const grid = (p.bin_factor || 1) !== state.binFactor || (p.voxel_mm && Math.abs(p.voxel_mm - state.voxelMm) > 1e-6);
     $('presetNote').textContent = `Applied "${p.name}". Press Segment pores to use it.${grid ? ` It was saved at ${(p.voxel_mm * 1000).toFixed(0)} µm${p.bin_factor > 1 ? `, ${p.bin_factor}× binned` : ''}; settings in voxels (smoothing, closing, margin, neck) keep their saved values on this grid.` : ''}`;

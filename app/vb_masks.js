@@ -292,7 +292,7 @@
       format: 'voxelbench-dragonfly-kit/1',
       dims, voxel_mm: voxelMm, analysis_bin: bin,
       settings: { poreThreshold: settings.poreThreshold, fineSigma: settings.fineSigma, margin: settings.margin, minVolumeMm3: settings.minVolumeMm3,
-        bodyThreshold: settings.bodyThreshold, closeRadius: settings.closeRadius },
+        bodyThreshold: settings.bodyThreshold, closeRadius: settings.closeRadius, closeShape: settings.closeShape === 'ball' ? 'ball' : 'box' },
       rule: `pore voxel = smoothed gray < ${settings.poreThreshold}, inside the region; joined through faces (6-connected); groups under ${settings.minVolumeMm3} mm3 dropped`,
       smoothing: SMOOTHING, connectivity: 6,
       min_group_voxels: Math.ceil(settings.minVolumeMm3 / voxelMm ** 3 - 1e-9),

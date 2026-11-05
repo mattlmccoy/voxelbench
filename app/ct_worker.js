@@ -13,7 +13,7 @@ let coarse = null, voidShare = null, zoneReady = null, airGray = null, patchLabe
 const say = (text) => postMessage({ type: 'status', text });
 
 function ensureBody(settings, crops) {
-  const key = JSON.stringify([settings.sigma, settings.bodyThreshold, settings.closeRadius, crops.map((c) => [c.plane, c.points])]);
+  const key = JSON.stringify([settings.sigma, settings.bodyThreshold, settings.closeRadius, settings.closeShape, crops.map((c) => [c.plane, c.points])]);
   if (key === bodyKey && body) return false;
   say('Building the sample mask');
   const crop = P.cropMask(crops, vol.dims, vol.bin);
