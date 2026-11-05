@@ -5,7 +5,7 @@ const { execFileSync } = require('node:child_process');
 
 const BANNED_TEXT = [['GaTech', ' ', 'Dropbox'], ['matt', '', 'mccoy'], ['PREDICTIONS', '_', 'LOCKED'], ['CT', '_', 'SCANS'],
   ['1026', '-', 'PILE'], ['1027', '-', 'DISK'], ['1021', '-', 'MOUND'], ['1020', '-', 'CUBE'], ['1022', '-', 'CUBE'], ['10/27', ' ', 'cube'],
-  ['CT', '_', 'prep'], ['Sample2', '_', '1027_cube'], ['venv', '', '312'], ['1NQ7ww', '', 'AbgJES4B7Gfs1tbs']]
+  ['CT', '_', 'prep'], ['Sample2', '_', '1027_cube'], ['venv', '', '312'], ['1NQ7ww', '', 'AbgJES4B7Gfs1tbs'], ['John', '', 'stone']]
   .map(([a, sep, b]) => a + sep + b);
 
 /** Commits reachable from ref whose added lines contain a banned string: [{ commit, text }]. Run before any push. */

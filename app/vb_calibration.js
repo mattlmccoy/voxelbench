@@ -47,9 +47,35 @@
   const g3 = (d) => `${d.value.toFixed(3)}${d.extrapolated ? '*' : ''} g/cm³`;
 
   /** Text after a voxel's gray in the status bar: its equivalent density when calibrated. */
-  function grayReadout(fit, gray) {
+  /** Relative density on one scale: (gray - air) / (dense - air); 0 = air, 1 = the dense reference. Null without
+      a usable scale. */
+  function relativeDensity({ airGray, denseGray }, gray) {
+    const span = denseGray - airGray;
+    if (!Number.isFinite(gray) || !Number.isFinite(span) || !(Math.abs(span) > 1e-9)) return null;
+    return (gray - airGray) / span;
+  }
+
+  /** The relative scales of a scan: one per material of its dense references (their median grays averaged), each
+      from this scan's air. A material whose dense gray is not above air gives no scale. */
+  function relativeScale({ airGray, dense }) {
+    if (!Number.isFinite(airGray)) return [];
+    const by = new Map();
+    for (const d of dense) if (Number.isFinite(d.gray)) { if (!by.has(d.material)) by.set(d.material, []); by.get(d.material).push(d.gray); }
+    return [...by].map(([material, g]) => ({ material, airGray, denseGray: g.reduce((a, b) => a + b, 0) / g.length })).filter((s) => s.denseGray > airGray);
+  }
+
+  /** The status-bar reading: the calibrated density (or "uncalibrated"), then the gray on each relative scale. */
+  function grayReadout(fit, gray, relative = []) {
     const d = applyCalibration(fit, gray);
-    return d ? ` ≈ ${g3(d)} eq.` : ' uncalibrated';
+    return (d ? ` ≈ ${g3(d)} eq.` : ' uncalibrated') + relative.map((s) => ` · ${relativeDensity(s, gray).toFixed(2)} of ${s.material} dense`).join('');
+  }
+
+  /** The phantom materials used in a project, most recent first, with the density last entered for each, so a lab
+      reference such as the printed holder is typed once and offered again. */
+  function knownMaterials(regions) {
+    const latest = new Map();
+    for (const r of [...regions].filter((x) => x.phantom).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))) latest.set(r.phantom.name, { at: r.created_at, density: r.phantom.density_g_cm3 });
+    return [...latest].sort((a, b) => String(b[1].at).localeCompare(String(a[1].at))).map(([name, v]) => ({ name, density_g_cm3: v.density }));
   }
 
   /** What a calibration gives for the open scan: the solid matrix at its mean gray, the bulk with the pores (air in
@@ -67,5 +93,5 @@
     return { rows, todo: null };
   }
 
-  return { AIR_DENSITY, calibrationPoints, fitCalibration, applyCalibration, grayReadout, calibrationResults };
+  return { AIR_DENSITY, calibrationPoints, fitCalibration, applyCalibration, relativeDensity, relativeScale, grayReadout, knownMaterials, calibrationResults };
 }));

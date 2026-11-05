@@ -3,7 +3,7 @@
    limits, exports the particles, and draws them in the 3D view (fibers as segments, the rest as points). */
 (function (App) {
   'use strict';
-  const CT = window.CT, F = window.VBFiller;
+  const CT = window.CT, F = window.VBFiller, R = window.CTRegions;
   const { state, $, on } = App;
   const NEGLIGIBLE_PERCENT = 0.001; // a bright phase below this share of the mask is reported as none
   const fmt = (v, d = 3) => (v === null || v === undefined || !Number.isFinite(v) ? 'n/a' : v.toFixed(d));
@@ -46,7 +46,7 @@
   }
 
   function renderRegions(r) {
-    const regions = App.regionsOf(state.folder).filter((x) => x.label !== 'crop' && x.label !== 'phantom');
+    const regions = App.regionsOf(state.folder).filter((x) => !R.isReference(x.label));
     const table = $('fillerRegions');
     table.textContent = '';
     $('fillerRegionWrap').hidden = !regions.length;

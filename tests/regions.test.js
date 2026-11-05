@@ -131,3 +131,19 @@ test('after saving a phantom or a crop, drawing continues with a user label', ()
   assert.equal(R.drawLabel('crop', labels), 'lot_7');
   assert.equal(R.drawLabel('other_region', labels), 'other_region');
 });
+
+test('crop, phantom and dense reference regions are references, not measured regions', () => {
+  const R2 = require('../app/ct_regions.js');
+  for (const id of ['crop', 'phantom', 'dense']) assert.equal(R2.isReference(id), true, id);
+  assert.equal(R2.isReference('region_a'), false);
+  assert.equal(R2.labelOf('dense', R2.DEFAULT_LABELS).label, 'Dense reference');
+});
+
+test('a dense reference records its material; without one it is refused', () => {
+  const R2 = require('../app/ct_regions.js');
+  const base = { id: 'd1', now: 't', sample: { folder: 'S' }, plane: 'XY', sliceFrom: 2, sliceTo: 4, points: [{ col: 1, row: 1 }, { col: 5, row: 1 }, { col: 5, row: 5 }], voxelMm: 0.04, dims: { nx: 10, ny: 10, nz: 10 } };
+  const r = R2.makeRegion({ ...base, label: 'dense', dense: { material: ' natural ' } });
+  assert.deepEqual(r.dense, { material: 'natural' });
+  assert.equal(r.belief_not_measurement, false);
+  assert.throws(() => R2.makeRegion({ ...base, label: 'dense' }), /material/);
+});

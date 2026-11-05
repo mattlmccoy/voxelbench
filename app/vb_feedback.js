@@ -32,7 +32,7 @@
 
   /** Card for a measured region (or one slice of an outline): stats from CTRegions.regionStats; part = { porosityPercent,
       matrixGray, airGray } of the whole part, each null when not known; fit = the density calibration or null. */
-  function regionCard({ title, stats, part, fit }) {
+  function regionCard({ title, stats, part, fit, relative = [] }) {
     if (!stats || !stats.voxels) return { title, rows: [], insights: ['The outline holds no voxels inside the field of view; draw it again on the part.'] };
     const rows = [['Volume', `${stats.volume_mm3.toFixed(2)} mm³ (${n0(stats.voxels)} voxels)`], ['Gray', `${gray(stats.gray_mean)} ± ${gray(stats.gray_sd)}`]];
     const insights = [];
@@ -41,6 +41,7 @@
     if (stats.matrix_gray_mean !== null && stats.matrix_gray_mean !== undefined) rows.push(['Solid gray', gray(stats.matrix_gray_mean)]);
     const d = Cal.applyCalibration(fit, stats.matrix_gray_mean ?? stats.gray_mean);
     if (d) rows.push(['Eq. density (solid)', g3(d)]);
+    for (const s of relative) rows.push([`Relative density (${s.material})`, `${Cal.relativeDensity(s, stats.gray_mean).toFixed(2)} of dense (mean gray, pores included)`]);
     if (pores && Number.isFinite(part.porosityPercent) && part.porosityPercent > 0) insights.push(porosityInsight(100 * stats.pore_fraction, part.porosityPercent));
     if (Number.isFinite(stats.matrix_gray_mean) && Number.isFinite(part.matrixGray) && Number.isFinite(part.airGray) && part.matrixGray !== part.airGray) insights.push(grayInsight(stats.matrix_gray_mean, part));
     if (stats.voxels < SMALL_VOXELS) insights.push(`Small region (${n0(stats.voxels)} voxels): treat the numbers as rough.`);

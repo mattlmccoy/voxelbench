@@ -50,11 +50,12 @@
     const drawing = annotating || state.tool === 'freehand';
     $('draftPanel').hidden = !drawing;
     const hints = { crop: 'Drag a polygon around the sample on the main view, then save. Voxels outside it are excluded through the full depth of that view.',
+      dense: `Drag a polygon inside fully dense ${state.denseDraft ? state.denseDraft.material : ''} material (glossy, pore-free), away from its edge, set the slices where it is dense, then save.`,
       phantom: `Drag a polygon inside the phantom${state.phantomDraft ? ` (${state.phantomDraft.name}, ${state.phantomDraft.density_g_cm3} g/cm³)` : ''}, away from its edge, set the slices where it is solid, then save.` };
     const regionHint = 'Pick a label below, then drag a closed outline on the main view around the area to measure. Set the slices it spans, then Save; draw more, or press Done drawing. Each region\'s volume, porosity and gray (and density, when calibrated) appear in the step 3 region table.';
     $('toolHintLong').textContent = state.tool === 'freehand' ? (hints[state.regionLabel] || regionHint) : tool.hint;
     $('types').hidden = !annotating;
-    $('regionLabels').hidden = state.tool !== 'freehand' || state.regionLabel === 'crop' || state.regionLabel === 'phantom';
+    $('regionLabels').hidden = state.tool !== 'freehand' || R.isReference(state.regionLabel);
     $('reviewVoids').setAttribute('aria-pressed', String(state.tool === 'review'));
     const chips = (host, list, current, pick) => {
       host.textContent = '';
@@ -106,11 +107,12 @@
       const crop = state.regionLabel === 'crop';
       const depth = CT.planeShape(d.plane, state.dims).depth;
       const phantom = state.regionLabel === 'phantom' ? state.phantomDraft : undefined;
-      const record = R.makeRegion({ ...common, plane: d.plane, sliceFrom: crop ? 0 : Number($('rangeFrom').value), sliceTo: crop ? depth - 1 : Number($('rangeTo').value), label: state.regionLabel, voxelMm: state.voxelMm, dims: state.dims, phantom }, App.regionLabels());
-      if (crop || phantom) { state.regionLabel = R.drawLabel(state.regionLabel, App.regionLabels()); state.phantomDraft = null; setTool('navigate'); }
+      const dense = state.regionLabel === 'dense' ? state.denseDraft : undefined;
+      const record = R.makeRegion({ ...common, plane: d.plane, sliceFrom: crop ? 0 : Number($('rangeFrom').value), sliceTo: crop ? depth - 1 : Number($('rangeTo').value), label: state.regionLabel, voxelMm: state.voxelMm, dims: state.dims, phantom, dense }, App.regionLabels());
+      if (crop || phantom || dense) { state.regionLabel = R.drawLabel(state.regionLabel, App.regionLabels()); state.phantomDraft = null; state.denseDraft = null; setTool('navigate'); }
       if (state.orientId) record.orientation = state.orientId; // drawn in the leveled frame
       App.saveRecord('regions', record);
-      if (!crop && !phantom) emit('markSaved', { collection: 'regions', id: record.id });
+      if (!crop && !phantom && !dense) emit('markSaved', { collection: 'regions', id: record.id });
       if (crop) App.cropChanged();
       else if (state.zones && state.zones.map) App.requestZones();
     } else {
@@ -144,7 +146,7 @@
         else {
           const b = document.createElement('button');
           b.className = 'link';
-          b.textContent = `load ${stack.files.length} slices`;
+          b.textContent = stack.kind === 'vox' ? `load VOX (${(stack.vox.size / 1e9).toFixed(1)} GB)` : `load ${stack.files.length} slices`;
           b.addEventListener('click', () => App.loadStack(stack));
           cell.append(b);
         }
@@ -187,8 +189,10 @@
     $('calHint').textContent = fit && fit.ok ? `Gray is calibrated to the equivalent density of the phantom material (${fit.n} points).` : 'Gray values are uncalibrated (no reference phantoms).';
     const { nx, ny, nz } = state.dims;
     const rows = [['Sample', sampleLabel(s)], ['Voxels', `${nx} × ${ny} × ${nz}`], ['Grid', CT.gridText(state.binFactor)],
-      ['Voxel', `${(state.voxelMm * 1000).toFixed(2)} µm, isotropic assumed (${state.binFactor > 1 ? `${state.binFactor}× the TIFF resolution tag` : 'TIFF resolution tag'})`],
-      ['FOV diameter', state.circle ? `${(2 * state.circle.r * state.voxelMm).toFixed(1)} mm` : state.orientation ? 'leveled scan: gray 0 is outside it' : 'not found'], ['Gray window', `${state.window.low} to ${state.window.high}, uncalibrated`]];
+      ['Voxel', state.stack && state.stack.kind === 'vox'
+        ? `${(state.voxelMm * 1000).toFixed(2)} µm, equal on all three axes (${state.binFactor > 1 ? `${state.binFactor}× the VOX header spacing` : 'VOX header'})`
+        : `${(state.voxelMm * 1000).toFixed(2)} µm, isotropic assumed (${state.binFactor > 1 ? `${state.binFactor}× the TIFF resolution tag` : 'TIFF resolution tag'})`],
+      ['Scanner settings', window.VBVox.settingsText(state.scanInfo)], ...(state.scanInfo && state.scanInfo.study ? [['Study', `${state.scanInfo.study}${state.scanInfo.scannedAt ? `, ${state.scanInfo.scannedAt.slice(0, 16).replace('T', ' ')}` : ''}`]] : []), ['FOV diameter', state.circle ? `${(2 * state.circle.r * state.voxelMm).toFixed(1)} mm` : state.orientation ? 'leveled scan: gray 0 is outside it' : 'not found'], ['Gray window', `${state.window.low} to ${state.window.high}, uncalibrated`]];
     for (const [k, v] of rows) {
       const a = document.createElement('span'); a.textContent = k;
       const b = document.createElement('span'); b.className = 'v'; b.textContent = v;
@@ -429,8 +433,8 @@
   }
 
   function regionRows() {
-    const regions = state.folder ? App.regionsOf(state.folder).filter((r) => r.label !== 'crop' && r.label !== 'phantom') : [];
-    const reference = regions.find((r) => r.id === state.referenceId) || null;
+    const regions = state.folder ? App.regionsOf(state.folder).filter((r) => !R.isReference(r.label)) : [];
+    const reference = state.folder ? App.regionsOf(state.folder).find((r) => r.id === state.referenceId && (!R.isReference(r.label) || r.label === 'dense')) || null : null;
     return regions.map((r) => {
       const stats = App.statsOf(r);
       return { ...r, stats, density: densityOf(r, stats, reference) };
@@ -468,20 +472,23 @@
 
   function renderRegions() {
     renderCrops();
-    const measured = state.folder ? App.regionsOf(state.folder).filter((r) => r.label !== 'crop' && r.label !== 'phantom') : [];
+    const measured = state.folder ? App.regionsOf(state.folder).filter((r) => !R.isReference(r.label)) : [];
     $('exportRegions').disabled = !measured.length;
     $('regionWrap').hidden = !measured.length;
     $('regionRefNote').hidden = true; // shown below when regions exist without a reference
     const select = $('referenceRegion');
+    // Dense references (step 5) are offered first, and the first one is picked when nothing else is.
+    const denseRefs = state.folder ? App.regionsOf(state.folder).filter((r) => r.label === 'dense') : [];
+    if (!state.referenceId && denseRefs.length) state.referenceId = denseRefs[0].id;
     const previous = state.referenceId;
     select.textContent = '';
     const none = document.createElement('option');
     none.value = ''; none.textContent = 'None';
     select.append(none);
-    for (const r of measured) {
+    for (const r of [...denseRefs, ...measured]) {
       const o = document.createElement('option');
       o.value = r.id;
-      o.textContent = `${R.labelOf(r.label, App.regionLabels()).label}${r.note ? `: ${r.note}` : ''} (${r.plane} ${AXIS[r.plane]} ${r.slice_from}–${r.slice_to})`;
+      o.textContent = `${R.labelOf(r.label, App.regionLabels()).label}${r.dense ? `: ${r.dense.material}` : r.note ? `: ${r.note}` : ''} (${r.plane} ${AXIS[r.plane]} ${r.slice_from}–${r.slice_to})`;
       if (r.id === previous) o.selected = true;
       select.append(o);
     }
@@ -495,7 +502,7 @@
     $('tableCalNote').hidden = !calibrated;
     if (calibrated) $('tableCalNote').textContent = calibrationNote(fit);
     // Relative columns only once a reference is picked (step 3 sub-panel); n/a columns with no reason confused users.
-    const referenced = measured.some((r) => r.id === state.referenceId) && state.airGray !== null;
+    const referenced = [...denseRefs, ...measured].some((r) => r.id === state.referenceId) && state.airGray !== null;
     const estimated = referenced && Number.isFinite(state.referenceDensity);
     $('regionRefNote').hidden = referenced;
     for (const h of ['Region', 'mm³', 'Gray', 'Matrix gray', 'Porosity (%)', 'Pores', ...(referenced ? ['Rel. density'] : []), ...(estimated ? ['g/cm³ (est.)'] : []), ...(calibrated ? ['Eq. density (g/cm³)'] : []), '']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
@@ -665,7 +672,7 @@
     const chunks = E.poreChunks(state.pores, state.rejected);
     const context = runContext();
     const rows = regionRows();
-    const run = { schema: 2, created_at: new Date().toISOString(), ...context, voxel_mm: state.voxelMm, stack_shape: state.dims, bin_factor: state.binFactor, orientation: state.orientId || null, leveled: state.orientId ? App.savedOrientation(state.folder) : null, chunk_count: chunks.length, rejected_voxels: state.rejectedVoxels,
+    const run = { schema: 2, created_at: new Date().toISOString(), ...context, voxel_mm: state.voxelMm, stack_shape: state.dims, bin_factor: state.binFactor, scan: state.scanInfo || null, relative_scale: App.relative(), orientation: state.orientId || null, leveled: state.orientId ? App.savedOrientation(state.folder) : null, chunk_count: chunks.length, rejected_voxels: state.rejectedVoxels,
       crops: App.cropsOf(state.folder).map((c) => ({ plane: c.plane, points: c.points })), air_gray: state.airGray, reference_region: state.referenceId || null,
       reference_density_assumed: Number.isFinite(state.referenceDensity) ? state.referenceDensity : null,
       regions: rows.map((r) => ({ id: r.id, label: r.label, plane: r.plane, slice_from: r.slice_from, slice_to: r.slice_to, note: r.note, stats: r.stats, density: r.density })),

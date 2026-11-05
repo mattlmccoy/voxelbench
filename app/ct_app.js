@@ -177,7 +177,7 @@ window.CTApp = (function () {
   /** One native XY slice (file index i) for the zoomed main view of a binned scan; only the latest is kept. */
   async function readNative(i) {
     if (state.native && state.native.index === i) return state.native;
-    const t = CT.parseTiff(await state.files[i].arrayBuffer());
+    const t = await state.reader.read(i);
     state.native = { index: i, pixels: t.pixels, width: t.width, height: t.height };
     return state.native;
   }
@@ -194,7 +194,14 @@ window.CTApp = (function () {
     return { ...Cal.fitCalibration(points), points, phantoms };
   }
 
-  const provenance = () => CT.provenanceLine({ voxelMm: state.voxelMm, binFactor: state.binFactor, calibration: calibration(), toolVersion: window.VB_VERSION });
+  /** This scan's relative density scales: air and each material's dense reference (median gray). */
+  function relative() {
+    if (!state.folder) return [];
+    const dense = regionsOf(state.folder).filter((r) => r.label === 'dense' && r.dense).map((r) => ({ material: r.dense.material, gray: statsOf(r).gray_p50 }));
+    return window.VBCalibration.relativeScale({ airGray: state.airGray, dense });
+  }
+
+  const provenance = () => CT.provenanceLine({ voxelMm: state.voxelMm, binFactor: state.binFactor, calibration: calibration(), toolVersion: window.VB_VERSION, scan: state.scanInfo });
 
   const unsavedOf = (collection) => [...state.unsaved.values()].filter((r) => r._collection === collection);
   // Records are kept on the grid they were drawn on and shown on the grid now loaded (CT.toGrid).
@@ -222,27 +229,45 @@ window.CTApp = (function () {
     else if (state.stacks.length) $('openerText').textContent = `Found ${state.stacks.length} scan folders. Choose one below.`;
   }
 
+  /** A scan read one slice at a time, whatever its files: { count, read(i), name(i) }. */
+  async function openReader(stack) {
+    if (stack.kind === 'vox') {
+      const v = await window.VBVox.openVox(stack.vox);
+      return { count: v.count, header: v.header, read: (i) => v.read(i), name: (i) => `${stack.vox.name}, slice ${i + 1}` };
+    }
+    const read = async (i) => {
+      try { return CT.parseTiff(await stack.files[i].arrayBuffer()); } catch (e) { throw new Error(`${stack.files[i].name}: ${e.message}`); }
+    };
+    return { count: stack.files.length, header: null, read, name: (i) => stack.files[i].name };
+  }
+
+  /** The scanner's record of the scan (DataInfo.xml) and the VOX value scale, or null when there is neither. */
+  async function readScanInfo(stack, reader) {
+    let info = null;
+    if (stack.dataInfo) {
+      try { info = window.VBVox.parseDataInfo(await stack.dataInfo.text()); } catch (e) { info = null; }
+    }
+    const h = reader.header;
+    if (h && h.valueScale !== null) info = { ...(info || {}), valueScale: h.valueScale, valueOffset: h.valueOffset };
+    return info;
+  }
+
   async function loadStack(stack) {
     const token = ++state.loadToken;
     if (worker) { worker.terminate(); worker = null; }
     for (const c of calls.values()) c.reject(new Error('Another scan was opened.')); calls.clear();
-    Object.assign(state, { slices: null, folder: null, stack, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null });
+    Object.assign(state, { slices: null, folder: null, stack, reader: null, scanInfo: null, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null });
     $('startup').hidden = false;
     showError('');
     emit('samplesChanged');
     const bar = $('progressBar');
     bar.hidden = false;
-    const n = stack.files.length;
-    const parse = async (i) => {
-      try {
-        return CT.parseTiff(await stack.files[i].arrayBuffer());
-      } catch (e) {
-        throw new Error(`${stack.files[i].name}: ${e.message}`);
-      }
-    };
     // The first slice sets the shape; the binning factor is chosen, and said, before the rest is read.
-    let shape, f, slices, nativeMid = null, saved = null, orient = null, dims, circle;
+    let shape, f, slices, nativeMid = null, saved = null, orient = null, dims, circle, n, parse, sliceName, scanInfo = null, source;
     try {
+      source = await openReader(stack);
+      ({ count: n, read: parse, name: sliceName } = source);
+      scanInfo = await readScanInfo(stack, source);
       shape = await parse(0);
       saved = savedOrientation(stack.folder);
       f = saved ? O.planOrientedBinning({ width: shape.width, height: shape.height, depth: n }, saved.dims, orientLimit())
@@ -257,7 +282,7 @@ window.CTApp = (function () {
           const group = [];
           for (let j = 0; j < f; j++) {
             const i = k * f + j, t = await parse(i);
-            VB.checkSlice(shape, t, stack.files[i].name, stack.files[0].name);
+            VB.checkSlice(shape, t, sliceName(i), sliceName(0));
             if (i === mid) nativeMid = t.pixels;
             group.push(t.pixels);
           }
@@ -293,7 +318,8 @@ window.CTApp = (function () {
     state.loading = null;
     state.folder = stack.folder;
     state.slices = slices;
-    state.files = stack.files;
+    state.reader = source;
+    state.scanInfo = scanInfo;
     state.binFactor = f;
     state.nativeVoxelMm = shape.voxelMm;
     state.native = null;
@@ -599,5 +625,5 @@ window.CTApp = (function () {
     emit('wallChanged');
   }
 
-  return { sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, hiddenMarks, orientLimit, cropOutlines, savedOrientation };
+  return { sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, relative, hiddenMarks, orientLimit, cropOutlines, savedOrientation };
 }());

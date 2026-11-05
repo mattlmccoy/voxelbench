@@ -726,10 +726,16 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
         <div class="body">
           <p class="hint">Outline each reference phantom where it is solid and enter its measured density. VoxelBench fits density to the median gray of each phantom, and to air if included. The result is the equivalent density of the phantom material: doped or filled material does not read its true density. Crop the phantoms out of the sample in step 1 if they are as dense as the part; calibration reads them either way. Scan protocol: docs/PHANTOM_PROTOCOL.md in the repository.</p>
           <div class="row">
-            <label>Name <input type="text" id="phantomName" placeholder="e.g. PA12 rod" autocomplete="off" style="width:110px"></label>
+            <label>Name <input type="text" id="phantomName" list="phantomMaterials" placeholder="e.g. resin holder" autocomplete="off" style="width:110px"></label><datalist id="phantomMaterials"></datalist>
             <label>g/cm³ <input type="number" id="phantomDensity" step="0.001" min="0" style="width:72px"></label>
             <button id="drawPhantom" disabled>Draw phantom</button>
           </div>
+          <p class="hint">No phantoms? A relative scale needs only air and the part's own fully dense material: 0 = air, 1 = dense. Outline glossy, pore-free material once per material (natural, doped); every gray then also reads as a fraction of dense, in this scan's own units, whatever the scan settings.</p>
+          <div class="row">
+            <label>Dense material <input type="text" id="denseMaterial" list="denseMaterials" placeholder="natural or doped" autocomplete="off" style="width:110px"></label><datalist id="denseMaterials"><option value="natural"></option><option value="doped"></option></datalist>
+            <button id="drawDense" disabled>Outline dense material</button>
+          </div>
+          <p class="mono" id="relNote"></p>
           <label class="pickrow" style="grid-template-columns:auto 1fr"><input type="checkbox" id="calAir" checked><span>Include air (0.0012 g/cm³ at the median gray outside the part)</span></label>
           <p class="hint" id="calDemo" hidden></p>
           <p class="mono" id="calFit"></p>
@@ -903,6 +909,7 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
 <script src="ct_export.js"></script>
 <script src="ct_sheetdata.js"></script>
 <script src="ct_plot.js"></script>
+<script src="vb_vox.js"></script>
 <script src="ct_app.js"></script>
 <script src="ct_views.js"></script>
 <script src="ct_model.js"></script>

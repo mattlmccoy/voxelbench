@@ -96,3 +96,31 @@ test('results for the scan: solid matrix, bulk with the pores, and Archimedes be
     ['Archimedes, measured', '0.950 g/cm³'],
   ]);
 });
+
+// Relative density in every scan: air (0) and the part's own fully dense material (1), per material, so scans at
+// different settings compare without phantoms. Gray values below are a lab scan's round numbers (air ~550, dense ~2700).
+test('the relative scale runs from air (0) to each material\'s dense reference (1)', () => {
+  const s = C.relativeScale({ airGray: 550, dense: [{ material: 'natural', gray: 2700 }, { material: 'natural', gray: 2720 }, { material: 'doped', gray: 3000 }] });
+  assert.deepEqual(s.map((m) => [m.material, m.denseGray, m.airGray]), [['natural', 2710, 550], ['doped', 3000, 550]]);
+  assert.equal(C.relativeDensity(s[0], 550), 0);
+  assert.equal(C.relativeDensity(s[0], 2710), 1);
+  assert.equal(C.relativeDensity(s[0], 1630), 0.5);
+  assert.deepEqual(C.relativeScale({ airGray: null, dense: [{ material: 'natural', gray: 2700 }] }), []);
+  assert.deepEqual(C.relativeScale({ airGray: 550, dense: [{ material: 'natural', gray: 500 }] }), []); // dense must read above air
+});
+
+test('the status bar adds each relative scale after the calibrated density', () => {
+  const s = C.relativeScale({ airGray: 550, dense: [{ material: 'natural', gray: 2710 }] });
+  assert.equal(C.grayReadout(null, 1630, s), ' uncalibrated · 0.50 of natural dense');
+  assert.equal(C.grayReadout(null, 1630, []), ' uncalibrated');
+});
+
+test('phantom materials used before are offered again with their density (the holder is entered once)', () => {
+  const regions = [
+    { label: 'phantom', phantom: { name: 'clear resin holder', density_g_cm3: 1.19 }, created_at: '2026-11-05T10:00' },
+    { label: 'phantom', phantom: { name: 'clear resin holder', density_g_cm3: 1.185 }, created_at: '2026-11-06T10:00' },
+    { label: 'phantom', phantom: { name: 'PA12 rod', density_g_cm3: 1.01 }, created_at: '2026-11-04T10:00' },
+    { label: 'region_a', created_at: '2026-11-06T10:00' },
+  ];
+  assert.deepEqual(C.knownMaterials(regions), [{ name: 'clear resin holder', density_g_cm3: 1.185 }, { name: 'PA12 rod', density_g_cm3: 1.01 }]);
+});

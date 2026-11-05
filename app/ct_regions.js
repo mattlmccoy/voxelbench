@@ -1,9 +1,9 @@
 /* Labeled regions: freehand outlines across a slice range, their statistics and density estimates.
    Region labels record what the operator assigns; gray measures bulk attenuation, not composition. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./ct_pores.js'), require('./ct_core.js'));
-  else root.CTRegions = factory(root.CTPores, root.CT);
-}(typeof self !== 'undefined' ? self : this, function (P, CT) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./ct_pores.js'), require('./ct_core.js'), require('./vb_calibration.js'));
+  else root.CTRegions = factory(root.CTPores, root.CT, root.VBCalibration);
+}(typeof self !== 'undefined' ? self : this, function (P, CT, Cal) {
   'use strict';
 
   // Labels are the user's own (stored with the project); these are the starting set. Crop is built in.
@@ -15,12 +15,18 @@
   const CROP = { id: 'crop', label: 'Crop', color: '#ffb454' };
   // A reference of known density scanned with the sample, for the density calibration (vb_calibration.js).
   const PHANTOM = { id: 'phantom', label: 'Phantom', color: '#f5f7fa' };
-  const BUILT_IN = [CROP.id, PHANTOM.id];
+  // Fully dense material of the part (or a known one in the scan), tagged with its material: with air it sets a
+  // relative density scale in every scan, 0 = air, 1 = dense (vb_calibration.js relativeScale).
+  const DENSE = { id: 'dense', label: 'Dense reference', color: '#ffd27a' };
+  const BUILT_IN = [CROP.id, PHANTOM.id, DENSE.id];
+  /** Crops, phantoms and dense references mark up the scan; they are not measured regions. */
+  const isReference = (id) => BUILT_IN.includes(id);
 
   /** The label for an id; a label deleted after regions used it still draws, under a neutral name. */
   function labelOf(id, labels) {
     if (id === CROP.id) return CROP;
     if (id === PHANTOM.id) return PHANTOM;
+    if (id === DENSE.id) return DENSE;
     return labels.find((l) => l.id === id) || { id, label: '(deleted label)', color: '#8b97a5' };
   }
 
@@ -35,17 +41,19 @@
     return out;
   }
 
-  function makeRegion({ id, now, sample, plane, sliceFrom, sliceTo, points, label, note, voxelMm, dims, binFactor = 1, phantom }, labels = DEFAULT_LABELS) {
+  function makeRegion({ id, now, sample, plane, sliceFrom, sliceTo, points, label, note, voxelMm, dims, binFactor = 1, phantom, dense }, labels = DEFAULT_LABELS) {
     if (!BUILT_IN.includes(label) && !labels.some((l) => l.id === label)) throw new Error(`Unknown region label: ${label}`);
     if (label === PHANTOM.id && !(phantom && String(phantom.name || '').trim() && Number.isFinite(phantom.density_g_cm3) && phantom.density_g_cm3 > 0)) {
       throw new Error('A phantom needs a name and a measured density above 0 g/cm³.');
     }
+    if (label === DENSE.id && !(dense && String(dense.material || '').trim())) throw new Error('A dense reference needs its material (for example natural or doped).');
     if (points.length < 3) throw new Error('An outline needs at least 3 points.');
     const depth = CT.planeShape(plane, dims).depth;
     const from = Math.max(0, Math.min(sliceFrom, sliceTo));
     const to = Math.min(depth - 1, Math.max(sliceFrom, sliceTo));
     return { schema: 1, id, created_at: now, sample, plane, slice_from: from, slice_to: to, points, label, note, voxel_mm: voxelMm, stack_shape: dims, bin_factor: binFactor,
-      belief_not_measurement: !BUILT_IN.includes(label), ...(label === PHANTOM.id ? { phantom: { name: String(phantom.name).trim(), density_g_cm3: phantom.density_g_cm3 } } : {}) };
+      belief_not_measurement: !BUILT_IN.includes(label), ...(label === PHANTOM.id ? { phantom: { name: String(phantom.name).trim(), density_g_cm3: phantom.density_g_cm3 } } : {}),
+      ...(label === DENSE.id ? { dense: { material: String(dense.material).trim() } } : {}) };
   }
 
   function percentile(counts, total, q) {
@@ -99,9 +107,8 @@
 
   /** Air counts as zero density. g_cm3 exists only when the person supplies an assumed reference density. */
   function densityEstimate({ gray, airGray, referenceGray, referenceDensity }) {
-    const span = referenceGray - airGray;
-    if (!(Math.abs(span) > 1e-9) || gray === null) return { relative: null, g_cm3: null };
-    const relative = (gray - airGray) / span;
+    const relative = gray === null ? null : Cal.relativeDensity({ airGray, denseGray: referenceGray }, gray);
+    if (relative === null) return { relative: null, g_cm3: null };
     return { relative, g_cm3: Number.isFinite(referenceDensity) ? relative * referenceDensity : null };
   }
 
@@ -115,5 +122,5 @@
       first user label. */
   const drawLabel = (label, labels) => (BUILT_IN.includes(label) ? labels[0].id : label);
 
-  return { DEFAULT_LABELS, CROP, PHANTOM, labelOf, drawLabel, labelDelete, simplifyFreehand, makeRegion, regionStats, estimateAirGray, densityEstimate };
+  return { DEFAULT_LABELS, CROP, PHANTOM, DENSE, isReference, labelOf, drawLabel, labelDelete, simplifyFreehand, makeRegion, regionStats, estimateAirGray, densityEstimate };
 }));

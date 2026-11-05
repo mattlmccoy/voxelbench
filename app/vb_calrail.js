@@ -19,6 +19,23 @@
     emit('startDrawing', 'phantom');
   }
 
+  function startDense() {
+    const material = $('denseMaterial').value.trim();
+    if (!material) { $('calNote').textContent = 'Enter the dense material first (for example natural or doped).'; return; }
+    state.denseDraft = { material };
+    $('calNote').textContent = `Outline fully dense ${material} material on a slice where it is glossy and pore-free, set its slice range, then Save.`;
+    emit('startDrawing', 'dense');
+  }
+
+  /** Phantom materials used before in this project fill the name list; picking one fills its density. */
+  function renderMaterials() {
+    const known = Cal.knownMaterials([...state.regions.values(), ...[...state.unsaved.values()].filter((r) => r._collection === 'regions')]);
+    const list = $('phantomMaterials');
+    list.textContent = '';
+    for (const m of known) { const o = document.createElement('option'); o.value = m.name; o.label = `${m.density_g_cm3} g/cm³`; list.append(o); }
+    return known;
+  }
+
   function setAir(include) {
     if (!state.folder) return;
     App.saveSample({ calibration_air: include });
@@ -54,6 +71,10 @@
 
   function render() {
     $('drawPhantom').disabled = !state.folder;
+    $('drawDense').disabled = !state.folder || state.airGray === null;
+    renderMaterials();
+    const rel = App.relative();
+    $('relNote').textContent = rel.length ? `Relative scale: ${rel.map((s) => `${s.material} dense = gray ${s.denseGray.toFixed(0)}`).join('; ')}; air = gray ${rel[0].airGray.toFixed(0)}.` : '';
     if (state.tool !== 'freehand' && $('calNote').textContent.startsWith('Outline')) $('calNote').textContent = ''; // drawing finished
     const fit = App.calibration();
     const air = state.folder ? CT.sampleInfo(state.folder, state.samples).calibration_air : true;
@@ -89,6 +110,11 @@
 
   on('start', () => {
     $('drawPhantom').addEventListener('click', startPhantom);
+    $('drawDense').addEventListener('click', startDense);
+    $('phantomName').addEventListener('input', () => {
+      const m = renderMaterials().find((x) => x.name === $('phantomName').value.trim());
+      if (m) $('phantomDensity').value = m.density_g_cm3;
+    });
     $('calAir').addEventListener('change', (e) => setAir(e.target.checked));
   });
   for (const e of ['loaded', 'recordsChanged', 'poresChanged', 'modelChanged', 'changed']) on(e, render);

@@ -116,3 +116,9 @@ test('provenanceLine names a calibration by its point count', () => {
     'Computed at 40 µm voxels (full resolution); smallest resolved pore ESD 0.12 mm; gray calibrated to equivalent density (3 points, linear); VoxelBench 0.1.0');
   assert.match(CT.provenanceLine({ voxelMm: 0.04, binFactor: 1, calibration: { ok: false }, toolVersion: '0.1.0' }), /gray uncalibrated/);
 });
+
+test('provenanceLine names the scan settings when the scanner recorded them (gray depends on them)', () => {
+  const scan = { kv: 120, ua: 350, scanSeconds: 256 };
+  assert.match(CT.provenanceLine({ voxelMm: 0.04, binFactor: 1, calibration: null, toolVersion: '0.1.0', scan }), /; scanned at 120 kV, 350 µA, 256 s;/);
+  assert.doesNotMatch(CT.provenanceLine({ voxelMm: 0.04, binFactor: 1, calibration: null, toolVersion: '0.1.0' }), /scanned at/);
+});

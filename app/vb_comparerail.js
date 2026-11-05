@@ -35,7 +35,10 @@
     $('compareWrap').hidden = false;
     const grid = (run) => (Number.isFinite(run.voxel_mm) ? `${(run.voxel_mm * 1000).toFixed(0)} µm${run.bin_factor > 1 ? `, ${run.bin_factor}× binned` : ''}` : 'voxel size not recorded');
     const day = (run) => (run.created_at || 'date not recorded').slice(0, 10);
-    $('compareNote').textContent = `Saved runs: ${other} (${day(theirs)}, ${grid(theirs)}) and this scan (${day(mine)}, ${grid(mine)}). n/a: the run was saved before that measurement existed or without it.`;
+    // Gray values move with tube voltage, current and scan time: say so when the two runs were scanned differently.
+    const differ = theirs.scan || mine.scan ? window.VBVox.settingsDiffer(theirs.scan || null, mine.scan || null) : [];
+    const warn = differ.length ? ` Scanned differently (${differ.join('; ')}): gray values, thresholds and calibrated or relative densities are not on one scale, so compare those with care.` : '';
+    $('compareNote').textContent = `Saved runs: ${other} (${day(theirs)}, ${grid(theirs)}) and this scan (${day(mine)}, ${grid(mine)}). n/a: the run was saved before that measurement existed or without it.${warn}`;
   }
 
   on('start', () => $('compareWith').addEventListener('change', compare));

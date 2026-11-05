@@ -13,7 +13,7 @@
 
   function content() {
     const steps = FD.stepInsights({ pores: state.pores, rejected: state.rejected, bodyMm3: state.bodyMm3, voxelMm: state.voxelMm, connectivity: state.connectivity, zones: state.zones, cad: state.cad, filler: state.filler, wall: state.wall });
-    const regions = App.regionsOf(state.folder).filter((r) => r.label !== 'crop' && r.label !== 'phantom').map((r) => ({
+    const regions = App.regionsOf(state.folder).filter((r) => !R.isReference(r.label)).map((r) => ({
       title: `${R.labelOf(r.label, App.regionLabels()).label}${r.note ? `: ${r.note}` : ''}`, sub: `${r.plane} ${AXIS[r.plane]} ${r.slice_from}–${r.slice_to}`, stats: App.statsOf(r) }));
     const porosity = window.CTPores.summarize(state.pores, state.bodyMm3, state.rejected).all_void_percent_of_body;
     const arch = App.sampleNow().archimedes;

@@ -94,20 +94,39 @@
   }
 
   /** Group picked files by their parent folder, keeping only slice files, in slice order. */
+  /** The scans in a picked folder. A Rigaku export folder (one holding a .VOX) is one scan read from the VOX; the
+      TIFF copy inside it is not listed again. Any other folder of TIFF slices is a scan sorted by the number in the
+      name. Each scan carries the scanner's DataInfo.xml from its folder or the folder above, when there is one. */
   function groupStacks(files) {
-    const groups = new Map();
-    for (const file of files) {
-      const parts = file.webkitRelativePath.split('/');
-      const base = parts[parts.length - 1];
-      if (base.startsWith('.') || !/\.tiff?$/i.test(base) || parts.length < 2) continue;
-      const folder = parts[parts.length - 2];
-      if (!groups.has(folder)) groups.set(folder, []);
-      groups.get(folder).push(file);
+    const pathOf = (f) => f.webkitRelativePath.split('/');
+    const dirOf = (f) => pathOf(f).slice(0, -1).join('/');
+    const baseOf = (f) => pathOf(f)[pathOf(f).length - 1];
+    const byDir = new Map();
+    for (const f of files) {
+      if (baseOf(f).startsWith('.') || pathOf(f).length < 2) continue;
+      if (!byDir.has(dirOf(f))) byDir.set(dirOf(f), []);
+      byDir.get(dirOf(f)).push(f);
     }
-    return [...groups.keys()].sort(naturalKey).map((folder) => ({
-      folder,
-      files: groups.get(folder).sort((a, b) => naturalKey(a.webkitRelativePath, b.webkitRelativePath)),
-    }));
+    const recordIn = (dir) => (byDir.get(dir) || []).find((f) => baseOf(f) === 'DataInfo.xml') || null;
+    const parent = (dir) => dir.split('/').slice(0, -1).join('/');
+    const stacks = [], voxDirs = new Set();
+    for (const [dir, list] of byDir) {
+      const vox = list.find((f) => /\.vox$/i.test(baseOf(f)));
+      if (!vox) continue;
+      voxDirs.add(dir);
+      stacks.push({ folder: dir.split('/').pop(), kind: 'vox', vox, files: [], dataInfo: recordIn(dir) });
+    }
+    const tiffs = new Map();
+    for (const [dir, list] of byDir) {
+      if (voxDirs.has(dir) || voxDirs.has(parent(dir))) continue;
+      const slices = list.filter((f) => /\.tiff?$/i.test(baseOf(f)));
+      if (!slices.length) continue;
+      const folder = dir.split('/').pop();
+      if (!tiffs.has(folder)) tiffs.set(folder, { folder, kind: 'tiff', files: [], dataInfo: recordIn(dir) || recordIn(parent(dir)) });
+      tiffs.get(folder).files.push(...slices);
+    }
+    for (const t of tiffs.values()) { t.files.sort((a, b) => naturalKey(a.webkitRelativePath, b.webkitRelativePath)); stacks.push(t); }
+    return stacks.sort((a, b) => naturalKey(a.folder, b.folder));
   }
 
   /** One line saying what a number was computed from: voxel size, binning, calibration, tool version. The smallest
@@ -129,11 +148,13 @@
     return out;
   }
 
-  function provenanceLine({ voxelMm, binFactor, calibration, toolVersion }) {
+  function provenanceLine({ voxelMm, binFactor, calibration, toolVersion, scan = null }) {
     const cal = calibration && calibration.ok ? `calibrated to equivalent density (${calibration.n} points, ${calibration.method})` : 'uncalibrated';
     const um = (mm) => `${Math.round(1000 * mm)} µm`;
     const res = binFactor > 1 ? `${gridText(binFactor)} from ${um(voxelMm / binFactor)}` : gridText(1);
-    return `Computed at ${um(voxelMm)} voxels (${res}); smallest resolved pore ESD ${(3 * voxelMm).toFixed(2)} mm; gray ${cal}; VoxelBench ${toolVersion}`;
+    // Gray values depend on the tube voltage, current and scan time, so they are named when the scanner recorded them.
+    const s = scan && scan.kv != null && scan.ua != null && scan.scanSeconds != null ? `; scanned at ${scan.kv} kV, ${scan.ua} µA, ${Math.round(scan.scanSeconds)} s` : '';
+    return `Computed at ${um(voxelMm)} voxels (${res}); smallest resolved pore ESD ${(3 * voxelMm).toFixed(2)} mm${s}; gray ${cal}; VoxelBench ${toolVersion}`;
   }
 
   /** What the user recorded about a scan folder; a folder nobody described keeps its own name and blank fields. */

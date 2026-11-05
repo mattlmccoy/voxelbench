@@ -18,7 +18,7 @@
 
   function regionContent(r) {
     const def = R.labelOf(r.label, App.regionLabels());
-    const card = F.regionCard({ title: `${def.label}${r.note ? `: ${r.note}` : ''}`, stats: App.statsOf(r), part: partNow(), fit: App.calibration() });
+    const card = F.regionCard({ title: `${def.label}${r.note ? `: ${r.note}` : ''}`, stats: App.statsOf(r), part: partNow(), fit: App.calibration(), relative: App.relative() });
     return { ...card, sub: `Region, ${r.plane} ${AXIS[r.plane]} ${r.slice_from}–${r.slice_to}`, step: 'step3', where: r.points.length ? CT.voxelOf(r.plane, Math.round((r.slice_from + r.slice_to) / 2), Math.round(r.points[0].col), Math.round(r.points[0].row)) : null };
   }
 
@@ -79,7 +79,7 @@
   on('markSaved', (which) => show({ ...which, fresh: true }));
   on('pickAt', (place) => {
     if (!state.folder) return;
-    const regions = App.regionsOf(state.folder).filter((r) => r.label !== 'crop' && r.label !== 'phantom');
+    const regions = App.regionsOf(state.folder).filter((r) => !R.isReference(r.label));
     const mark = F.markAt(place, { regions, annotations: App.annotationsOf(state.folder) });
     if (mark) show({ ...mark, fresh: false });
   });

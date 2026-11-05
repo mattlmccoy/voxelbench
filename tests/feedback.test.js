@@ -114,3 +114,9 @@ test('the point or line wins over the region it sits in', () => {
   const inside = { regions: marks.regions, annotations: [{ id: 'p2', kind: 'point', plane: 'XY', slice: 15, voxels: [{ x: 20, y: 20, z: 15 }] }] };
   assert.equal(F.markAt({ plane: 'XY', slice: 15, col: 20, row: 20 }, inside).id, 'p2');
 });
+
+test('a region card reads its mean gray as relative density against each dense reference', () => {
+  const rel = C.relativeScale({ airGray: 700, dense: [{ material: 'natural', gray: 2000 }] });
+  const card = F.regionCard({ title: 'R', stats: stats({ gray_mean: 1350 }), part, fit: null, relative: rel });
+  assert.equal(row(card, 'Relative density (natural)'), '0.50 of dense (mean gray, pores included)');
+});

@@ -425,7 +425,7 @@
     const pore = id ? state.byId.get(id) : null;
     const patch = state.patchLabels ? coarseAt(state.patchLabels, state.patchGrid, p) : 0;
     const poreText = pore ? ` | ${pore.clipped ? 'cut by scan edge' : pore.crack_like ? 'crack' : 'pore'} ${id}, ${pore.diameter_mm.toFixed(3)} mm` : patch ? ` | low-density patch ${patch}` : '';
-    $('readout').textContent = `x ${p.x} y ${p.y} z ${p.z} | ${mm(p.x)}, ${mm(p.y)}, ${mm(p.z)} mm | gray ${gray}${outside ? ' outside reconstruction' : window.VBCalibration.grayReadout(App.calibration(), gray)}${poreText}`;
+    $('readout').textContent = `x ${p.x} y ${p.y} z ${p.z} | ${mm(p.x)}, ${mm(p.y)}, ${mm(p.z)} mm | gray ${gray}${outside ? ' outside reconstruction' : window.VBCalibration.grayReadout(App.calibration(), gray, App.relative())}${poreText}`;
   }
 
   function clickAt(v, place) {
