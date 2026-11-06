@@ -484,9 +484,9 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
 .libstatus:empty { display: none; }
 .libgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap: 12px; }
 .libgrid:empty { display: none; }
-.libcard { display: grid; grid-template-rows: auto 1fr; min-width: 0; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.libcard { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; min-width: 0; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 .libcard.missing { opacity: .62; }
-.library .libthumb { display: grid; place-items: center; aspect-ratio: 1; width: 100%; background: var(--image-bg); color: #8b97a5; font-size: 12px; }
+.library .libthumb { display: grid; place-items: center; aspect-ratio: 1; width: 100%; overflow: hidden; background: var(--image-bg); color: #8b97a5; font-size: 12px; }
 .library .libthumb:disabled { cursor: default; }
 .libthumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .libcardbody { display: grid; align-content: start; gap: 4px; padding: 8px 10px 10px; min-width: 0; }

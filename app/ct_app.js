@@ -63,7 +63,7 @@ window.CTApp = (function () {
       connecting: 'Connecting to database',
       connected: `Shared database · ${counts}`,
       file: `${state.projectDirty ? 'Project file (unsaved changes)' : state.projectFile ? `Project file saved (${state.projectFile})` : 'No project file yet'} · ${counts}`,
-      library: `Library on the drive · ${counts}`,
+      library: `Library on the drive · ${counts}${state.projectDirty ? ' · the project file has unsaved changes (open a folder or demo to see them)' : ''}`,
       unavailable: `Not saving: ${state.dbDetail}`,
     }[state.dbState];
     $('saveState').textContent = text + unsaved; $('saveState').title = text + unsaved;
@@ -102,13 +102,16 @@ window.CTApp = (function () {
     emit('changed');
   }
 
-  /** Make store the one records are read from and saved to; the watches of the previous one end. */
+  /** Make store the one records are read from and saved to; the watches of the previous one end. Unsaved edits stay
+      with the store they were made in (never dropped) and show again when it is back. */
+  const unsavedByStore = new WeakMap();
   function useStore(store) {
     if (!store || state.store === store) return;
     for (const stop of unwatch) if (typeof stop === 'function') stop();
     unwatch = [];
+    if (state.store) unsavedByStore.set(state.store, state.unsaved);
     state.store = store;
-    state.unsaved = new Map();
+    state.unsaved = unsavedByStore.get(store) || new Map();
     setDbState(store.kind === 'library' ? 'library' : store.kind === 'file' ? 'file' : 'connected');
     watchRecords(store);
     emit('changed');
@@ -117,17 +120,21 @@ window.CTApp = (function () {
   // Messages about project files go next to the project buttons, where they are always visible.
   const projectNote = (text) => { $('projectNote').textContent = text; $('projectNote').title = text; };
 
-  const markDirty = () => { if (state.store && state.store.kind === 'file') { state.projectDirty = true; renderSaveState(); } };
+  // The project file is dirty when its store changed, even if another store became active while the save ran.
+  const markDirty = (store = state.store) => { if (store && store.kind === 'file') { state.projectDirty = true; renderSaveState(); } };
+  // A failed write is reported where it happened: on the active store, or kept as NOT SAVED with its own store.
+  const failed = (store, text) => { if (store === state.store) setDbState('unavailable', text); };
 
   async function saveRecord(collection, record) {
     state.unsaved.set(record.id, { ...record, _collection: collection });
     emit('recordsChanged'); renderSaveState();
-    if (!state.store) return;
+    const store = state.store;
+    if (!store) return;
     try {
-      await state.store.put(collection, record);
-      markDirty();
+      await store.put(collection, record);
+      markDirty(store);
     } catch (e) {
-      setDbState('unavailable', `the last save failed: ${e.message}`);
+      failed(store, `the last save failed: ${e.message}`);
     }
   }
 
@@ -158,12 +165,13 @@ window.CTApp = (function () {
     state.regionStats.delete(id);
     const stored = state[collection].has(id) || pending;
     emit('recordsChanged'); renderSaveState();
-    if (!stored || !state.store) return;
+    const store = state.store;
+    if (!stored || !store) return;
     try {
-      await state.store.remove(collection, id);
-      markDirty();
+      await store.remove(collection, id);
+      markDirty(store);
     } catch (e) {
-      setDbState('unavailable', `the last delete failed: ${e.message}`);
+      failed(store, `the last delete failed: ${e.message}`);
     }
   }
 
@@ -179,6 +187,8 @@ window.CTApp = (function () {
   }
 
   async function openProject(file) {
+    // Ruling 10: a project opened here would land in the library as records of no scan; Task 7's Import does it right.
+    if (state.store && state.store.kind === 'library') { projectNote("Open a folder or a demo first; importing a project into a library comes with the library's Import."); return; }
     try {
       let obj;
       try { obj = JSON.parse(await file.text()); } catch (e) { throw new Error('Not a VoxelBench project'); }

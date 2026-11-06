@@ -180,6 +180,43 @@
     return { index: mergeIndex(index, scans, now), stacks: byId, read, places: seen.length, found: scans.length, failed };
   }
 
+  /** Rescans for one page. open() marks a new root: a Rescan begun before it is stale (it writes nothing, to either
+      root) and no longer counts as running. run(dir, index) works on the dir it was given, re-reads scans.json just
+      before writing and refuses (writing nothing) one that is now newer, unreadable, or changed on the drive since this
+      page read or wrote it. I/O is passed in: listFiles(dir), ensureDrive(dir), readIndex(dir) -> text | null,
+      writeIndex(dir, text), plus rescan()'s groupStacks, readScan and onRead, and now() for the time stamp. listFiles gets
+      live(), false once the Rescan is stale. */
+  function makeRescanner(io) {
+    let gen = 0, running = 0;
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(JSON.parse(JSON.stringify(b)));
+    async function run(dir, index) {
+      if (running && running === gen) return { skipped: true };
+      const mine = gen;
+      running = mine;
+      try {
+        const live = () => mine === gen; // progress from a stale Rescan is not shown
+        const files = await io.listFiles(dir, live);
+        if (!live()) return { stale: true };
+        const r = await rescan({ files, index, groupStacks: io.groupStacks, readScan: io.readScan, now: io.now(), onRead: (...a) => { if (live() && io.onRead) io.onRead(...a); } });
+        if (mine !== gen) return { stale: true };
+        await io.ensureDrive(dir);
+        const text = await io.readIndex(dir);
+        if (text !== null) {
+          let obj;
+          try { obj = JSON.parse(text); } catch (e) { throw new Error(`VoxelBench/scans.json is not readable JSON (${e.message}); it was left untouched`); }
+          checkIndex(obj);
+          if (!same(obj, index)) throw new Error('VoxelBench/scans.json changed on the drive since this page read it (another VoxelBench?); it was left untouched. Reopen the library and Rescan');
+        }
+        if (mine !== gen) return { stale: true };
+        await io.writeIndex(dir, JSON.stringify(r.index, null, 2));
+        return r;
+      } finally {
+        if (running === mine) running = 0;
+      }
+    }
+    return { open: () => ++gen, busy: () => Boolean(running) && running === gen, run };
+  }
+
   /** The display window for a thumbnail: the 1st to 99.9th percentile of the nonzero values (zero is outside the
       reconstruction). Sampled on a stride for large slices. */
   function grayWindow(pixels, maxSamples = 262144) {
@@ -193,5 +230,5 @@
     return { low, high: high > low ? high : low + 1 };
   }
 
-  return { scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, grayWindow };
+  return { scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
 }));

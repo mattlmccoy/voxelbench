@@ -267,3 +267,69 @@ test('parseTags: comma-separated, trimmed, without blanks or repeats', () => {
   assert.deepEqual(L.parseTags(' a, b ,,a,  c '), ['a', 'b', 'c']);
   assert.deepEqual(L.parseTags(''), []);
 });
+
+// ---------- Fix round 1: the Rescan runs on the root it started with, and never overwrites an index it did not read ----------
+function rescanRig(onDisk = {}) {
+  const writes = [], gates = [];
+  const io = {
+    groupStacks: CTCore.groupStacks,
+    readScan: async (stack) => ({ id: `s_${stack.dir.replace(/\W/g, '')}`, study: null, info: null, width: 1, height: 1, count: 1, voxel_um: 1 }),
+    listFiles: async (dir) => { if (dir.gate) await new Promise((r) => gates.push(r)); return [file(`${dir.name}/v/a.vox`)]; },
+    ensureDrive: async () => {},
+    readIndex: async (dir) => (dir.name in onDisk ? onDisk[dir.name] : null),
+    writeIndex: async (dir, text) => { writes.push({ dir: dir.name, text }); onDisk[dir.name] = text; },
+    now: () => 't',
+  };
+  return { io, writes, gates, onDisk, r: L.makeRescanner(io) };
+}
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+test('rescanner: writes the new index once, to the root it scanned', async () => {
+  const { r, writes } = rescanRig();
+  r.open();
+  const out = await r.run({ name: 'A' }, L.emptyIndex('t0'));
+  assert.equal(out.found, 1);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].dir, 'A');
+  assert.deepEqual(Object.keys(JSON.parse(writes[0].text).scans), ['s_Av']);
+});
+
+test('rescanner: a root opened during a Rescan clears busy, the stale Rescan writes nothing, and the new root rescans', async () => {
+  const { r, writes, gates } = rescanRig();
+  r.open();
+  const stale = r.run({ name: 'A', gate: true }, L.emptyIndex('t0'));
+  await tick();
+  assert.equal(r.busy(), true);
+  assert.deepEqual(await r.run({ name: 'A' }, L.emptyIndex('t0')), { skipped: true }, 'one Rescan at a time');
+  r.open(); // another library is picked while the first Rescan waits on the drive
+  assert.equal(r.busy(), false);
+  const fresh = await r.run({ name: 'B' }, L.emptyIndex('t0'));
+  assert.equal(fresh.found, 1);
+  gates.forEach((go) => go());
+  assert.deepEqual(await stale, { stale: true });
+  assert.deepEqual(writes.map((w) => w.dir), ['B'], 'nothing from the stale Rescan, in either root');
+});
+
+test('rescanner: a scans.json made newer or unreadable since it was read is refused, not overwritten', async () => {
+  for (const [text, msg] of [[JSON.stringify({ ...L.emptyIndex(1), version: L.INDEX_VERSION + 1 }), /newer/], ['{oops', /not readable JSON/], ['[]', /not a VoxelBench scan index/]]) {
+    const { r, writes, onDisk } = rescanRig({ A: text });
+    r.open();
+    await assert.rejects(r.run({ name: 'A' }, L.emptyIndex('t0')), msg);
+    assert.equal(writes.length, 0);
+    assert.equal(onDisk.A, text);
+    assert.equal(r.busy(), false, 'a refusal ends the Rescan');
+  }
+});
+
+test('rescanner: a scans.json changed on the drive since it was read is refused', async () => {
+  const mine = L.mergeIndex(L.emptyIndex('t0'), [], 't1');
+  const theirs = JSON.stringify(L.mergeIndex(mine, [{ id: 'sx', path: 'x', kind: 'vox', bytes: 1, mtime: 1, study: null }], 't2'));
+  const { r, writes } = rescanRig({ A: theirs });
+  r.open();
+  await assert.rejects(r.run({ name: 'A' }, mine), /changed on the drive/);
+  assert.equal(writes.length, 0);
+  const same = rescanRig({ A: JSON.stringify(mine, null, 2) });
+  same.r.open();
+  await same.r.run({ name: 'A' }, mine);
+  assert.equal(same.writes.length, 1, 'the index this page read (or last wrote) is replaced as before');
+});

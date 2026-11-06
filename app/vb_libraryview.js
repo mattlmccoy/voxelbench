@@ -14,7 +14,7 @@
 
   const lib = App.library = {
     dir: null, index: null, entries: [], store: null, stacks: new Map(), samples: new Map(), runs: new Map(), runErrors: new Map(),
-    thumbs: new Map(), refused: null, busy: false, lastRescan: null, gen: 0, saved: null,
+    thumbs: new Map(), refused: null, lastRescan: null, gen: 0, saved: null,
   };
   const view = { query: '', filter: 'all', tag: null, project: null };
   const thumbQueue = new Map(); // id -> a thumbnail image made while reading the scan, written once the cards show
@@ -45,11 +45,11 @@
   const wrap = (path, file) => ({ webkitRelativePath: path, name: file.name, size: file.size, lastModified: file.lastModified, type: file.type,
     arrayBuffer: () => file.arrayBuffer(), slice: (...a) => file.slice(...a), text: () => file.text() });
 
-  async function listFiles(dir, prefix = '') {
+  async function listFiles(dir, prefix = '', live = () => true) {
     const out = [];
     for await (const { path, file } of FS.walk(dir, prefix)) {
       out.push(wrap(path, file));
-      if (out.length % 500 === 0) say(`Listing files: ${out.length}…`);
+      if (out.length % 500 === 0 && live()) say(`Listing files: ${out.length}…`);
     }
     return out;
   }
@@ -61,8 +61,8 @@
   }
 
   // An unplugged drive must not read as an empty library, and a write must not recreate the folder elsewhere.
-  async function ensureDrive() {
-    try { await lib.dir.getDirectoryHandle(V.LIBRARY_DIR); } catch (e) {
+  async function ensureDrive(dir = lib.dir) {
+    try { await dir.getDirectoryHandle(V.LIBRARY_DIR); } catch (e) {
       throw new Error(`The library drive is not available (${V.LIBRARY_DIR} folder not found: ${e.message}); reconnect it and reopen the library`);
     }
   }
@@ -125,7 +125,7 @@
 
   // ---------- opening a library ----------
   function close() {
-    lib.gen++;
+    lib.gen = rescanner.open(); // a Rescan of the previous root goes stale: it writes nothing and no longer blocks Rescan
     if (unwatchSamples) unwatchSamples();
     unwatchSamples = null;
     for (const url of lib.thumbs.values()) URL.revokeObjectURL(url);
@@ -196,20 +196,26 @@
   }
 
   // ---------- Rescan ----------
+  // The Rescan works on the root it started with (Ruling 9); see makeRescanner in vb_library.js.
+  const rescanner = L.makeRescanner({
+    groupStacks: CT.groupStacks, readScan,
+    listFiles: (dir, live) => listFiles(dir, '', live),
+    ensureDrive: (dir) => ensureDrive(dir),
+    readIndex: (dir) => FS.readText(dir, INDEX_PATH),
+    writeIndex: (dir, text) => FS.writeText(dir, INDEX_PATH, text),
+    now: () => new Date().toISOString(),
+    onRead: (stack, k) => say(`Reading ${stack.dir} (new or changed; ${k} read so far)…`),
+  });
+
   async function rescan() {
-    if (lib.busy || !lib.dir || lib.refused) return;
+    if (rescanner.busy() || !lib.dir || lib.refused) return;
     const gen = lib.gen;
-    lib.busy = true;
+    say(`Listing files under ${rootName()}…`);
+    const run = rescanner.run(lib.dir, lib.index); // marks the Rescan as running before its first await
     render();
     try {
-      await ensureDrive();
-      say(`Listing files under ${rootName()}…`);
-      const files = await listFiles(lib.dir);
-      const r = await L.rescan({ files, index: lib.index, groupStacks: CT.groupStacks, readScan, now: new Date().toISOString(),
-        onRead: (stack, k) => say(`Reading ${stack.dir} (new or changed; ${k} read so far)…`) });
-      if (gen !== lib.gen) return;
-      await ensureDrive();
-      await FS.writeText(lib.dir, INDEX_PATH, JSON.stringify(r.index, null, 2));
+      const r = await run;
+      if (r.skipped || r.stale || gen !== lib.gen) return;
       lib.index = r.index;
       lib.stacks = r.stacks;
       const missing = Object.values(r.index.scans).filter((e) => e.missing).length;
@@ -220,8 +226,6 @@
       for (const id of r.stacks.keys()) { lib.runs.delete(id); lib.runErrors.delete(id); }
     } catch (e) {
       if (gen === lib.gen) say(`Rescan stopped: ${e.message}`, true);
-    } finally {
-      if (gen === lib.gen) lib.busy = false;
     }
     if (gen !== lib.gen) return;
     render();
@@ -287,8 +291,14 @@
     lib.store.put('samples', CT.sampleRecord(id, lib.samples, changes)).catch((e) => say(`Not saved: ${e.message}`, true));
   }
 
+  // Ruling 10: opening a library scan switches records to the library; the project file's unsaved edits are kept in
+  // memory, but the user decides first.
+  const UNSAVED_PROJECT = 'The project file has unsaved changes. Open the library scan anyway? Save the project first to keep them.';
+  const projectUnsaved = () => Boolean(state.store && state.store.kind === 'file' && (state.unsaved.size || state.projectDirty));
+
   async function openScan(id) {
     const row = lib.entries.find((r) => r.id === id);
+    if (projectUnsaved() && !window.confirm(UNSAVED_PROJECT)) return;
     try {
       const stack = { ...(await stackFor(id)), store: lib.store, title: row ? L.cardFacts(row).title : id };
       state.stacks = [stack];
@@ -402,8 +412,8 @@
     $('libReopen').hidden = !(supported && lib.saved && !lib.dir);
     if (lib.saved) $('libReopen').textContent = `Allow access to ${lib.saved.name}`;
     $('libRescan').hidden = !open;
-    $('libRescan').disabled = lib.busy;
-    $('libRescan').textContent = lib.busy ? 'Scanning…' : 'Rescan';
+    $('libRescan').disabled = rescanner.busy();
+    $('libRescan').textContent = rescanner.busy() ? 'Scanning…' : 'Rescan';
     $('libStudio').hidden = !state.folder;
     $('libStudio').textContent = 'Back to the open scan';
     $('libSide').hidden = !open;
@@ -421,7 +431,7 @@
     renderSide(rows);
     const shown = L.filterScans(rows, view);
     grid.replaceChildren(...shown.map(card));
-    $('libEmpty').hidden = Boolean(shown.length) || lib.busy;
+    $('libEmpty').hidden = Boolean(shown.length) || rescanner.busy();
     $('libEmpty').textContent = rows.length ? 'No scans match the search and filters.' : `No scans found under ${rootName()}. A scan is a folder holding a .VOX file, or a folder of TIFF slices.`;
   }
 
