@@ -38,8 +38,18 @@ window.CTApp = (function () {
   const emit = (name, ...args) => { for (const fn of listeners[name] || []) fn(...args); };
   const off = (name, fn) => { listeners[name] = (listeners[name] || []).filter((f) => f !== fn); };
 
+  // ---------- pages ----------
+  // The library (first screen), the scan overview and the studio; one shows at a time.
+  const PAGES = { library: 'libraryPage', overview: 'overviewPage', studio: 'studio' };
+  function showPage(name) {
+    for (const [page, id] of Object.entries(PAGES)) { const el = $(id); if (el) el.hidden = page !== name; }
+    state.page = name;
+    emit('pageChanged', name);
+  }
+
   // ---------- records ----------
-  // The store is the artifact database when the page runs on claude.ai, otherwise a project file (vb_store.js).
+  // The store is the artifact database when the page runs on claude.ai, otherwise a project file (vb_store.js); a scan
+  // opened from the library uses the library's store, and a folder or demo opened after it goes back to the project file.
   function setDbState(next, detail) {
     state.dbState = next;
     state.dbDetail = detail || '';
@@ -53,23 +63,25 @@ window.CTApp = (function () {
       connecting: 'Connecting to database',
       connected: `Shared database · ${counts}`,
       file: `${state.projectDirty ? 'Project file (unsaved changes)' : state.projectFile ? `Project file saved (${state.projectFile})` : 'No project file yet'} · ${counts}`,
+      library: `Library on the drive · ${counts}`,
       unavailable: `Not saving: ${state.dbDetail}`,
     }[state.dbState];
     $('saveState').textContent = text + unsaved; $('saveState').title = text + unsaved;
-    const good = (state.dbState === 'connected' || (state.dbState === 'file' && state.projectFile && !state.projectDirty)) && !state.unsaved.size;
+    const good = (state.dbState === 'connected' || state.dbState === 'library' || (state.dbState === 'file' && state.projectFile && !state.projectDirty)) && !state.unsaved.size;
     $('dbDot').className = `dot ${good ? 'live' : state.dbState === 'connecting' || state.dbState === 'file' ? 'warn' : 'err'}`;
     $('saveProject').hidden = !state.store;
-    $('saveProject').textContent = state.store && state.store.kind === 'artifact' ? 'Export project' : 'Save project';
+    $('saveProject').textContent = state.store && state.store.kind !== 'file' ? 'Export project' : 'Save project';
   }
 
+  let unwatch = [];
   function watchRecords(store) {
-    const watch = (name, into) => store.watch(name, (records) => {
+    const watch = (name, into) => unwatch.push(store.watch(name, (records) => {
       state[into] = records;
       for (const id of records.keys()) state.unsaved.delete(id);
       if (state.dbState === 'connecting') setDbState(store.kind === 'file' ? 'file' : 'connected');
       else renderSaveState();
       emit('recordsChanged');
-    }, (e) => setDbState('unavailable', e.message));
+    }, (e) => setDbState('unavailable', e.message)));
     watch('annotations', 'annotations');
     watch('regions', 'regions');
     watch('samples', 'samples');
@@ -81,10 +93,23 @@ window.CTApp = (function () {
     const use = window.claude && window.claude.use ? (name) => window.claude.use(name) : null;
     const { store, downloads, note } = await V.connect(use);
     state.store = store;
+    state.fileStore = store; // the project file (or database) that folders and demos use
     state.downloads = downloads;
     if (store.kind === 'file') setDbState('file');
     else setTimeout(() => { if (state.dbState === 'connecting') setDbState('unavailable', 'the database sent no records within 10 seconds.'); }, 10000);
     if (note) projectNote(`Not saving to the database: ${note}.`);
+    watchRecords(store);
+    emit('changed');
+  }
+
+  /** Make store the one records are read from and saved to; the watches of the previous one end. */
+  function useStore(store) {
+    if (!store || state.store === store) return;
+    for (const stop of unwatch) if (typeof stop === 'function') stop();
+    unwatch = [];
+    state.store = store;
+    state.unsaved = new Map();
+    setDbState(store.kind === 'library' ? 'library' : store.kind === 'file' ? 'file' : 'connected');
     watchRecords(store);
     emit('changed');
   }
@@ -121,9 +146,10 @@ window.CTApp = (function () {
   // The scan and its leveled copy are both in memory while it is built: they share 1.5 times the load budget.
   const orientLimit = () => ORIENT_HEADROOM * VB.budgetBytes(navigator.userAgent, location.search);
 
-  function saveSample(changes) {
-    const pending = state.unsaved.get(state.folder);
-    saveRecord('samples', CT.sampleRecord(state.folder, state.samples, changes, pending && pending._collection === 'samples' ? pending : null));
+  /** Saves fields of a scan's sample record (the open scan's unless folder is given), keeping its other fields. */
+  function saveSample(changes, folder = state.folder) {
+    const pending = state.unsaved.get(folder);
+    saveRecord('samples', CT.sampleRecord(folder, state.samples, changes, pending && pending._collection === 'samples' ? pending : null));
   }
 
   async function removeRecord(collection, id) {
@@ -222,6 +248,8 @@ window.CTApp = (function () {
   }
 
   function openFiles(files) {
+    if (state.store && state.store.kind === 'library') useStore(state.fileStore); // a folder outside the library: today's project file
+    showPage('library');
     state.stacks = CT.groupStacks([...files]);
     showError(state.stacks.length ? '' : 'No TIFF (Tagged Image File Format) slices were found in that folder.');
     emit('samplesChanged');
@@ -254,10 +282,12 @@ window.CTApp = (function () {
 
   async function loadStack(stack) {
     const token = ++state.loadToken;
+    useStore(stack.store || state.fileStore); // a library scan carries its library's store
+    const label = stack.title || stack.folder; // a library scan's folder is its id; it is shown by its title
     if (worker) { worker.terminate(); worker = null; }
     for (const c of calls.values()) c.reject(new Error('Another scan was opened.')); calls.clear();
     Object.assign(state, { slices: null, folder: null, stack, reader: null, scanInfo: null, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null });
-    $('startup').hidden = false;
+    showPage('library'); // the loading progress shows there
     showError('');
     emit('samplesChanged');
     const bar = $('progressBar');
@@ -289,7 +319,7 @@ window.CTApp = (function () {
           slices[k] = f === 1 ? group[0] : VB.binGroup(group, shape.width, shape.height, f);
           done += f;
           bar.firstElementChild.style.width = `${(100 * done) / n}%`;
-          $('openerText').textContent = `Reading ${stack.folder}${binning}: slice ${done} of ${n}.`;
+          $('openerText').textContent = `Reading ${label}${binning}: slice ${done} of ${n}.`;
         }
       };
       await Promise.all(Array.from({ length: READ_CONCURRENCY }, reader));
@@ -301,7 +331,7 @@ window.CTApp = (function () {
         // A leveled scan is rebuilt in the part's frame; the original is dropped once that is done.
         orient = O.onGrid(saved, f);
         slices = await O.resamplePaced({ slices, dims, circle, orient, pause: () => new Promise((r) => { setTimeout(r, 0); }), every: 8,
-          onProgress: (k, total) => { bar.firstElementChild.style.width = `${(100 * k) / total}%`; $('openerText').textContent = `Leveling ${stack.folder} in the part's frame: slice ${k} of ${total}.`; } });
+          onProgress: (k, total) => { bar.firstElementChild.style.width = `${(100 * k) / total}%`; $('openerText').textContent = `Leveling ${label} in the part's frame: slice ${k} of ${total}.`; } });
         dims = { ...orient.dims };
         circle = null;
       }
@@ -310,7 +340,7 @@ window.CTApp = (function () {
       state.loading = null;
       emit('samplesChanged');
       bar.hidden = true;
-      showError(`Could not load ${stack.folder}. ${e.name === 'RangeError' ? 'The browser ran out of memory for this stack.' : e.message}`);
+      showError(`Could not load ${label}. ${e.name === 'RangeError' ? 'The browser ran out of memory for this stack.' : e.message}`);
       return;
     }
     if (token !== state.loadToken) return;
@@ -337,7 +367,7 @@ window.CTApp = (function () {
     state.viewWindows = {};
     state.window = { ...state.autoWindow };
     bar.hidden = true;
-    $('startup').hidden = true;
+    showPage('studio');
     emit('loaded');
     await restoreRun();
     startWorker();
@@ -625,5 +655,5 @@ window.CTApp = (function () {
     emit('wallChanged');
   }
 
-  return { sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, relative, hiddenMarks, orientLimit, cropOutlines, savedOrientation };
+  return { showPage, useStore, openReader, openFiles, sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, relative, hiddenMarks, orientLimit, cropOutlines, savedOrientation };
 }());

@@ -28,8 +28,26 @@
 
   /** Whether a file seen during a scan of the root must be opened again. Same path, size and modified time as an
       indexed entry means nothing changed, so the (slow) read that yields the id can be skipped. */
-  function needsRead(index, { path, bytes, mtime }) {
-    return !Object.values(index.scans).some((e) => e.path === path && e.bytes === bytes && e.mtime === mtime);
+  function needsRead(index, stamp) {
+    return findIndexed(index, stamp) === null;
+  }
+
+  /** The id of the indexed scan seen at this path with this size and modified time, as its own file or as one of its
+      copies (copy_stamps), or null. */
+  function findIndexed(index, { path, bytes, mtime }) {
+    const same = (s) => s.path === path && s.bytes === bytes && s.mtime === mtime;
+    for (const [id, e] of Object.entries(index.scans)) if (same(e) || (e.copy_stamps || []).some(same)) return id;
+    return null;
+  }
+
+  /** Refuses a scans.json this VoxelBench cannot read safely (another file, or one from a newer version), so it is never
+      overwritten. */
+  function checkIndex(obj) {
+    const bad = () => new Error('VoxelBench/scans.json is not a VoxelBench scan index; it was left untouched');
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj) || obj.schema !== 'voxelbench-library-index' || typeof obj.version !== 'number') throw bad();
+    if (obj.version > INDEX_VERSION) throw new Error(`The scan index is from a newer VoxelBench (index version ${obj.version}, this one reads ${INDEX_VERSION}); it was left untouched`);
+    if (!obj.scans || typeof obj.scans !== 'object' || Array.isArray(obj.scans)) throw bad();
+    return obj;
   }
 
   /** Fold the scans found this time into the index. Returns a new index; the input is not changed. Nothing is ever
@@ -39,12 +57,141 @@
   function mergeIndex(index, scans, now) {
     const next = {};
     for (const [id, e] of Object.entries(index.scans)) next[id] = { ...e, missing: true };
-    for (const { id, path, kind, bytes, mtime, study } of scans) {
+    for (const { id, ...seen } of scans) { // every field found now (scanner record, copies) replaces the old ones
       const old = index.scans[id];
-      next[id] = { path, kind, bytes, mtime, study, first_seen: old ? old.first_seen : now, last_seen: now, missing: false };
+      next[id] = { ...seen, first_seen: old ? old.first_seen : now, last_seen: now, missing: false };
     }
     return { ...index, scans: next };
   }
 
-  return { scanId, INDEX_VERSION, emptyIndex, needsRead, mergeIndex };
+  /** One entry per scan id. A VOX and a full-resolution TIFF export of it share an id; the entry is read from the VOX
+      (else from the shortest path) and the other places are kept as copies, with the size and time each was seen
+      at so an unchanged copy is not read again. Entries with a unique id pass through unchanged. */
+  function dedupeScans(scans) {
+    const byId = new Map();
+    for (const s of scans) { if (!byId.has(s.id)) byId.set(s.id, []); byId.get(s.id).push(s); }
+    const better = (a, b) => (a.kind === 'vox') !== (b.kind === 'vox') ? (a.kind === 'vox' ? -1 : 1) : a.path.length - b.path.length || (a.path < b.path ? -1 : 1);
+    return [...byId.values()].map((group) => {
+      if (group.length === 1) return group[0];
+      const [best, ...rest] = [...group].sort(better);
+      return { ...best, copies: rest.map((s) => s.path), copy_stamps: rest.map(({ path, bytes, mtime }) => ({ path, bytes, mtime })) };
+    });
+  }
+
+  const leaf = (path) => String(path || '').split('/').filter(Boolean).pop() || '';
+  const dirOf = (path) => path.split('/').slice(0, -1).join('/');
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+  /** What a card shows. The title is the sample's name, else the scanner's study, else the folder name (a record saved
+      without a name stores its id as the name, which is not one). Porosity comes only from a saved run. */
+  function cardFacts({ entry, record, run }) {
+    const info = entry.info || {};
+    const named = record && record.name && record.name !== record.id ? record.name : null;
+    return {
+      title: named || entry.study || leaf(entry.path),
+      date: info.scannedAt || null,
+      scanSeconds: num(info.scanSeconds),
+      voxelUm: num(info.voxelUm) ?? num(entry.voxel_um),
+      kv: num(info.kv),
+      porosity: run && run.summary ? num(run.summary.all_void_percent_of_body) : null,
+      analyzed: Boolean(run),
+      starred: Boolean(record && record.starred),
+      tags: record && Array.isArray(record.tags) ? [...record.tags] : [],
+      missing: Boolean(entry.missing),
+    };
+  }
+
+  const FILTERS = {
+    all: () => true,
+    starred: (f) => f.starred,
+    analyzed: (f) => f.analyzed,
+    unanalyzed: (f) => !f.analyzed,
+    missing: (f) => f.missing,
+  };
+
+  /** The rows ({ id, entry, record, run }) that pass the side filter, the tag, the project and the search, which looks
+      in the title, the study, the tags and the notes. Order is kept. */
+  function filterScans(rows, { query = '', filter = 'all', tag = null, project = null } = {}) {
+    const q = String(query).trim().toLowerCase();
+    const pass = FILTERS[filter] || FILTERS.all;
+    return rows.filter((r) => {
+      const f = cardFacts(r), rec = r.record || {};
+      if (!pass(f)) return false;
+      if (tag && !f.tags.includes(tag)) return false;
+      if (project && rec.project !== project) return false;
+      if (!q) return true;
+      return [f.title, r.entry.study, ...f.tags, rec.notes].filter(Boolean).join('\n').toLowerCase().includes(q);
+    });
+  }
+
+  /** Tags typed as "a, b, c": trimmed, without blanks or repeats. */
+  const parseTags = (text) => [...new Set(String(text || '').split(',').map((t) => t.trim()).filter(Boolean))];
+
+  /** CT.groupStacks keys TIFF scans by their folder's name, so equal names in different places would merge into one
+      volume; a library walks a whole drive, where that happens. Each stack is split back into its real folders (dir),
+      and a TIFF folder takes the DataInfo.xml beside it or one level up, as groupStacks does. */
+  function scanFolders(stacks, files) {
+    const records = new Map();
+    for (const f of files) if (leaf(f.webkitRelativePath) === 'DataInfo.xml') records.set(dirOf(f.webkitRelativePath), f);
+    const out = [];
+    for (const s of stacks) {
+      if (s.kind === 'vox') { out.push({ ...s, dir: dirOf(s.vox.webkitRelativePath) }); continue; }
+      const byDir = new Map();
+      for (const f of s.files) { const d = dirOf(f.webkitRelativePath); if (!byDir.has(d)) byDir.set(d, []); byDir.get(d).push(f); }
+      for (const [dir, list] of byDir) out.push({ ...s, folder: leaf(dir), dir, files: list, dataInfo: records.get(dir) || records.get(dirOf(dir)) || null });
+    }
+    return out;
+  }
+
+  /** What tells whether a scan's files changed: its folder, and the VOX file's size and time, or the slices' total size
+      and latest time. */
+  function stampOf(stack) {
+    if (stack.kind === 'vox') return { path: stack.dir, bytes: stack.vox.size, mtime: stack.vox.lastModified };
+    return { path: stack.dir, bytes: stack.files.reduce((a, f) => a + f.size, 0), mtime: Math.max(...stack.files.map((f) => f.lastModified)) };
+  }
+
+  const CARRIED = ['study', 'info', 'width', 'height', 'count', 'voxel_um'];
+
+  /** One pass over the files under the library root. A scan whose stamp is already indexed (as itself or as a copy)
+      keeps what is known about it; any other is read with readScan(stack) -> { id, study, info, width, height, count,
+      voxel_um }. A scan that cannot be read is reported in failed and left out of this pass (an indexed one is then
+      kept as missing, never dropped). Returns the new index, the scans by id (stack.folder = the id), how many scan
+      folders were listed (places, copies included) and read, and what failed. */
+  async function rescan({ files, index, groupStacks, readScan, now, onRead = () => {} }) {
+    const stacks = scanFolders(groupStacks(files), files);
+    const seen = [], byPath = new Map(), failed = [];
+    let read = 0;
+    for (const stack of stacks) {
+      const stamp = stampOf(stack);
+      byPath.set(stamp.path, stack);
+      let id = findIndexed(index, stamp), meta;
+      if (id) {
+        const e = index.scans[id];
+        meta = Object.fromEntries(CARRIED.map((k) => [k, e[k] ?? null]));
+      } else {
+        onRead(stack, read);
+        try { ({ id, ...meta } = await readScan(stack)); } catch (e) { failed.push({ path: stamp.path, message: e.message }); continue; }
+        read++;
+      }
+      seen.push({ id, ...stamp, kind: stack.kind, ...Object.fromEntries(CARRIED.map((k) => [k, meta[k] ?? null])) });
+    }
+    const scans = dedupeScans(seen);
+    const byId = new Map(scans.map((s) => [s.id, { ...byPath.get(s.path), folder: s.id }]));
+    return { index: mergeIndex(index, scans, now), stacks: byId, read, places: seen.length, found: scans.length, failed };
+  }
+
+  /** The display window for a thumbnail: the 1st to 99.9th percentile of the nonzero values (zero is outside the
+      reconstruction). Sampled on a stride for large slices. */
+  function grayWindow(pixels, maxSamples = 262144) {
+    const step = Math.max(1, Math.floor(pixels.length / maxSamples));
+    const vals = [];
+    for (let i = 0; i < pixels.length; i += step) if (pixels[i]) vals.push(pixels[i]);
+    if (!vals.length) return { low: 0, high: 1 };
+    const v = Float64Array.from(vals).sort();
+    const at = (p) => v[Math.floor(p * (v.length - 1))];
+    const low = at(0.01), high = at(0.999);
+    return { low, high: high > low ? high : low + 1 };
+  }
+
+  return { scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, grayWindow };
 }));

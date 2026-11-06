@@ -1,7 +1,7 @@
 /* Guided tour: walks a new user through the eight steps on the generated test scans. Each stop points at the part of
    the page it describes; its buttons run the step for the user (load a scan, draw an outline, press the button) so the
    real results appear, and a live line reads them back next to the known answers of the generated scan.
-   Start it from the top bar, the start page, or with ?tour in the address. */
+   Start it from the top bar, the library page, or with ?tour in the address. */
 (function (App) {
   'use strict';
   const { state, $, emit } = App;
@@ -123,7 +123,7 @@
       body: ['This tour runs the eight steps on generated test scans with known answers: crop, pores, zones, export, density calibration, CAD comparison, filler and walls.',
         'Each stop points at the controls it describes. Press the button in this card to have the tour do the step, or do it yourself and press Next. Scans are generated in this browser; nothing is uploaded.',
         'Esc closes the tour; the arrow keys move between stops.'] },
-    { title: 'Open a scan', target: () => (state.folder ? $('crumb') : $('startup').querySelector('.row')),
+    { title: 'Open a scan', target: () => (state.folder && state.page === 'studio' ? $('crumb') : $('libDemos')),
       body: ['A real scan is a folder of 16-bit TIFF slices (Open scan folder). The tour uses the generated dense-band scan: a 16 mm cylinder at 0.1 mm voxels with 40 spherical pores and a band over the middle 30 % of its length that reads 10 % denser.'],
       actions: [{ label: 'Load the dense-band scan', run: () => load('dense'), done: () => on('dense') }],
       result: () => (on('dense') ? `Loaded ${state.dims.nx} × ${state.dims.ny} × ${state.dims.nz} voxels at ${fmt(state.voxelMm * 1000, 0)} µm.` : '') },
@@ -200,7 +200,7 @@
         { label: 'Measure walls', run: async () => { $('runWall').click(); await until(wallDone, RUN_TIMEOUT_MS, 'Wall measurement'); }, done: () => on('cad') && Boolean(wallDone()) }],
       result: () => (on('cad') ? wallLine() : '') },
     { title: 'Your own scan', target: () => $('folder').parentElement,
-      body: ['Open scan folder reads a folder of single-page, uncompressed 16-bit TIFF slices with the voxel size in the resolution tags; a folder of scan folders lists each one. Large scans load block-mean binned, and the page says so first.',
+      body: ['The Library button opens the scan library: in Chrome or Edge, choose the folder that holds your scans and every scan under it is listed as a card. Open scan folder reads one folder of 16-bit TIFF slices (or a Rigaku .VOX) without a library; a folder of scan folders lists each one. Large scans load block-mean binned, and the page says so first.',
         'Save project writes the regions, annotations and runs to a file kept next to the scan. The tour is under Guided tour in the top bar.'] },
   ];
 

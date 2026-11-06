@@ -184,7 +184,9 @@
     const facts = $('facts');
     facts.textContent = '';
     if (!state.folder) return;
-    const s = CT.sampleInfo(state.folder, state.samples);
+    const info = CT.sampleInfo(state.folder, state.samples);
+    // A library scan's folder is its id: without a sample name it is titled as its card is (study, else folder name).
+    const s = info.name === state.folder && state.stack && state.stack.title ? { ...info, name: state.stack.title } : info;
     const fit = App.calibration();
     $('calHint').textContent = fit && fit.ok ? `Gray is calibrated to the equivalent density of the phantom material (${fit.n} points).` : 'Gray values are uncalibrated (no reference phantoms).';
     const { nx, ny, nz } = state.dims;

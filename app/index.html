@@ -68,9 +68,6 @@ input[type=range] { accent-color: var(--accent); }
 .slicebar.vertical { writing-mode: vertical-lr; direction: ltr; width: 22px; height: 100%; }
 .canvasnote { position: absolute; left: 8px; top: 8px; background: var(--scrim); border-left: 2px solid var(--accent); padding: 4px 8px; pointer-events: none; }
 .empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; color: var(--muted); }
-.startup { grid-column: 1 / -1; grid-row: 1 / -1; background: var(--bg); display: grid; place-content: center; gap: 12px; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px; max-width: 640px; margin: 0 auto; z-index: 2; }
-.startup h1 { font: 700 18px var(--font-mono); letter-spacing: .08em; color: var(--fg-strong); margin: 0; text-wrap: balance; }
-.startup p { margin: 0; }
 .progress { height: 3px; background: var(--line-strong); }
 .progress div { height: 100%; width: 0; background: var(--accent); }
 
@@ -189,7 +186,6 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
   .conn { margin-left: 0; white-space: normal; }
   .strip { flex-wrap: wrap; padding-block: 5px; }
   .center { grid-template: 380px repeat(3, 240px) / minmax(0, 1fr); }
-  .startup { grid-row: 1 / -1; }
   .rail { border-left: 0; display: block; }
   .statusbar { flex-wrap: wrap; white-space: normal; padding-block: 4px; }
   .statusbar .right { margin-left: 0; flex-wrap: wrap; }
@@ -292,8 +288,6 @@ html:is([data-skin="mac"], [data-skin="glass"]) .layer .lname .count { font: 12p
 html:is([data-skin="mac"], [data-skin="glass"]) .viewtoggle button:nth-of-type(1) { border-radius: 7px 0 0 7px; }
 html:is([data-skin="mac"], [data-skin="glass"]) .viewtoggle button:nth-of-type(2) { border-radius: 0 7px 7px 0; }
 html:is([data-skin="mac"], [data-skin="glass"]) .statusbar { font: 11px var(--font-ui); color: var(--muted); }
-html:is([data-skin="mac"], [data-skin="glass"]) .startup h1 { font: 600 24px/1.2 var(--font-ui); letter-spacing: -.015em; }
-html:is([data-skin="mac"], [data-skin="glass"]) .startup p { line-height: 1.55; }
 html:is([data-skin="mac"], [data-skin="glass"]) .progress { height: 4px; border-radius: 4px; overflow: hidden; }
 
 /* ===== Mac: a light Mac app ===== */
@@ -328,7 +322,6 @@ html[data-skin="mac"] .panehead { background: #0b0b0c; color: rgba(255, 255, 255
 html[data-skin="mac"] .panehead b { color: #fff; }
 html[data-skin="mac"] .panehead .mono { color: rgba(255, 255, 255, .5); }
 html[data-skin="mac"] .slicebar { background: #0b0b0c; accent-color: #8e8e93; }
-html[data-skin="mac"] .startup { align-self: center; max-height: 100%; overflow: auto; background: var(--mac-sheet); border-radius: 16px; padding: 30px 32px; box-shadow: 0 20px 50px rgba(0, 0, 0, .14), 0 0 0 .5px rgba(0, 0, 0, .1); }
 html[data-skin="mac"] .rail { background: var(--mac-rail); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%); border-left: 1px solid var(--line);
   grid-template-columns: 62px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
 html[data-skin="mac"] .stepbar { grid-column: 1; grid-row: 1 / -1; flex-direction: column; align-items: center; gap: 4px; padding: 12px 0; border-right: 1px solid var(--line); }
@@ -395,8 +388,6 @@ html[data-skin="glass"] th { background: var(--g-th); color: var(--muted); }
 html[data-skin="glass"] .draftpanel { background: var(--g-hover); border-bottom: 1px solid var(--line); }
 html[data-skin="glass"] .notice { background: var(--g-notice); color: var(--g-notice-ink); }
 html[data-skin="glass"] .viewtoggle button[aria-pressed="true"] { background: var(--g-primary); color: var(--g-primary-ink); }
-html[data-skin="glass"] .startup { align-self: center; justify-self: center; max-height: 100%; overflow: auto; background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
-  border-radius: 30px; padding: 32px 34px; box-shadow: var(--glass-edge); }
 html[data-skin="glass"] .skinmenu { background: var(--g-menu); border-radius: 18px; } /* near solid: inside the blurred bar its own blur has nothing to blur (Chrome), so a see-through sheet showed the page through it */
 html[data-skin="glass"] .studio .topbar .skinmenu button { border-radius: 12px; }
 html[data-skin="glass"] .dot.live { box-shadow: 0 0 8px rgba(48, 209, 88, .7); }
@@ -409,7 +400,6 @@ html[data-skin="glass"] .dot.live { box-shadow: 0 0 8px rgba(48, 209, 88, .7); }
   html:is([data-skin="mac"], [data-skin="glass"]) .rail { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; border-radius: 18px; }
   html:is([data-skin="mac"], [data-skin="glass"]) .stepbar { grid-row: 1; grid-column: 1; flex-direction: row; justify-content: space-between; padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--line); }
   html:is([data-skin="mac"], [data-skin="glass"]) :is(.rail .steps, .legend) { grid-column: 1; grid-row: auto; }
-  html:is([data-skin="mac"], [data-skin="glass"]) .startup { align-self: start; padding: 22px 18px; }
   html[data-skin="mac"] .topbar, html[data-skin="mac"] .statusbar { border-radius: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { html:is([data-skin="mac"], [data-skin="glass"]) * { transition: none !important; } }
@@ -468,6 +458,84 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
   html[data-skin="lab"] .studio { grid-template-columns: minmax(0, 1fr); }
   html[data-skin="lab"] .rail { display: grid; grid-template-columns: minmax(0, 1fr); }
   html[data-skin="lab"] .stepbar, html[data-skin="lab"] .rail .steps, html[data-skin="lab"] .legend { grid-column: 1; grid-row: auto; }
+}
+
+/* ---------- The library (vb_libraryview.js), the first screen: a bar, filters on the side, scan cards. ---------- */
+.library[hidden], .studio[hidden] { display: none !important; }
+.library { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); position: relative; z-index: 1; min-width: 0; }
+.libbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px)); background: var(--bg-deep); border-bottom: 1px solid var(--line); min-width: 0; }
+.libroot { flex: 1 1 14ch; min-width: 0; color: var(--fg-strong); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.libbody { display: grid; grid-template-columns: auto minmax(0, 1fr); min-height: 0; min-width: 0; }
+.libside { width: 230px; display: grid; align-content: start; gap: 4px; padding: 14px 12px; overflow: auto; border-right: 1px solid var(--line); background: var(--panel); }
+.libside[hidden] { display: none; }
+.libside input[type=search] { width: 100%; margin-bottom: 8px; background: var(--bg-deep); color: var(--fg); border: 1px solid var(--line-control); border-radius: var(--radius); padding: 5px 8px; }
+.libside h3 { margin: 12px 0 2px; font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.libfilters { display: grid; gap: 2px; }
+.library .link { all: unset; box-sizing: border-box; cursor: pointer; }
+.library .link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.library .libfilter { display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; border-radius: var(--radius); color: var(--fg); min-width: 0; overflow-wrap: anywhere; }
+.library .libfilter:hover { background: var(--warn-bg); }
+.library .libfilter[aria-pressed="true"] { background: var(--warn-bg); color: var(--accent); font-weight: 600; }
+.libmain { grid-column: 2; overflow: auto; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 24px 16px; display: grid; align-content: start; gap: 12px; min-width: 0; }
+.libmain > p { margin: 0; }
+.libintro { max-width: 70ch; display: grid; gap: 8px; }
+.libintro h1 { margin: 0; font: 700 18px var(--font-mono); letter-spacing: .08em; color: var(--fg-strong); }
+.libintro p { margin: 0; }
+.libstatus:empty { display: none; }
+.libgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap: 12px; }
+.libgrid:empty { display: none; }
+.libcard { display: grid; grid-template-rows: auto 1fr; min-width: 0; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.libcard.missing { opacity: .62; }
+.library .libthumb { display: grid; place-items: center; aspect-ratio: 1; width: 100%; background: var(--image-bg); color: #8b97a5; font-size: 12px; }
+.library .libthumb:disabled { cursor: default; }
+.libthumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.libcardbody { display: grid; align-content: start; gap: 4px; padding: 8px 10px 10px; min-width: 0; }
+.libcardhead { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.libtitle { flex: 1 1 auto; min-width: 0; color: var(--fg-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.library .libstar { font-size: 17px; line-height: 1; padding: 2px 4px; color: var(--muted); }
+.library .libstar[aria-pressed="true"] { color: var(--accent); }
+.libfacts { color: var(--muted); overflow-wrap: anywhere; }
+.libresult { font-size: 12px; color: var(--muted); }
+.libresult.analyzed { color: var(--fg); font-weight: 500; }
+.libtags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.libtags input { flex: 1 1 100%; min-width: 0; }
+.libtag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--warn-bg); color: var(--fg); overflow-wrap: anywhere; }
+.library .libtagedit { font-size: 11px; color: var(--accent); padding: 1px 2px; }
+.libstart { display: grid; gap: 10px; margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--line); min-width: 0; }
+.libstart h2 { margin: 0; font: 600 13px var(--font-ui); color: var(--fg-strong); }
+.libstart p { margin: 0; }
+@media (max-width: 900px) {
+  .library { height: auto; }
+  .libbody { grid-template-columns: minmax(0, 1fr); }
+  .libside { width: auto; border-right: 0; border-bottom: 1px solid var(--line); padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
+  .libfilters { display: flex; flex-wrap: wrap; gap: 4px; }
+  .libside h3 { margin-top: 6px; }
+  .libmain { grid-column: 1; overflow: visible; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
+}
+/* Mac: a sidebar and white cards. */
+html[data-skin="mac"] .libbar { background: var(--mac-bar); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+html[data-skin="mac"] .libside { background: var(--mac-rail); }
+html[data-skin="mac"] .libcard { background: var(--card); border: 0; border-radius: 12px; box-shadow: var(--card-shadow); }
+html[data-skin="mac"] .library .libfilter { border-radius: 7px; }
+html[data-skin="mac"] .library .libfilter[aria-pressed="true"] { background: var(--mac-tint); color: var(--mac-tint-ink); }
+html[data-skin="mac"] .libside input[type=search] { background: var(--mac-field); border: 1px solid var(--mac-field-line); border-radius: 7px; }
+/* Glass: floating panes over the blurred backdrop. */
+html[data-skin="glass"] .libbar, html[data-skin="glass"] .libside { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-edge); border: 0; }
+html[data-skin="glass"] .libbar { margin: 16px 16px 0; border-radius: 26px; padding-inline: 16px; }
+html[data-skin="glass"] .libbody { gap: 16px; padding: 16px 16px 0; }
+html[data-skin="glass"] .libside { border-radius: 24px; align-self: start; max-height: 100%; }
+html[data-skin="glass"] .libmain { padding: 0 0 24px; }
+html[data-skin="glass"] .libcard { background: var(--card); border: 0; border-radius: 20px; box-shadow: var(--glass-edge); }
+html[data-skin="glass"] .library .libfilter { border-radius: 12px; }
+html[data-skin="glass"] .library .libfilter[aria-pressed="true"] { background: var(--g-current); color: var(--fg-strong); }
+html[data-skin="glass"] .libside input[type=search] { background: var(--g-field); border: 1px solid var(--g-field-line); border-radius: 12px; }
+html:is([data-skin="mac"], [data-skin="glass"]) .libintro h1 { font: 600 24px/1.2 var(--font-ui); letter-spacing: -.015em; }
+html:is([data-skin="mac"], [data-skin="glass"]) .libintro p { line-height: 1.55; }
+@media (max-width: 900px) {
+  html[data-skin="glass"] .libbar { margin: 8px 8px 0; }
+  html[data-skin="glass"] .libbody { padding: 8px 8px 0; gap: 8px; }
+  html[data-skin="glass"] .libside { max-height: none; }
+  html[data-skin="glass"] .libmain { padding-inline: 0; }
 }
 
 /* ===== Light and dark (Appearance > Mode; data-mode is set before the page renders). Image areas stay black. ===== */
@@ -532,9 +600,51 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
 <script src="vb_skin.js"></script>
 <script>VBSkin.boot({ doc: document, storage: (() => { try { return window.localStorage; } catch (e) { return null; } })(), url: location.search }); VBSkin.bootMode({ doc: document, storage: (() => { try { return window.localStorage; } catch (e) { return null; } })(), win: window });</script>
 
-<div class="studio">
+<div class="library" id="libraryPage">
+  <header class="libbar">
+    <span class="wordmark" aria-label="VoxelBench"><span class="cap">V</span>OXEL<span class="cap">B</span>ENCH</span>
+    <span class="libroot" id="libRoot">No library open</span>
+    <button id="libReopen" class="primary" hidden></button>
+    <button id="libPick" title="The folder on the lab drive that holds the scans; every scan anywhere under it is listed">Choose the library folder…</button>
+    <button id="libRescan" hidden title="Look for new, moved and removed scans under the library folder; unchanged scans are not read again">Rescan</button>
+    <label class="filebtn" title="A scan folder outside the library, opened as before: records go to a project file you save">Open a folder…<input type="file" id="libFolder" webkitdirectory multiple></label>
+    <button id="libStudio" hidden>Back to the open scan</button>
+  </header>
+  <div class="libbody">
+    <nav class="libside" id="libSide" aria-label="Find scans" hidden>
+      <input type="search" id="libSearch" placeholder="Search name, study, tags, notes" aria-label="Search scans" autocomplete="off">
+      <div class="libfilters" id="libFilters" role="group" aria-label="Show"></div>
+      <h3 hidden>Projects</h3><div class="libfilters" id="libProjects" role="group" aria-label="Projects"></div>
+      <h3 hidden>Tags</h3><div class="libfilters" id="libTags" role="group" aria-label="Tags"></div>
+    </nav>
+    <main class="libmain">
+      <p class="notice" id="libNotice" hidden></p>
+      <section class="libintro" id="libIntro">
+        <h1>Scan library</h1>
+        <p>Choose the folder on the lab drive that holds your scans. Every scan under it (a folder with a .VOX file, or a folder of TIFF slices) is listed here with its settings, preview and results. Scans stay where they are; VoxelBench keeps its index and records in a VoxelBench folder inside the one you choose. Slices are read in this browser; no image data leaves this computer.</p>
+      </section>
+      <p class="libstatus mono" id="libStatus" role="status"></p>
+      <div class="progress" id="progressBar" hidden><div></div></div>
+      <p class="mono muted" id="openerText"></p>
+      <p class="error" id="loadError" hidden></p>
+      <div class="libgrid" id="libGrid"></div>
+      <p class="muted" id="libEmpty" hidden></p>
+      <section class="libstart">
+        <h2>Without a library</h2>
+        <p class="muted">Open a folder… reads one scan folder, or a folder of scan folders, as before; its regions, annotations and results go to a project file you save next to the scan.</p>
+        <div class="row"><div class="row"><button id="tourStartup" class="primary" title="Walks through the eight steps on generated test scans with known answers">Take the guided tour</button><span class="muted">or try a generated scan on your own:</span></div></div>
+        <div class="row" id="libDemos"><button id="trySynthetic" title="A generated 160-voxel cube with 40 known pores; nothing to download">Try a synthetic test scan</button><button id="trySyntheticDense" title="A 16 mm cylinder at 0.1 mm voxels, its middle 30 % of the length 10 % denser and its pores kept away from the ends, for trying gray-value zones">With a dense band</button><button id="trySyntheticPhantoms" title="The same scan with two phantom rods (0.50 and 1.40 g/cm³) for trying the density calibration">With phantom rods</button><button id="trySyntheticFiller" title="The synthetic scan with 50 bright spheres and 20 short fibers lying within 8° of x, for trying the filler analysis">With filler</button><button id="trySyntheticCad" title="A generated L-shaped part, shrunk 3 % with its upright bent 0.12 mm, and its nominal STL, for trying the CAD comparison">With a CAD model</button></div>
+        <div class="tablewrap" id="libFolderScans" hidden style="max-height:none"><table id="startSamples"></table></div>
+        <div class="row" id="batchRow" hidden><button id="batchRun">Run all scans</button><button id="batchCsv" disabled>Batch table (CSV)</button><span class="mono muted" id="batchStatus"></span></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="studio" id="studio" hidden>
   <header class="topbar">
     <span class="wordmark" aria-label="VoxelBench"><span class="cap">V</span>OXEL<span class="cap">B</span>ENCH</span>
+    <button id="toLibrary" title="Back to the scan library">Library</button>
     <span class="crumb" id="crumb">X-ray computed tomography (CT) of polymer parts</span>
     <select id="sampleSelect" aria-label="Scan" hidden></select>
     <label class="filebtn">Open scan folder<input type="file" id="folder" webkitdirectory multiple></label>
@@ -555,17 +665,6 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
       <ul class="rcinsights" id="rcInsights"></ul>
       <div class="row"><button id="rcJump">Show it</button><button id="rcStep"></button></div>
     </aside>
-    <div class="startup" id="startup">
-      <h1>Open a scan folder to begin</h1>
-      <p>Select a folder of scan folders, or one scan folder. Slices are read in this browser; no image data leaves this computer (the browser may label this an upload). Regions, annotations and results are kept in a project file you save, or in the shared database when this page runs on claude.ai.</p>
-      <div class="row"><button id="tourStartup" class="primary" title="Walks through the eight steps on generated test scans with known answers">Take the guided tour</button><span class="muted">or try a generated scan on your own:</span></div>
-      <div class="row"><button id="trySynthetic" title="A generated 160-voxel cube with 40 known pores; nothing to download">Try a synthetic test scan</button><button id="trySyntheticDense" title="A 16 mm cylinder at 0.1 mm voxels, its middle 30 % of the length 10 % denser and its pores kept away from the ends, for trying gray-value zones">With a dense band</button><button id="trySyntheticPhantoms" title="The same scan with two phantom rods (0.50 and 1.40 g/cm³) for trying the density calibration">With phantom rods</button><button id="trySyntheticFiller" title="The synthetic scan with 50 bright spheres and 20 short fibers lying within 8° of x, for trying the filler analysis">With filler</button><button id="trySyntheticCad" title="A generated L-shaped part, shrunk 3 % with its upright bent 0.12 mm, and its nominal STL, for trying the CAD comparison">With a CAD model</button></div>
-      <div class="progress" id="progressBar" hidden><div></div></div>
-      <p class="mono muted" id="openerText"></p>
-      <p class="error" id="loadError" hidden></p>
-      <div class="tablewrap" style="max-height:none"><table id="startSamples"></table></div>
-      <div class="row" id="batchRow" hidden><button id="batchRun">Run all scans</button><button id="batchCsv" disabled>Batch table (CSV)</button><span class="mono muted" id="batchStatus"></span></div>
-    </div>
     <section class="pane with-vertical main" id="paneXY" style="--plane: var(--plane-xy)"></section>
     <section class="pane" id="pane3D" style="--plane: var(--line-control)">
       <div class="panehead"><b>3D</b><span class="mono" id="modelState"></span></div>
@@ -888,6 +987,7 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="version.js"></script>
 <script src="ct_core.js"></script>
+<script src="vb_fsdir.js"></script>
 <script src="vb_store.js"></script>
 <script src="vb_volume.js"></script>
 <script src="vb_calibration.js"></script>
@@ -910,6 +1010,7 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
 <script src="ct_sheetdata.js"></script>
 <script src="ct_plot.js"></script>
 <script src="vb_vox.js"></script>
+<script src="vb_library.js"></script>
 <script src="ct_app.js"></script>
 <script src="ct_views.js"></script>
 <script src="ct_model.js"></script>
@@ -926,6 +1027,7 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
 <script src="vb_comparerail.js"></script>
 <script src="vb_bookmarks.js"></script>
 <script src="vb_batch.js"></script>
+<script src="vb_libraryview.js"></script>
 <script src="vb_archimedes.js"></script>
 <script src="vb_orientrail.js"></script>
 <script src="ct_sheet.js"></script>
