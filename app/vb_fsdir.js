@@ -6,7 +6,7 @@
 }(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const LIBRARY_FOLDER = 'VoxelBench'; // the lab's data lives here, so a scan walk must not descend into it
+  const LIBRARY_FOLDER = 'VoxelBench'; // the library's data lives here, so a scan walk must not descend into it
 
   // A path is '/'-separated segments; '..', '.' and empty segments are refused so a stored name can never leave the folder.
   function segments(path) {

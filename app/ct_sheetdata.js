@@ -151,7 +151,9 @@
   function methodsSourceLine({ voxelMm, binFactor, scanInfo, kind, settingsText }) {
     const source = kind === 'vox' ? 'the scan file spacing' : 'the TIFF tag';
     const how = binFactor > 1 ? `${binFactor}× ${source}, binned` : (kind === 'vox' ? 'from the scan file' : 'TIFF tag');
-    return `Voxel ${(1000 * voxelMm).toFixed(2)} µm (${how}). ${scanInfo ? `Scanned at ${settingsText(scanInfo)}.` : 'Acquisition parameters not recorded.'}`;
+    // A VOX opened without DataInfo.xml still carries header values (valueScale), so a record means acquisition settings.
+    const recorded = scanInfo && [scanInfo.kv, scanInfo.ua, scanInfo.scanSeconds].some((v) => v !== null && v !== undefined);
+    return `Voxel ${(1000 * voxelMm).toFixed(2)} µm (${how}). ${recorded ? `Scanned at ${settingsText(scanInfo)}.` : 'Acquisition parameters not recorded.'}`;
   }
 
   return { methodsSourceLine, SIZE_EDGES_MM, columnPorosity, axialProfile, sliceAreaFilter, extents, sizeBins, sizeDistribution, magmaR, niceTicks };

@@ -71,10 +71,10 @@ Sinter CT Annotator, version 10 (the lab's single-sample annotator):
 
 Sample 2 specifics to remove:
 - `CT.SAMPLES` and `identifySample` in `ct_core.js` (the lab run table and folder-name mapping).
-- `REGION_LABELS` in `ct_regions.js` (believed natural / believed doped).
+- `REGION_LABELS` in `ct_regions.js` (fixed labels for believed material states).
 - The zone method in `ct_zones.js`: gray offset from the pore-free ends of the long axis at equal depth.
   This suits a part that grades along one axis and is one option, not the default.
-- Review-sheet wording that names doped/natural assignments.
+- Review-sheet wording that names those fixed-label assignments.
 
 ## Ideas taken from Lumafield Voyager
 
@@ -84,7 +84,7 @@ its own versions, not copies of Voyager's interface.
 - **Porosity reports sphericity and surface proximity** (distance from each pore to the part surface). Near-surface
   pores matter for polymer parts. Added to the pore table and the size plots.
 - **Saved named analyses** ("authoring": an analysis saved with its own thresholds). VoxelBench: analysis
-  presets, named and stored with the project, plus material presets (PA12 SLS, TPU, PEEK, foams, fiber
+  presets, named and stored with the project, plus material presets (a material name plus a process name per preset; polymers, foams, fiber
   composites) as starting values.
 - **Inclusion analysis** (bright phase). Becomes the filler half of goal 6.
 - **Crack and leak detection.** VoxelBench: a through-path check as part of open porosity (goal 4): is there a
@@ -112,7 +112,7 @@ build) and artifact database (artifact build). Done when both builds open a scan
 
 **Phase 1: lab-ready basics.**
 - Per-sample metadata entered by the user (name, material, process, notes) in place of `CT.SAMPLES`.
-- User-defined region labels in place of natural/doped.
+- User-defined region labels in place of the fixed labels.
 - Zone method chosen per project: whole-part median baseline (default) or end baseline (the Sample 2 method).
 - Large scans: when the full stack does not fit the memory budget, analyze on a binned copy and read full
   resolution only for displayed slices and zoomed regions. The page states which resolution each number came

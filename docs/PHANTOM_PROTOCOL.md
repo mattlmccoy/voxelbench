@@ -22,7 +22,7 @@ is the density a phantom of the reference material would need to show that gray.
 2. **Size.** At least 20 voxels across: about 1 mm at 40 µm voxels, 2 mm at 100 µm.
 3. **Position.** Keep them clear of the FOV edge and of the holder, and with air between phantom and sample.
 4. **Set.** Use at least two points: air, plus one solid phantom.
-   - **Base polymer:** a molded or machined rod of the same polymer as the part (for example PA12), full density.
+   - **Base polymer:** a molded or machined rod of the same polymer as the part (a material name such as the part's polymer), full density.
    - **Check point (recommended):** a denser reference such as PTFE (about 2.2 g/cm³). With three or more points
      VoxelBench shows residuals and R², which tells you whether a straight line holds.
 5. **Densities.** Measure each phantom's density yourself, by Archimedes (ASTM D792) or gas pycnometry. Datasheet

@@ -92,5 +92,7 @@ test('methods line names where the voxel size and scan settings came from', () =
   assert.equal(m({ kind: 'vox', scanInfo: info }), 'Voxel 12.30 µm (from the scan file). Scanned at 80 kV, 220 µA, 4 min 16 s scan.');
   assert.equal(m({ kind: 'vox' }), 'Voxel 12.30 µm (from the scan file). Acquisition parameters not recorded.');
   assert.equal(m({ kind: 'vox', binFactor: 2 }), 'Voxel 12.30 µm (2× the scan file spacing, binned). Acquisition parameters not recorded.');
+  const headerOnly = { valueScale: 0.588235, valueOffset: -1294.118 }; // what a VOX opened without DataInfo.xml carries
+  assert.equal(m({ kind: 'vox', scanInfo: headerOnly }), 'Voxel 12.30 µm (from the scan file). Acquisition parameters not recorded.');
   assert.match(m({ scanInfo: info }), /^Voxel 12\.30 µm \(TIFF tag\)\. Scanned at 80 kV/);
 });
