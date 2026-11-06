@@ -56,13 +56,18 @@
   // The writable is a swap file the browser commits only on close(), so an abort leaves the old file whole.
   async function writeData(dir, path, data) {
     const parts = segments(path);
+    const name = parts[parts.length - 1];
     const d = await dirAt(dir, parts.slice(0, -1), true);
-    const w = await (await d.getFileHandle(parts[parts.length - 1], { create: true })).createWritable();
+    let existed = true;
+    try { await d.getFileHandle(name); } catch (e) { if (!isNotFound(e)) throw e; existed = false; }
+    const w = await (await d.getFileHandle(name, { create: true })).createWritable();
     try {
       await w.write(data);
       await w.close();
     } catch (e) {
       try { await w.abort(); } catch (_) { /* the original error is the one to report */ }
+      // Creating the handle made an empty file; left behind it would read as corrupt JSON. Remove only what this write created.
+      if (!existed) { try { await d.removeEntry(name); } catch (_) { /* nothing more to undo */ } }
       throw e;
     }
   }
@@ -70,5 +75,5 @@
   const writeText = (dir, path, text) => writeData(dir, path, text);
   const writeBlob = (dir, path, blob) => writeData(dir, path, blob);
 
-  return { LIBRARY_FOLDER, walk, list, readText, writeText, writeBlob };
+  return { LIBRARY_FOLDER, segments, walk, list, readText, writeText, writeBlob };
 }));

@@ -237,3 +237,76 @@ test('library store: putFile writes under VoxelBench and refuses library.json', 
   assert.equal(f.size, 1);
   await assert.rejects(s.putFile('library.json', new Blob(['x'])));
 });
+
+test('library store: a failed first write leaves no empty file, and the library still opens', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.putRun('S1', { n: 1 }, []);
+  root.shared.failNextWrite = true;
+  await assert.rejects(s.putRun('S1', { n: 2 }, []), /simulated/);
+  assert.equal((await s.getRun('S1')).n, 1);
+  assert.equal((await s.listRuns('S1')).length, 1);
+  root.shared.failNextWrite = true;
+  await assert.rejects(s.put('samples', sample('NEW')), /simulated/);
+  const again = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  assert.equal((await again.getRun('S1')).n, 1);
+  assert.equal(await libText(root, 'records/NEW.json'), null);
+  // a failed creation of library.json itself leaves nothing that blocks the next open
+  const fresh = makeFakeDir();
+  fresh.shared.failNextWrite = true;
+  await assert.rejects(S.makeLibraryStore(fresh, { toolVersion: '0.1.0' }), /simulated/);
+  await S.makeLibraryStore(fresh, { toolVersion: '0.1.0' });
+});
+
+test('library store: putFile writes only thumbs/ and non-json files under runs/<folder>/, never over a saved file', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.putRun('S1', { n: 1 }, []);
+  await s.put('labels', { id: 'a', label: 'A' });
+  await s.put('presets', { id: 'p' });
+  await s.put('samples', sample('S1'));
+  const runName = (await FS.list(root, `${S.LIBRARY_DIR}/runs/S1`))[0].name;
+  await s.putFile('thumbs/S1.png', new Blob(['1']));
+  await s.putFile('thumbs/S1.png', new Blob(['2'])); // thumbnails may be refreshed
+  await s.putFile('runs/S1/2026-11-05T12-00-00.000Z-review.pdf', new Blob(['pdf']));
+  const before = {};
+  const paths = [`runs/S1/${runName}`, 'records/S1.json', 'labels.json', 'presets.json', 'library.json'];
+  for (const p of paths) before[p] = await libText(root, p);
+  const refused = [...paths, 'LIBRARY.json', 'Library.JSON', 'Labels.json', 'RECORDS/S1.json', 'runs/S1/' + runName.toUpperCase(),
+    'runs/S1/2026-11-05T12-00-00.000Z-review.pdf', 'runs/x.pdf', 'other/x.pdf', 'thumbs/../library.json', 'thumbs'];
+  for (const p of refused) await assert.rejects(s.putFile(p, new Blob(['BAD'])), undefined, p);
+  for (const p of paths) assert.equal(await libText(root, p), before[p], p);
+  assert.equal(await libText(root, 'thumbs/S1.png'), '2');
+});
+
+test('library store: a library.json, labels.json or presets.json that is JSON but not the expected shape refuses', async () => {
+  for (const bad of ['null', '0', 'false', '""', '[]', '7']) {
+    const root = makeFakeDir();
+    await FS.writeText(root, 'VoxelBench/library.json', bad);
+    await assert.rejects(S.makeLibraryStore(root, { toolVersion: '0.1.0' }), /library\.json/, bad);
+    assert.equal(await libText(root, 'library.json'), bad, 'untouched');
+  }
+  for (const f of ['labels.json', 'presets.json', 'records/S1.json']) {
+    for (const bad of ['null', '0', 'false', '""', '{}x']) {
+      const root = makeFakeDir();
+      await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+      await FS.writeText(root, `VoxelBench/${f}`, bad);
+      await assert.rejects(S.makeLibraryStore(root, { toolVersion: '0.1.0' }), new RegExp(f.replace('.', '\\.')), `${f} ${bad}`);
+      assert.equal(await libText(root, f), bad, 'untouched');
+    }
+  }
+});
+
+test('library store: reads and writes throw when the library folder is gone, rather than reporting no data', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.putRun('S1', { n: 1 }, []);
+  assert.equal(await s.getRun('nope'), null, 'a missing run in a present library is just absent');
+  await root.removeEntry(S.LIBRARY_DIR);
+  await assert.rejects(s.getRun('S1'), /library drive is not available/);
+  await assert.rejects(s.listRuns('S1'), /library drive is not available/);
+  await assert.rejects(s.exportProject('0.1.0'), /library drive is not available/);
+  await assert.rejects(s.putRun('S1', { n: 2 }, []), /library drive is not available/);
+  await assert.rejects(s.put('samples', sample('S9')), /library drive is not available/);
+  await assert.rejects(root.getDirectoryHandle(S.LIBRARY_DIR), /could not be found/, 'nothing was recreated');
+});

@@ -50,3 +50,11 @@ test('paths that climb out of the folder are refused', async () => {
   const root = makeFakeDir();
   for (const p of ['../x.txt', 'a/../x.txt', 'a//x.txt', '']) await assert.rejects(D.writeText(root, p, 'x'), /path/i);
 });
+
+test('a failed first write of a new file leaves no file behind', async () => {
+  const root = makeFakeDir();
+  root.shared.failNextWrite = true;
+  await assert.rejects(D.writeText(root, 'x/new.json', 'data'), /simulated/);
+  assert.deepEqual((await D.list(root, 'x')).map((e) => e.name), []);
+  assert.equal(await D.readText(root, 'x/new.json'), null);
+});

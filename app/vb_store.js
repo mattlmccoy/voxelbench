@@ -108,15 +108,17 @@
   const PER_SCAN = ['samples', 'regions', 'annotations']; // stored together in records/<scan folder>.json
   const GLOBAL_FILE = { labels: 'labels.json', presets: 'presets.json' };
   const enc = encodeURIComponent;
+  const segments = (path) => FS.segments(path);
   // Records of a scan's own collections belong to the folder they name; a sample's id is its folder.
   const folderOf = (c, r) => (c === 'samples' ? r.id : (r.sample && r.sample.folder) || '_unfiled');
   // ISO times sort as text; ':' is not allowed in file names on every drive, so the file name uses '-' there.
   const runFileName = (d) => `${d.toISOString().replace(/:/g, '-')}.json`;
   const runTime = (name) => name.slice(0, -5).replace(/T(\d\d)-(\d\d)-(\d\d)/, 'T$1:$2:$3');
 
+  // undefined means the file is absent; a file holding JSON null is present and is returned as null.
   async function readJson(root, path) {
     const text = await FS.readText(root, path);
-    if (text === null) return null;
+    if (text === null) return undefined;
     try { return JSON.parse(text); } catch (e) { throw new Error(`${path} is not readable JSON (${e.message}); it was left untouched`); }
   }
 
@@ -124,8 +126,8 @@
   async function makeLibraryStore(dir, opts = {}) {
     const base = (p) => `${LIBRARY_DIR}/${p}`;
     const lib = await readJson(dir, base('library.json'));
-    if (lib) {
-      if (lib.schema !== LIBRARY_SCHEMA) throw new Error(`${LIBRARY_DIR}/library.json is not a VoxelBench library; it was left untouched`);
+    if (lib !== undefined) {
+      if (!lib || typeof lib !== 'object' || Array.isArray(lib) || lib.schema !== LIBRARY_SCHEMA) throw new Error(`${LIBRARY_DIR}/library.json is not a VoxelBench library; it was left untouched`);
       if (!(lib.version <= LIBRARY_VERSION)) throw new Error(`The library is from a newer VoxelBench (library version ${lib.version}, this one reads ${LIBRARY_VERSION}); open it with the newer VoxelBench`);
     }
 
@@ -141,14 +143,14 @@
     }
     for (const [c, file] of Object.entries(GLOBAL_FILE)) {
       const arr = await readJson(dir, base(file));
-      if (arr === null) continue;
+      if (arr === undefined) continue;
       if (!Array.isArray(arr)) throw new Error(`${base(file)} is not a VoxelBench records file; it was left untouched`);
       for (const r of arr) data[c].set(r.id, r);
     }
     const runFolders = new Set();
     for (const e of await FS.list(dir, base('runs'))) if (e.kind === 'directory') runFolders.add(decodeURIComponent(e.name));
 
-    if (!lib) await FS.writeText(dir, base('library.json'), JSON.stringify({ schema: LIBRARY_SCHEMA, version: LIBRARY_VERSION, created: new Date().toISOString() }, null, 2));
+    if (lib === undefined) await FS.writeText(dir, base('library.json'), JSON.stringify({ schema: LIBRARY_SCHEMA, version: LIBRARY_VERSION, created: new Date().toISOString() }, null, 2));
 
     const view = (c) => new Map([...data[c]].map(([id, r]) => [id, copy(r)]));
     const notify = (c) => { for (const fn of watchers[c]) fn(view(c)); };
@@ -175,23 +177,43 @@
       notify(c);
     }
 
+    // An absent run folder is normal, but not when the whole library has vanished (drive unplugged): that is
+    // unknown, not empty, and must never read as "no runs" or be silently recreated by a write.
+    const ensureLibrary = async () => {
+      try { await dir.getDirectoryHandle(LIBRARY_DIR); } catch (e) {
+        throw new Error(`The library drive is not available (${LIBRARY_DIR} folder not found: ${e.message}); reconnect it and reopen the library`);
+      }
+    };
     const runDir = (folder) => base(`runs/${enc(folder)}`);
-    const runNames = async (folder) => (await FS.list(dir, runDir(folder))).filter((e) => e.kind === 'file' && e.name.endsWith('.json')).map((e) => e.name).sort();
+    const readRun = async (folder, name) => {
+      const path = `${runDir(folder)}/${name}`;
+      const r = await readJson(dir, path);
+      if (!r || typeof r !== 'object' || !r.doc) throw new Error(`${path} is not a saved run; it was left untouched`);
+      return r;
+    };
+    const runNames = async (folder) => {
+      const entries = await FS.list(dir, runDir(folder));
+      if (!entries.length) await ensureLibrary();
+      return entries.filter((e) => e.kind === 'file' && e.name.endsWith('.json')).map((e) => e.name).sort();
+    };
 
     const store = {
       kind: 'library',
       watch(c, fn) { watchers[c].add(fn); fn(view(c)); return () => watchers[c].delete(fn); },
-      put: (c, record) => serial(() => change(c, record.id, copy(record), folderOf(c, record))),
-      remove: (c, id) => serial(() => {
+      put: (c, record) => serial(async () => { await ensureLibrary(); return change(c, record.id, copy(record), folderOf(c, record)); }),
+      remove: (c, id) => serial(async () => {
         const r = data[c].get(id);
-        return r ? change(c, id, null, folderOf(c, r)) : undefined;
+        if (!r) return undefined;
+        await ensureLibrary();
+        return change(c, id, null, folderOf(c, r));
       }),
       async getRun(folder) {
         const names = await runNames(folder);
         if (!names.length) return null;
-        return (await readJson(dir, `${runDir(folder)}/${names[names.length - 1]}`)).doc;
+        return (await readRun(folder, names[names.length - 1])).doc;
       },
       putRun: (folder, doc, chunks) => serial(async () => {
+        await ensureLibrary();
         const have = new Set(await runNames(folder));
         const t = new Date();
         while (have.has(runFileName(t))) t.setTime(t.getTime() + 1); // two runs in one millisecond still get two files
@@ -199,9 +221,23 @@
         runFolders.add(folder);
       }),
       async listRuns(folder) { return (await runNames(folder)).map((n) => ({ at: runTime(n) })); },
+      // Only two places take loose files: thumbnails, and non-JSON files (review sheets) beside a scan's runs. Records,
+      // labels, presets, library.json and saved runs are all JSON, so none can be reached; names compare case-insensitively
+      // because the drive may fold case. A file beside the runs is never replaced.
       putFile(path, blob) {
-        if (path === 'library.json') return Promise.reject(new Error('library.json is written only by the library itself'));
-        return serial(() => FS.writeBlob(dir, base(path), blob));
+        return serial(async () => {
+          const parts = segments(path);
+          const low = parts.map((p) => p.toLowerCase());
+          const thumb = low[0] === 'thumbs' && parts.length >= 2;
+          const beside = low[0] === 'runs' && parts.length === 3 && !low[2].endsWith('.json');
+          if (!thumb && !beside) throw new Error(`Refusing to write ${path}: the library takes only thumbs/ files and non-JSON files under runs/<scan>/`);
+          await ensureLibrary();
+          if (beside) {
+            const have = (await FS.list(dir, base(`runs/${parts[1]}`))).map((e) => e.name.toLowerCase());
+            if (have.includes(low[2])) throw new Error(`Refusing to replace the saved file ${path}`);
+          }
+          await FS.writeBlob(dir, base(path), blob);
+        });
       },
       async exportProject(toolVersion = opts.toolVersion) {
         const out = header(toolVersion);
@@ -209,7 +245,7 @@
         out.runs = {};
         for (const f of runFolders) {
           const names = await runNames(f);
-          if (names.length) out.runs[f] = await readJson(dir, `${runDir(f)}/${names[names.length - 1]}`);
+          if (names.length) out.runs[f] = await readRun(f, names[names.length - 1]);
         }
         return out;
       },
