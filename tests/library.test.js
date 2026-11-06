@@ -698,3 +698,13 @@ test('makeFramedRender: rows, entries and the Compare targets are current at onc
   render(); // a frame is still pending: the state still updates
   assert.equal(L.cardFacts(lib.entries[0]).title, 'Part A');
 });
+
+test('Analyze on the scan already open goes back to it; any other scan, or one still loading, is read again', () => {
+  const store = {}, other = {};
+  const open = { folder: 's1', loading: null, stack: { store } };
+  assert.equal(L.isOpenScan('s1', store, open), true);
+  assert.equal(L.isOpenScan('s2', store, open), false); // another scan
+  assert.equal(L.isOpenScan('s1', other, open), false); // the same id in another library
+  assert.equal(L.isOpenScan('s1', store, { ...open, loading: 's1', folder: null }), false); // still being read
+  assert.equal(L.isOpenScan('s1', store, { folder: null, loading: null, stack: null }), false); // nothing open
+});

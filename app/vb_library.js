@@ -466,5 +466,11 @@
   /** Bytes in decimal units, as the drive shows them: "2.5 GB", "420 MB". */
   const bytesText = (b) => (b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`);
 
-  return { libraryRows, refreshSummaries, makeFramedRender, sameStamp, matchImport, projectFolders, remapProject, sharedTargets, actionTargets, batchBytes, bytesText, driveCard, driveSummary, refusalMessage, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
+  /** Whether this library scan is the one already open in the studio (read, not still loading): Analyze then goes back
+      to it with its analysis rather than reading the whole scan again. */
+  function isOpenScan(id, store, open) {
+    return Boolean(open.stack) && open.folder === id && !open.loading && open.stack.store === store;
+  }
+
+  return { isOpenScan, libraryRows, refreshSummaries, makeFramedRender, sameStamp, matchImport, projectFolders, remapProject, sharedTargets, actionTargets, batchBytes, bytesText, driveCard, driveSummary, refusalMessage, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
 }));

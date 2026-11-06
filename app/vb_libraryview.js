@@ -311,6 +311,7 @@
   /** Opens a library scan in the studio; a failure is told by report (the overview passes its own status line). */
   async function openScan(id, report = (text) => say(text, true)) {
     const row = lib.entries.find((r) => r.id === id);
+    if (L.isOpenScan(id, lib.store, state)) { App.showPage('studio'); return; } // still in memory, analysis and all
     if (projectUnsaved() && !window.confirm(UNSAVED_PROJECT)) return;
     try {
       const stack = { ...(await stackFor(id)), store: lib.store, title: row ? L.cardFacts(row).title : id };
