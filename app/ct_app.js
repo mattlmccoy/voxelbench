@@ -179,7 +179,10 @@ window.CTApp = (function () {
   async function saveProject() {
     const folders = state.stacks.map((s) => s.folder);
     const project = await state.store.exportProject(window.VB_VERSION, folders);
-    const name = `${folders[0] || 'voxelbench'}_voxelbench.json`;
+    // A library scan's folder is its id: the file is named by the sample's name, else the card's title.
+    const named = state.store.kind === 'library' && folders[0] ? CT.sampleInfo(folders[0], state.samples).name : null;
+    const base = state.store.kind === 'library' ? V.fileSafe(named && named !== folders[0] ? named : (state.stack && state.stack.title) || '') : '';
+    const name = `${base || folders[0] || 'voxelbench'}_voxelbench.json`;
     const how = await V.saveBlob(state.downloads, name, new Blob([JSON.stringify(project)], { type: 'application/json' }));
     if (how === 'declined') { projectNote('Save canceled.'); return; }
     if (state.store.kind === 'file') { state.projectDirty = false; state.projectFile = name; renderSaveState(); }

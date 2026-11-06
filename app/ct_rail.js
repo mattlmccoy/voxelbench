@@ -660,7 +660,7 @@
   async function saveFile(filename, data) {
     try {
       const how = await window.VBStore.saveBlob(state.downloads, filename, data instanceof Blob ? data : new Blob([data], { type: 'text/csv' }));
-      sayExport(how === 'declined' ? 'Save canceled.' : how === 'link' ? `Downloaded ${filename} to the browser's download folder.` : `Saved ${filename}.`);
+      sayExport(how === 'declined' ? 'Save canceled.' : how === 'link' ? `Download started: ${filename}.` : `Saved ${filename}.`);
     } catch (e) {
       sayExport(`Could not save: ${e.message}`);
     }

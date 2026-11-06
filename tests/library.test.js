@@ -591,3 +591,8 @@ test('sharedTargets: two folders headed for one scan are found, so their records
   assert.deepEqual(L.sharedTargets({ Cube: 'sb', Cube_tif: 'sb', PartA: 'sa' }), [['sb', ['Cube', 'Cube_tif']]]);
   assert.deepEqual(L.sharedTargets({ A: 'sa' }), []);
 });
+
+test('projectFolders: a sample without a string id falls back to its folder, else is not listed (never "undefined")', () => {
+  const p = { samples: [{ folder: 'F' }, { name: 'nameless' }, { id: 7 }, { id: 'A' }] };
+  assert.deepEqual(L.projectFolders(p), ['F', 'A']);
+});

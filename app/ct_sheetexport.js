@@ -122,11 +122,11 @@
         kept = `Not kept in the library: ${e.message}. `;
       }
     }
-    const name = `${store && store.kind === 'library' && title ? title.replace(/[\\/:*?"<>|]+/g, '_') : folder}_review_sheet.pdf`;
+    const name = `${store && store.kind === 'library' && title ? window.VBStore.fileSafe(title) || folder : folder}_review_sheet.pdf`;
     let how = 'declined';
     try {
       how = await window.VBStore.saveBlob(state.downloads, name, blob);
-      say(`${kept}${how === 'declined' ? (inLibrary ? 'Download canceled.' : 'Save canceled.') : how === 'link' ? `Downloaded ${name} to the browser's download folder.` : `Saved ${name}.`}`);
+      say(`${kept}${how === 'declined' ? (inLibrary ? 'Download canceled.' : 'Save canceled.') : how === 'link' ? `Download started: ${name}.` : `Saved ${name}.`}`);
     } catch (e) {
       say(`${kept}Could not save: ${e.message}`);
     }

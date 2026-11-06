@@ -382,3 +382,53 @@ test('library store: exportProject(folders) exports only those scans\' records a
   const all = await s.exportProject('0.1.0');
   assert.deepEqual(Object.keys(all.runs).sort(), ['S1', 'S2'], 'no folders: the whole library, as before');
 });
+
+// ---------- Task 7 fix 1: import dedupes runs by content (Ruling 17) ----------
+// Shaped like a real Save run (ct_rail.js saveRun): created_at is stamped when the run is built, and putRun names the
+// file with its own clock a moment later, so a native run's file time never equals its created_at.
+const savedRun = (createdAt, porosity) => ({
+  schema: 2, created_at: createdAt, settings: { poreThreshold: 1300, bodyThreshold: 900 }, binFactor: 1,
+  sample: { folder: 'S1', name: 'S1' }, summary: { all_void_percent_of_body: porosity, pore_count: 12 },
+  voxel_mm: 0.04, bin_factor: 1, scan: null, relative_scale: [], chunk_count: 1, regions: [], zones: { labels: {} },
+});
+
+test('library store: a native run exported and imported back into the same library is not added again', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.putRun('S1', savedRun('2020-01-02T03:04:05.000Z', 7.5), [{ rows: [1] }]); // filed at now, not at created_at
+  assert.notEqual((await s.listRuns('S1'))[0].at, '2020-01-02T03:04:05.000Z', 'the fixture is a real-shaped run');
+  const res = await s.importProject(await s.exportProject('0.1.0', ['S1']));
+  assert.deepEqual(res.runsAlready, ['S1']);
+  assert.deepEqual(res.runsAdded, []);
+  assert.equal((await s.listRuns('S1')).length, 1);
+});
+
+test('library store: a run whose time collides with a different run is imported once, not again on every import', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  const t = '2021-05-06T07:08:09.010Z';
+  await s.putRun('S1', savedRun(t, 1), [], { at: t });
+  const p = { schema: 'voxelbench-project', version: 1, runs: { S1: { doc: savedRun(t, 2), chunks: [] } } };
+  assert.deepEqual((await s.importProject(p)).runsAdded, ['S1']); // filed 1 ms later
+  for (let k = 0; k < 2; k++) assert.deepEqual((await s.importProject(p)).runsAlready, ['S1']);
+  assert.equal((await s.listRuns('S1')).length, 2);
+});
+
+test('library store: an imported label that differs from the library\'s label of the same id is named, and the library\'s is kept', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.put('labels', { id: 'label_4', label: 'Dense', color: '#a0e070' });
+  await s.put('labels', { id: 'region_a', label: 'Region A', color: '#6ec3ff' });
+  const p = { schema: 'voxelbench-project', version: 1,
+    labels: [{ id: 'label_4', label: 'Phantom', color: '#a0e070' }, { color: '#6ec3ff', label: 'Region A', id: 'region_a' }] };
+  const res = await s.importProject(p);
+  assert.deepEqual(res.labelClashes, [{ id: 'label_4', library: 'Dense', project: 'Phantom' }]);
+  let labels; s.watch('labels', (m) => { labels = m; });
+  assert.equal(labels.get('label_4').label, 'Dense');
+});
+
+test('fileSafe: a name usable as a file name on every drive', () => {
+  assert.equal(S.fileSafe('Cube 3/4: top?'), 'Cube 3_4_ top_');
+  assert.equal(S.fileSafe('  '), '');
+  assert.equal(S.fileSafe('a\\b*c"d<e>f|g'), 'a_b_c_d_e_f_g');
+});

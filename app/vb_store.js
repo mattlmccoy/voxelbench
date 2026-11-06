@@ -274,33 +274,46 @@
 
   /** A project into a library, whose folders are already the library's scan ids (VBLibrary.remapProject). Nothing in
       the library is overwritten: a sample record already there keeps its fields and takes only the ones it lacks, any
-      other record already there is kept as it is, and runs join the scan's history at the time they were made. A run
-      already in the history (the same time, else the same content) is not added again. */
+      other record already there is kept as it is (a label that differs is listed in labelClashes), and runs join the
+      scan's history at the time they were made. A run whose content is already in the scan's history is not added again. */
   async function importIntoLibrary(store, obj, data, runNames, readRun) {
     checkProject(obj);
     let added = 0;
-    const keptRecords = [], runsAdded = [], runsAlready = [];
+    const keptRecords = [], runsAdded = [], runsAlready = [], labelClashes = [];
     for (const c of COLLECTIONS) {
       for (const r of obj[c] || []) {
         const have = data[c].get(r.id);
         if (!have) { await store.put(c, r); added++; continue; }
         keptRecords.push(`${c}/${r.id}`);
+        if (c === 'labels' && sorted(have) !== sorted(r)) labelClashes.push({ id: r.id, library: have.label, project: r.label });
         if (c === 'samples' && Object.keys(r).some((k) => !(k in have))) await store.put(c, { ...r, ...have });
       }
     }
     for (const [folder, r] of Object.entries(obj.runs || {})) {
       const at = r.doc && validTime(r.doc.created_at) ? r.doc.created_at : null;
+      // Ruling 17: content decides, against every run of the scan. A run's file time is not its created_at (Save run
+      // stamps created_at, the file is named a moment later; a clash moves it 1 ms), so time only orders the search.
       const names = await runNames(folder);
-      const same = JSON.stringify(r.doc);
-      const candidates = at ? names.filter((n) => runTime(n) === new Date(at).toISOString()) : names;
+      const same = sorted(r.doc);
+      const near = (n) => (at ? Math.abs(new Date(runTime(n)).getTime() - new Date(at).getTime()) : 0);
       let there = false;
-      for (const n of candidates) if (JSON.stringify((await readRun(folder, n)).doc) === same) { there = true; break; }
+      for (const n of [...names].sort((a, b) => near(a) - near(b))) if (sorted((await readRun(folder, n)).doc) === same) { there = true; break; }
       if (there) { runsAlready.push(folder); continue; }
       await store.putRun(folder, r.doc, r.chunks || [], { at });
       runsAdded.push(folder);
     }
-    return { added, renamedRuns: [], keptRecords, runsAdded, runsAlready };
+    return { added, renamedRuns: [], keptRecords, runsAdded, runsAlready, labelClashes };
   }
+
+  /** JSON with keys in order, so two records compare equal whatever order their fields were written in. */
+  function sorted(v) {
+    if (Array.isArray(v)) return `[${v.map(sorted).join(',')}]`;
+    if (v && typeof v === 'object') return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${sorted(v[k])}`).join(',')}}`;
+    return JSON.stringify(v === undefined ? null : v);
+  }
+
+  /** A name usable as a file name on every drive: the characters Windows, macOS or exFAT refuse become _. */
+  const fileSafe = (text) => String(text || '').trim().replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_');
 
   /** Offer a file to the viewer: the downloads capability when there is one, else a plain download link. */
   async function saveBlob(downloads, filename, blob) {
@@ -338,5 +351,5 @@
     return { store: makeArtifactStore(db), downloads, note: '' };
   }
 
-  return { PROJECT_SCHEMA, PROJECT_VERSION, COLLECTIONS, LIBRARY_DIR, sheetPath, checkProject, makeFileStore, makeArtifactStore, makeLibraryStore, connect, saveBlob };
+  return { PROJECT_SCHEMA, PROJECT_VERSION, COLLECTIONS, LIBRARY_DIR, sheetPath, checkProject, fileSafe, makeFileStore, makeArtifactStore, makeLibraryStore, connect, saveBlob };
 }));

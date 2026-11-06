@@ -362,9 +362,9 @@
   }
 
   /** Every scan folder a project file names (its samples, regions, annotations and runs), once each, in first-seen order. */
+  const sampleKey = (r) => (typeof r.id === 'string' && r.id ? r.id : typeof r.folder === 'string' && r.folder ? r.folder : null); // never "undefined"
   function projectFolders(obj) {
-    const seen = new Set();
-    for (const r of obj.samples || []) seen.add(r.id);
+    const seen = new Set((obj.samples || []).map(sampleKey).filter(Boolean));
     for (const c of ['regions', 'annotations']) for (const r of obj[c] || []) if (r.sample && r.sample.folder) seen.add(r.sample.folder);
     for (const f of Object.keys(obj.runs || {})) seen.add(f);
     return [...seen];
@@ -375,7 +375,7 @@
   function remapProject(obj, mapping) {
     const to = (f) => (Object.prototype.hasOwnProperty.call(mapping, f) ? mapping[f] : null);
     const out = JSON.parse(JSON.stringify(obj));
-    out.samples = (out.samples || []).filter((r) => to(r.id) !== null).map((r) => ({ ...r, id: to(r.id), folder: to(r.id) }));
+    out.samples = (out.samples || []).filter((r) => sampleKey(r) && to(sampleKey(r)) !== null).map((r) => ({ ...r, id: to(sampleKey(r)), folder: to(sampleKey(r)) }));
     for (const c of ['regions', 'annotations']) {
       out[c] = (out[c] || []).filter((r) => r.sample && to(r.sample.folder) !== null).map((r) => ({ ...r, sample: { ...r.sample, folder: to(r.sample.folder) } }));
     }

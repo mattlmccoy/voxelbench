@@ -178,6 +178,8 @@
         const res = await store.importProject(L.remapProject(obj, choice.mapping));
         parts.push(`${res.added} record${res.added === 1 ? '' : 's'} added`, `${res.runsAdded.length} run${res.runsAdded.length === 1 ? '' : 's'} added to the scans' history`);
         if (res.runsAlready.length) parts.push(`${res.runsAlready.length} run${res.runsAlready.length === 1 ? ' was' : 's were'} already there`);
+        // A label id the library already uses for another label: the library's is kept, and the user is told which.
+        for (const c of res.labelClashes) parts.push(`label ${c.id} is "${c.library}" in the library and "${c.project}" in the project; the library's was kept`);
         if (res.keptRecords.length) parts.push(`${res.keptRecords.length} record${res.keptRecords.length === 1 ? '' : 's'} already in the library kept as they were (a sample's empty fields filled from the project)`);
         if (store === lib().store) LV.forgetRuns(Object.values(choice.mapping));
       }
