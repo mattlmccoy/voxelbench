@@ -53,7 +53,7 @@ polished first experience.
 
 ## Calls made in review (2026-11-05), for the owner to check
 - **Scan identity = a hash of the first slice plus the volume's size**; the scanner record is only metadata. A VOX and
-  a full-resolution TIFF export of the same volume are voxel-identical (checked on a lab scan, 548,937,984 voxels), so
+  a full-resolution TIFF export of the same volume are voxel-identical (checked on a real scan), so
   they are one card, read from the VOX; a binned or flipped export differs and stays its own card, so records never
   merge across grids.
 - **Runs keep a history**: Save run appends; the studio reopens the latest; the review-sheet PDF is saved beside its

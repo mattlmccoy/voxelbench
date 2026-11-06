@@ -94,15 +94,30 @@ native slice under the binned results.
 Serve the page over http (the hosted page, or `npx serve dist` after `node tools/build_static.js`); a page opened
 straight from a file cannot start the analysis worker.
 
+## Scan library
+
+The first page is a library of every scan under one folder you choose, such as the lab's shared drive (Chrome or
+Edge only: it reads and writes a folder on your drive, which other browsers do not allow).
+
+- Press **Choose your scan drive…** and pick the folder that holds your CT scan folders. Before anything is written
+  to a folder without a library, VoxelBench asks; then it writes only a `VoxelBench` folder inside the one you chose
+  (the scan index, thumbnails, records, saved runs and review sheets). Scans are never moved, renamed or changed.
+- A scan is a folder holding a .VOX file or a folder of TIFF slices. **Rescan** finds scans added, moved or changed
+  since; a scan no longer found is listed as missing, with its records kept.
+- Keep one shared folder per lab, so everyone's records are in one library. Pick the folder that holds `VoxelBench`,
+  not `VoxelBench` itself; a library found inside another one is reported, not merged.
+- Click a card for the scan's overview (scanner settings, previews, saved runs, sample details), then **Analyze** to
+  open it in the studio. Tick cards, or pick a project, to compare their runs or batch them.
+
 ## Where records are kept
 
-- **As a web page:** regions, annotations, sample details and runs go into a project file. Under **File ▾** in the
-  studio's top bar, press **Save project…** and keep the file next to the scan; press **Open project…** to continue later.
-- **As a claude.ai artifact:** the same records go to the artifact's shared database; **Export project** writes them
-  to a file.
+- **In a scan library:** in its `VoxelBench` folder on the drive; every Save run is kept, newest shown first.
+- **For a scan opened outside a library:** regions, annotations, sample details and runs go into a project file.
+  Under **File ▾** in the studio's top bar, press **Save project…** and keep the file next to the scan; press
+  **Open project…** to continue later. **Import project…** on the library page brings a project file into a library.
 
-A project file opens in either one. Importing never overwrites a saved run; a run with the same name is kept under
-a new name.
+Importing never overwrites a saved run. The claude.ai artifact build is retired; its last version points here and
+keeps **Export project**, so its records can be imported into a library.
 
 ## Limits
 

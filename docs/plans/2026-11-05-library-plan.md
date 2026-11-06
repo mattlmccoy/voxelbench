@@ -55,7 +55,7 @@ Access API, IndexedDB, OPFS for browser verification.
 - [ ] **Step 3: Implement** `scanId` with `crypto.subtle.digest('SHA-256', …)` over the text
   `${width}x${height}x${count}` followed by the bytes of `first` and `middle`.
 - [ ] **Step 4: Run** the tests; expected PASS.
-- [ ] **Step 5: Real data:** with `fs.openAsBlob` and `VBVox.openVox`, the 30 wt% reference VOX and the same data via
+- [ ] **Step 5: Real data:** with `fs.openAsBlob` and `VBVox.openVox`, a reference VOX scan and the same data via
   its TIFF stack give the same id (print both).
 - [ ] **Step 6: Commit** `feat(library): scan identity from size and two slices`.
 
