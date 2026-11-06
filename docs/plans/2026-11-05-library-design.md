@@ -114,3 +114,21 @@ holder", and the README's "printed holder". Generic physics wording stays.
 - How XZ and YZ previews are read for TIFF-only scans (they need every slice) versus VOX (byte ranges).
 - Write safety on exFAT (write to a temporary file, then replace).
 - How the checklist reads each step's done state.
+
+## The first screen (decided by the owner, 2026-11-05, after seeing the built page)
+The built "Scan library" intro and its "Without a library" box read as unwelcoming, and "Open a folder…" could not
+pick a .VOX file (the folder picker grays files out). The owner chose direction A, "Front door", from three mockups.
+- **Welcome (no library open):** a title, one line on what VoxelBench does, "scans stay on your drive; nothing is
+  uploaded", and one primary button **Choose your scan drive…** with a hint under it (the drive or folder that holds
+  your CT scan folders).
+- **Remembered drive:** once a library was opened in this browser, it shows as a card: its folder name, scan count,
+  analyzed count and the date last opened, with **Open ›**. One click reopens it (Chrome's "Allow access" once per
+  session). When the folder is gone or access is refused, the card says so; it never shows the remembered counts as if
+  current — the card labels them "at last visit". The summary is a per-browser convenience (it may be absent).
+- **One quiet line below:** **Open a .VOX file…** (a file picker for `.vox`; the user may also select the scan's
+  `DataInfo.xml`, otherwise kV, µA and scan time read "not recorded") · **Open a folder of slices…** (today's folder
+  path: a TIFF stack, a scan folder, or a folder of scan folders, whose scan list still shows) · **Try a demo scan**
+  (the five generated scans as a small menu) · **Guided tour**. "We may not always have a VOX file", so both openers
+  stay.
+- **Removed:** the long intro paragraph and the "Without a library" box.
+- **After choosing the drive:** the library cards as built, with a one-time hint "Click a scan to see its details."

@@ -160,6 +160,18 @@ for XZ/YZ previews from a VOX.
 - [ ] **Step 6: Browser check** on the OPFS library: overview of a VOX scan without a run and of one after Save run.
 - [ ] **Step 7: Commit** `feat(library): scan overview`.
 
+### Task 5A: Welcome screen (owner-approved 2026-11-05)
+
+**Files:** Modify `app/index.html`, `app/vb_libraryview.js`, `app/ct_core.js` (or wherever `groupStacks` lives), `app/vb_library.js`; Test `tests/library.test.js` (and the groupStacks test file)
+
+**Interfaces:** Produces `driveCard(summary, access) -> { title, facts, state }` in `vb_library.js` (summary: `{ name, scans, analyzed, opened_at } | null`; access: `'granted' | 'prompt' | 'denied' | 'gone'`; state `'open' | 'allow' | 'unavailable'`; counts labeled as at the last visit) and lets `groupStacks` accept files picked without a folder (no `webkitRelativePath`): one `.vox` file, with or without a `DataInfo.xml`, is one VOX scan.
+
+- [ ] **Step 1: Write the failing tests:** `driveCard` for no summary, granted, prompt, gone/denied (never shows counts as current); `groupStacks` on `[x.VOX]` and on `[x.VOX, DataInfo.xml]` picked as loose files → one vox scan, dataInfo present only in the second.
+- [ ] **Step 2: Run**; FAIL. **Step 3: Implement**. **Step 4: Run**; PASS.
+- [ ] **Step 5: Wire** the welcome per the design's "The first screen": title, one line, **Choose your scan drive…**, the remembered-drive card (summary saved per browser on each library open/Rescan), and one quiet line — **Open a .VOX file…** (accept `.vox,.VOX,.xml`, multiple), **Open a folder of slices…** (the existing folder input; the folder's scan list still shows), **Try a demo scan** (menu of the five demos), **Guided tour**. Remove the intro paragraph and the "Without a library" box; keep `vb_tour.js` working. One-time hint on the library: "Click a scan to see its details."
+- [ ] **Step 6: Browser check** (controller): first visit, remembered drive, a .VOX opened alone and with DataInfo.xml, a TIFF folder, a demo, the tour, phone width, three looks.
+- [ ] **Step 7: Commit** `feat(library): welcome screen`.
+
 ### Task 6: Studio checklist rail
 
 **Files:** Create `app/vb_checklist.js`; Modify `app/vb_skin.js` (`wireStepBar`), `app/index.html`;
