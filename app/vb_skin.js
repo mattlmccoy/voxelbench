@@ -4,7 +4,7 @@
    - glass: frosted panels floating on a blurred copy of the scan.
    Chosen by ?skin= in the address, else the viewer's last choice, else lab. The choice is a per-viewer convenience in
    localStorage; when storage is blocked the page still works, it just forgets. Every look shows the rail one section at a
-   time through the step bar. */
+   time, picked from the checklist (vb_checklist.js). */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.VBSkin = factory();
@@ -19,31 +19,6 @@
   function pickSkin({ url, stored }) {
     const m = /[?&]skin=([^&#]*)/.exec(url || '');
     return valid(m && decodeURIComponent(m[1])) || valid(stored) || 'lab';
-  }
-
-  // Step-bar icons by rail section id (16 x 16 strokes).
-  const ICONS = {
-    crop: '<path d="M4 1.5V12h10.5M1.5 4H12v10.5"/>',
-    pores: '<circle cx="8" cy="8" r="6.2"/><circle cx="6" cy="6.5" r="1.4"/><circle cx="10" cy="9.5" r="1.8"/><circle cx="6.5" cy="10.8" r=".8"/>',
-    zones: '<circle cx="8" cy="8" r="6.2"/><path d="M8 1.8a6.2 6.2 0 0 1 0 12.4z" fill="currentColor" fill-opacity=".35"/>',
-    notes: '<path d="M3 1.5h7l3 3v10H3z"/><path d="M5.5 7h5M5.5 9.5h5M5.5 12h3"/>',
-    density: '<path d="M6 1.5h4M6.8 1.5v4.2L2.8 13a1 1 0 0 0 .9 1.5h8.6a1 1 0 0 0 .9-1.5L9.2 5.7V1.5"/><path d="M4.6 10.5h6.8"/>',
-    cad: '<path d="M8 1.5 14 5v6l-6 3.5L2 11V5z"/><path d="M2 5l6 3.5L14 5M8 8.5v6"/>',
-    filler: '<circle cx="5" cy="5" r="1.6"/><circle cx="11" cy="6" r="1.2"/><circle cx="7" cy="11" r="1.4"/><path d="M10 10.5l3.5 2.5"/>',
-    wall: '<path d="M2 3h12M2 13h12"/><path d="M8 4.5v7M6.5 6 8 4.5 9.5 6M6.5 10 8 11.5 9.5 10"/>',
-    info: '<circle cx="8" cy="8" r="6.2"/><path d="M8 7.2v4M8 4.8v.1"/>',
-    dot: '<circle cx="8" cy="8" r="2.5"/>',
-  };
-  const SECTION_ICON = { step1: 'crop', step2: 'pores', step3: 'zones', step4: 'notes', step5: 'density', step6: 'cad', step7: 'filler', step8: 'wall', secScan: 'info' };
-
-  const SHORT = { step1: 'Crop', step2: 'Pores', step3: 'Zones', step4: 'Export', step5: 'Density', step6: 'CAD', step7: 'Filler', step8: 'Walls', secScan: 'Scan' };
-
-  /** Step-bar items from the rail sections [{ id, title (summary text), open }]. */
-  function navItems(sections) {
-    return sections.map((s) => {
-      const title = s.title.replace(/^\s*\d+\s*/, '').trim();
-      return { id: s.id, icon: SECTION_ICON[s.id] || 'dot', title, short: SHORT[s.id] || title, active: Boolean(s.open) };
-    });
   }
 
   /** Whether a step has a result, from its status tag ('optional', 'not run', 'running' and empty mean no);
@@ -100,7 +75,6 @@
   /** Sets the look before the page body renders, so the page never flashes another look. */
   function boot({ doc, storage, url }) { return apply(doc, pickSkin({ url, stored: read(storage) })); }
 
-  const svg = (name) => `<svg class="skinicon" viewBox="0 0 16 16" aria-hidden="true">${ICONS[name] || ICONS.dot}</svg>`;
   const current = (doc) => doc.documentElement.getAttribute('data-skin') || 'lab';
 
   /** The Appearance menu: one choice per look. Emits 'vbskin' on the document when the look changes. */
@@ -133,17 +107,13 @@
     show();
   }
 
-  /** The step bar, in every look: one button per rail section (icon, short name, a dot once the step has a result);
-      picking one shows only that section. Each finished step ends with a Next line that opens the usual next step. */
-  function wireStepBar({ doc, rail }) {
+  /** The rail's sections, one open at a time in every look; show(id) opens one (the checklist calls it). Each finished
+      step ends with a Next line that opens the usual next step. Returns { show }. */
+  function wireSections({ doc, rail }) {
     const sections = [...rail.querySelectorAll('.steps > details')];
-    const nav = doc.createElement('nav');
-    nav.className = 'stepbar'; nav.setAttribute('aria-label', 'Steps');
-    // The summary text without its status tag; navItems drops the leading step number.
-    const titleOf = (d) => [...d.querySelector('summary').childNodes].filter((n) => !(n.classList && n.classList.contains('tag'))).map((n) => n.textContent).join('');
-    const items = navItems(sections.map((d) => ({ id: d.id, title: titleOf(d), open: d.open })));
-    const byId = Object.fromEntries(items.map((i) => [i.id, i]));
-    nav.innerHTML = items.map((i) => `<button type="button" data-section="${i.id}" title="${i.title}" aria-label="${i.title}">${svg(i.icon)}<span class="stepname">${i.short}</span></button>`).join('');
+    // The summary text without its status tag or step number.
+    const titleOf = (d) => [...d.querySelector('summary').childNodes].filter((n) => !(n.classList && (n.classList.contains('tag') || n.classList.contains('num')))).map((n) => n.textContent).join('').trim();
+    const titles = Object.fromEntries(sections.map((d) => [d.id, titleOf(d)]));
     const tagOf = (d) => { const t = d.querySelector('summary .tag'); return t ? t.textContent : ''; };
     const nexts = new Map();
     for (const d of sections) {
@@ -163,29 +133,21 @@
     let shown = '';
     function refresh() {
       const done = Object.fromEntries(sections.map((d) => [d.id, stepDone(d.id, tagOf(d))]));
-      for (const b of nav.children) {
-        const id = b.dataset.section;
-        b.setAttribute('aria-current', String(doc.getElementById(id).open));
-        if (done[id] === null) b.removeAttribute('data-done'); else b.dataset.done = String(done[id]);
-        b.setAttribute('aria-label', `${byId[id].title}${done[id] ? ', done' : ''}`);
-      }
       const key = JSON.stringify(done);
       if (key === shown) return; // the Next lines change only with the done set
       shown = key;
       for (const [id, row] of nexts) {
         const list = nextFor(id, done);
         row.hidden = !list.length;
-        row.innerHTML = list.length ? `<span class="nextlabel">Next:</span>${list.map((n) => `<button type="button" data-next="${n.id}">${byId[n.id] ? byId[n.id].title : n.id}</button>${n.note ? `<span class="nextnote">${n.note}</span>` : ''}`).join('')}` : '';
+        row.innerHTML = list.length ? `<span class="nextlabel">Next:</span>${list.map((n) => `<button type="button" data-next="${n.id}">${titles[n.id] || n.id}</button>${n.note ? `<span class="nextnote">${n.note}</span>` : ''}`).join('')}` : '';
       }
     }
-    nav.addEventListener('click', (e) => { const b = e.target.closest('[data-section]'); if (b) show(b.dataset.section); });
     rail.addEventListener('click', (e) => { const b = e.target.closest('[data-next]'); if (b) show(b.dataset.next); });
-    for (const d of sections) d.addEventListener('toggle', refresh);
-    // Status tags are set by each step's own code; watching them keeps the dots and Next lines current.
+    // Status tags are set by each step's own code; watching them keeps the Next lines current.
     const watch = new MutationObserver(refresh);
     for (const d of sections) { const t = d.querySelector('summary .tag'); if (t) watch.observe(t, { childList: true, characterData: true, subtree: true }); }
-    rail.prepend(nav);
     refresh();
+    return { show };
   }
 
   const WIDTH_KEY = 'voxelbench.railWidth';
@@ -252,5 +214,5 @@
     if (b.dataset.skin) return { skin: b.dataset.skin };
     return null;
   }
-  return { SKINS, SKIN_LABELS, MODES, pickMode, resolveMode, bootMode, wireTopbarHeight, pickSkin, navItems, stepDone, nextFor, clampRailWidth, openOnly, boot, wireSettings, wireStepBar, wireRailResize, wireBackdrop, menuPick };
+  return { SKINS, SKIN_LABELS, MODES, pickMode, resolveMode, bootMode, wireTopbarHeight, pickSkin, stepDone, nextFor, clampRailWidth, openOnly, boot, wireSettings, wireSections, wireRailResize, wireBackdrop, menuPick };
 }));

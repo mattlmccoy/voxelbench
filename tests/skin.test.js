@@ -33,22 +33,8 @@ test('boot applies the chosen look to the page even when storage throws', () => 
   assert.equal(K.boot({ doc, storage, url: '' }), 'lab');
 });
 
-test('the step bar lists each rail section with its icon and a title without the step number', () => {
-  const items = K.navItems([
-    { id: 'step1', title: '1Crop', open: false }, { id: 'step2', title: '2Pore segmentation', open: true }, { id: 'secScan', title: 'Scan information', open: false },
-    { id: 'stepX', title: '9Something new', open: false },
-  ]);
-  assert.deepEqual(items.map((i) => [i.id, i.icon, i.title, i.active]), [
-    ['step1', 'crop', 'Crop', false], ['step2', 'pores', 'Pore segmentation', true], ['secScan', 'info', 'Scan information', false], ['stepX', 'dot', 'Something new', false]]);
-});
-
 test('picking a section leaves only that one open', () => {
   assert.deepEqual(K.openOnly(['step1', 'step2', 'secScan'], 'secScan'), { step1: false, step2: false, secScan: true });
-});
-
-test('each step has a short name for under its icon; an unknown section falls back to its title', () => {
-  const items = K.navItems([{ id: 'step2', title: '2Pore segmentation', open: false }, { id: 'step5', title: '5Density calibration', open: false }, { id: 'stepX', title: '9Something new', open: false }]);
-  assert.deepEqual(items.map((i) => i.short), ['Pores', 'Density', 'Something new']);
 });
 
 test('a step counts as done from its status tag; scan information gets no dot', () => {

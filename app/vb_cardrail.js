@@ -73,7 +73,7 @@
   on('start', () => {
     $('rcClose').addEventListener('click', () => { shown = null; render(); });
     $('rcJump').addEventListener('click', () => { const w = $('resultCard').dataset.where; if (w) emit('jump', JSON.parse(w)); });
-    $('rcStep').addEventListener('click', () => { const b = document.querySelector(`.stepbar [data-section="${$('rcStep').dataset.step}"]`); if (b) b.click(); });
+    $('rcStep').addEventListener('click', () => { const s = $('rcStep').dataset.step; if (App.openStep) App.openStep(s, s === 'step3' ? 'regionWrap' : 'log'); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && shown && !state.draft) { shown = null; render(); } });
   });
   on('markSaved', (which) => show({ ...which, fresh: true }));

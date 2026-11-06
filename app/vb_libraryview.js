@@ -477,12 +477,12 @@
     $('libPick').addEventListener('click', pick);
     $('libPickHero').addEventListener('click', pick);
     $('driveCard').addEventListener('click', () => { if (lib.access === 'granted') openLibraryDir(lib.saved); else allowSaved(); });
-    $('libVox').addEventListener('change', (e) => { state.demoPhantoms = null; App.openFiles(e.target.files); e.target.value = ''; });
+    // The openers outside the library: here and in the studio's top bar (a .VOX file; a folder of slices).
+    const openPicked = (e) => { state.demoPhantoms = null; App.openFiles(e.target.files); e.target.value = ''; };
+    for (const id of ['libVox', 'libFolder', 'studioVox']) $(id).addEventListener('change', openPicked);
     $('libRescan').addEventListener('click', rescan);
     VBSkin.wireSettings({ doc: document, storage: (() => { try { return window.localStorage; } catch (e) { return null; } })(), button: $('libSkinButton'), menu: $('libSkinMenu') }); // the same Appearance menu as the studio's
     $('libStudio').addEventListener('click', () => App.showPage('studio'));
-    $('toLibrary').addEventListener('click', () => App.showPage('library'));
-    $('libFolder').addEventListener('change', (e) => { state.demoPhantoms = null; App.openFiles(e.target.files); e.target.value = ''; });
     $('libSearch').addEventListener('input', (e) => { view.query = e.target.value; render(); });
     on('pageChanged', (page) => {
       if (page !== 'library') return;

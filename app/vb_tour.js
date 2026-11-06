@@ -162,8 +162,8 @@
       actions: [{ label: 'Segment zones', run: async () => { await pores(); $('draftZones').click(); await until(() => state.zones, RUN_TIMEOUT_MS, 'Zone segmentation'); App.setMain('XZ'); }, done: () => Boolean(zonesDone()) }],
       result: zoneLine },
     { title: 'Step 4 · Annotations and export', target: () => $('step4'), open: 'step4', needs: 'dense',
-      body: ['Save run keeps the segmentation, rejections and zones with the sample. The tables export as CSV; the review sheet is a three-page PDF with sections, the pore size distribution, threshold sensitivity and methods.',
-        'Point, Measure and Outline in the toolbar add annotations; a Measure line with a nominal and tolerance is checked as a dimension. Bookmarks keep a view, and Compare with puts two scans\' saved runs side by side.'],
+      body: ['Save run keeps the segmentation, rejections and zones with the sample. The tables export as CSV; the review sheet is a three-page PDF with sections, the pore size distribution, threshold sensitivity and methods. Save run, Review sheet and Exports are also in the top bar.',
+        'Point, Measure and Outline in the toolbar add annotations; a Measure line with a nominal and tolerance is checked as a dimension. Bookmarks in the top bar keep a view, and Compare with puts two scans\' saved runs side by side.'],
       actions: [
         { label: 'Save run', run: () => $('savePoreRun').click() },
         { label: 'Make the review sheet (PDF)', run: () => App.exportSheet() }],
@@ -200,7 +200,7 @@
         { label: 'Measure walls', run: async () => { $('runWall').click(); await until(wallDone, RUN_TIMEOUT_MS, 'Wall measurement'); }, done: () => on('cad') && Boolean(wallDone()) }],
       result: () => (on('cad') ? wallLine() : '') },
     { title: 'Your own scan', target: () => $('folder').parentElement,
-      body: ['The Library button opens the scan library: in Chrome or Edge, choose the folder that holds your scans and every scan under it is listed as a card. Open a .VOX file… reads a Rigaku scan, and Open a folder of slices… reads a folder of 16-bit TIFF slices, without a library; a folder of scan folders lists each one. Large scans load block-mean binned, and the page says so first.',
+      body: ['‹ Library in the top bar opens the scan library (for a scan from the library, ‹ Overview opens its overview first): in Chrome or Edge, choose the folder that holds your scans and every scan under it is listed as a card. Open a .VOX file… reads a Rigaku scan, and Open a folder of slices… reads a folder of 16-bit TIFF slices, without a library; a folder of scan folders lists each one. Large scans load block-mean binned, and the page says so first.',
         'Save project writes the regions, annotations and runs to a file kept next to the scan. The tour is under Guided tour in the top bar.'] },
   ];
 

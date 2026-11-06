@@ -69,6 +69,7 @@
   async function exportSheet() {
     const say = (t) => { $('exportStatus').textContent = t; };
     if (!state.pores || !state.patches) { say('Run pore segmentation first.'); return; }
+    const folder = state.folder; // the sheet takes minutes; another scan may be open by the time it is saved
     if (!window.jspdf) { say('The PDF library did not load.'); return; }
     say('Review sheet: computing sheet data and threshold sweep (several minutes).');
     // The sweep is the slow part; reuse it while the segmentation, rejections and zone threshold are unchanged.
@@ -113,6 +114,7 @@
     try {
       const how = await window.VBStore.saveBlob(state.downloads, name, blob);
       say(how === 'declined' ? 'Save canceled.' : how === 'link' ? `Downloaded ${name} to the browser's download folder.` : `Saved ${name}.`);
+      if (how !== 'declined' && state.folder === folder) { state.sheetSaved = true; App.emit('sheetSaved'); } // the checklist's Review sheet step
     } catch (e) {
       say(`Could not save: ${e.message}`);
     }

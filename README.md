@@ -32,9 +32,12 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
 - Three looks under Appearance in the top bar: Lab (the original instrument look, default), Mac (a Mac-style
   inspector) and Glass (frosted panels floating on a blurred copy of the scan), each light or dark (Mode: System
   follows the computer). `?skin=mac` or
-  `?skin=glass` in the address also picks one; the choice is remembered in this browser. In every look a step bar
-  shows one step at a time, with a green dot on each step that has a result and a Next line at the end of a finished
-  step; drag the panel's left edge to widen it for wide tables (double-click to reset).
+  `?skin=glass` in the address also picks one; the choice is remembered in this browser. In every look the rail
+  opens with a checklist for the open scan (scan info, level the part, crop, segment pores, measure regions, density
+  reference, review sheet), a ✓ on each step with a result and the next one highlighted, and the other analyses under
+  More analyses; it shows one step at a time, with a Next line at the end of a finished step. Save run, Review sheet,
+  the other exports and the bookmarks sit in the top bar. Drag the panel's left edge to widen it for wide tables
+  (double-click to reset).
 - "What this shows" in every step: the step's result read in words (one dominant void or spread porosity, voids
   gathering near the surface, a zone's porosity against the baseline, over- or undersize against CAD, clustered
   filler, aligned fibers, walls at the resolution limit) with what to check next.
@@ -77,7 +80,7 @@ status and the VoxelBench version.
    **With phantom rods** to try the density calibration on two rods of known density, **With filler** to try the
    filler analysis on 50 bright spheres and 20 aligned fibers, or **With a CAD model** to try
    the CAD comparison on a generated L-shaped part (shrunk 3 %, its upright bent 0.12 mm) and its nominal STL.
-3. For a real scan, press **Open scan folder** and pick a folder of single-page, uncompressed 16-bit TIFF slices with
+3. For a real scan, press **Open a .VOX file…** for a Rigaku scan, or **Open a folder of slices…** and pick a folder of single-page, uncompressed 16-bit TIFF slices with
    the voxel size in the resolution tags.
 4. Crop out holders or packaging (step 1), segment pores (step 2), map zones (step 3), export (step 4), and
    calibrate density from phantoms (step 5, optional), compare to CAD (step 6, optional), and analyze filler and

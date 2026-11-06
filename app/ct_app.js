@@ -296,7 +296,7 @@ window.CTApp = (function () {
     const label = stack.title || stack.folder; // a library scan's folder is its id; it is shown by its title
     if (worker) { worker.terminate(); worker = null; }
     for (const c of calls.values()) c.reject(new Error('Another scan was opened.')); calls.clear();
-    Object.assign(state, { slices: null, folder: null, stack, reader: null, scanInfo: null, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null });
+    Object.assign(state, { slices: null, folder: null, stack, reader: null, scanInfo: null, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, sheetSaved: false });
     showPage('library'); // the loading progress shows there
     showError('');
     emit('samplesChanged');
