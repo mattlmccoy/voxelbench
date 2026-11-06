@@ -30,7 +30,7 @@
     const list = $('ovRuns');
     list.replaceChildren(...f.runs.map(({ label }, i) => el('li', '', i === 0 ? `${label} (latest, shown above)` : label)));
     $('ovRunsHead').hidden = !f.runs.length;
-    const title = L.cardFacts({ entry: r.entry, record: record(), run: cur.run }).title;
+    const title = L.cardFacts({ entry: r.entry, record: record() }).title;
     $('ovTitle').textContent = title;
     $('ovPath').textContent = r.entry.path;
     $('ovAnalyze').disabled = Boolean(r.entry.missing);
@@ -41,7 +41,7 @@
   function renderDetails() {
     const rec = record(), r = row();
     if (!r) return;
-    const facts = L.cardFacts({ entry: r.entry, record: rec, run: null });
+    const facts = L.cardFacts({ entry: r.entry, record: rec });
     const fill = { ovName: rec && rec.name && rec.name !== rec.id ? rec.name : '', ovMaterial: (rec && rec.material) || '', ovProcess: (rec && rec.process) || '',
       ovNotes: (rec && rec.notes) || '', ovProject: (rec && rec.project) || '', ovTags: facts.tags.join(', ') };
     for (const [id, value] of Object.entries(fill)) if (document.activeElement !== $(id)) $(id).value = value;

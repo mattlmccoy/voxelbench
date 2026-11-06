@@ -120,6 +120,17 @@
   const sheetTime = (name) => name.slice(0, -SHEET_SUFFIX.length).replace(/T(\d\d)-(\d\d)-(\d\d)/, 'T$1:$2:$3');
   const validTime = (iso) => typeof iso === 'string' && !Number.isNaN(new Date(iso).getTime());
 
+  const finite = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  /** What a library card needs from a saved run (Ruling 19), so opening a library reads this and not every full run:
+      at (the run's filed time), porosity, pore_count, crack_like_count (only when the run has it) and kv. */
+  function runSummary(doc, at) {
+    const s = (doc && doc.summary) || {}, scan = (doc && doc.scan) || {};
+    const out = { at, porosity: finite(s.all_void_percent_of_body), pore_count: finite(s.pore_count) };
+    if (finite(s.crack_like_count) !== null) out.crack_like_count = s.crack_like_count;
+    out.kv = finite(scan.kv);
+    return out;
+  }
+
   // undefined means the file is absent; a file holding JSON null is present and is returned as null.
   async function readJson(root, path) {
     const text = await FS.readText(root, path);
@@ -196,6 +207,13 @@
       if (!r || typeof r !== 'object' || !r.doc) throw new Error(`${path} is not a saved run; it was left untouched`);
       return r;
     };
+    // summaries/<scan>.json: the latest run's runSummary. A cache: one missing, unreadable or older than the latest run
+    // is made again from the run, never trusted.
+    const summaryPath = (folder) => base(`summaries/${enc(folder)}.json`);
+    const readSummary = async (folder) => {
+      try { const o = await readJson(dir, summaryPath(folder)); return o && typeof o === 'object' && typeof o.at === 'string' ? o : undefined; } catch (e) { return undefined; }
+    };
+    const writeSummary = (folder, summary) => FS.writeText(dir, summaryPath(folder), JSON.stringify(summary, null, 2)).catch(() => {}); // a failed write leaves an older summary, which latestSummary does not trust
     const runNames = async (folder) => {
       const entries = await FS.list(dir, runDir(folder));
       if (!entries.length) await ensureLibrary();
@@ -224,9 +242,24 @@
         const have = new Set(await runNames(folder));
         const t = validTime(opts.at) ? new Date(opts.at) : new Date();
         while (have.has(runFileName(t))) t.setTime(t.getTime() + 1); // two runs in one millisecond still get two files
-        await FS.writeText(dir, `${runDir(folder)}/${runFileName(t)}`, JSON.stringify({ doc, chunks }));
+        const name = runFileName(t);
+        await FS.writeText(dir, `${runDir(folder)}/${name}`, JSON.stringify({ doc, chunks }));
         runFolders.add(folder);
+        if ([...have].every((n) => n < name)) await writeSummary(folder, runSummary(doc, runTime(name))); // only the latest run's
       }),
+      /** The latest run's summary, or null when the scan has no saved run. Read from summaries/ when it is current; else
+          (a run saved before summaries, or a stale one) from the run itself, and written for the next time. A run that
+          cannot be read throws: unknown is never "not analyzed". */
+      async latestSummary(folder) {
+        const names = await runNames(folder);
+        if (!names.length) return null;
+        const latest = names[names.length - 1], at = runTime(latest);
+        const have = await readSummary(folder);
+        if (have && have.at === at) return have;
+        const fresh = runSummary((await readRun(folder, latest)).doc, at);
+        await serial(async () => { const now = await runNames(folder); if (now[now.length - 1] === latest) await writeSummary(folder, fresh); }); // not over a newer run's
+        return fresh;
+      },
       async listRuns(folder) { return (await runNames(folder)).map((n) => ({ at: runTime(n) })); },
       /** The review sheets saved beside a scan's runs, oldest first: [{ at, name }]. */
       async listSheets(folder) {
@@ -351,5 +384,5 @@
     return { store: makeArtifactStore(db), downloads, note: '' };
   }
 
-  return { PROJECT_SCHEMA, PROJECT_VERSION, COLLECTIONS, LIBRARY_DIR, sheetPath, checkProject, fileSafe, makeFileStore, makeArtifactStore, makeLibraryStore, connect, saveBlob };
+  return { PROJECT_SCHEMA, PROJECT_VERSION, COLLECTIONS, LIBRARY_DIR, sheetPath, runSummary, checkProject, fileSafe, makeFileStore, makeArtifactStore, makeLibraryStore, connect, saveBlob };
 }));

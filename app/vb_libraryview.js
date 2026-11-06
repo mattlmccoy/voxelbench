@@ -13,7 +13,7 @@
   const supported = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
   const lib = App.library = {
-    dir: null, index: null, entries: [], store: null, stacks: new Map(), samples: new Map(), runs: new Map(), runErrors: new Map(),
+    dir: null, index: null, entries: [], store: null, stacks: new Map(), samples: new Map(), summaries: new Map(), runErrors: new Map(),
     thumbs: new Map(), refused: null, lastRescan: null, gen: 0, saved: null, access: 'prompt',
   };
   const view = { query: '', filter: 'all', tag: null, project: null };
@@ -28,8 +28,8 @@
   /** Saves the card's summary for the open library; analyzed is unknown (null) until every saved run has been read. */
   function saveSummary() {
     if (!lib.dir || !lib.index || lib.refused) return;
-    const rows = Object.entries(lib.index.scans).map(([id, entry]) => ({ id, entry, record: null, run: lib.runs.get(id) || null }));
-    keepLocal(SUMMARY_KEY, JSON.stringify(L.driveSummary(lib.dir.name || 'browser storage', rows, (id) => lib.runs.has(id) || Boolean(lib.index.scans[id].missing), new Date().toISOString())));
+    const rows = Object.entries(lib.index.scans).map(([id, entry]) => ({ id, entry, record: null, summary: lib.summaries.get(id) }));
+    keepLocal(SUMMARY_KEY, JSON.stringify(L.driveSummary(lib.dir.name || 'browser storage', rows, (id) => lib.summaries.has(id) || Boolean(lib.index.scans[id].missing), new Date().toISOString())));
   }
   const thumbQueue = new Map(); // id -> a thumbnail image made while reading the scan, written once the cards show
   let unwatchSamples = null;
@@ -143,7 +143,7 @@
     if (unwatchSamples) unwatchSamples();
     unwatchSamples = null;
     for (const url of lib.thumbs.values()) URL.revokeObjectURL(url);
-    Object.assign(lib, { dir: null, index: null, entries: [], store: null, stacks: new Map(), samples: new Map(), runs: new Map(), runErrors: new Map(), thumbs: new Map(), refused: null, lastRescan: null });
+    Object.assign(lib, { dir: null, index: null, entries: [], store: null, stacks: new Map(), samples: new Map(), summaries: new Map(), runErrors: new Map(), thumbs: new Map(), refused: null, lastRescan: null });
     thumbQueue.clear();
   }
 
@@ -242,7 +242,7 @@
       const failed = r.failed.length ? ` Could not read ${r.failed.length}: ${r.failed.map((f) => `${f.path} (${f.message})`).join('; ')}.` : '';
       const copies = r.places - r.found;
       say(`Rescan: ${r.found} scans found${copies ? ` (${copies} more folder${copies > 1 ? 's are copies' : ' is a copy'})` : ''}; ${r.read} folder${r.read === 1 ? '' : 's'} read (new or changed), ${r.places - r.read} unchanged${missing ? `; ${missing} missing` : ''}.${failed}`, Boolean(r.failed.length));
-      for (const id of r.stacks.keys()) { lib.runs.delete(id); lib.runErrors.delete(id); }
+      for (const id of r.changed) { lib.summaries.delete(id); lib.runErrors.delete(id); } // an unchanged scan keeps what was read
     } catch (e) {
       if (gen === lib.gen) say(`Rescan stopped: ${e.message}`, true);
     }
@@ -269,10 +269,10 @@
     const all = Object.keys(lib.index.scans), ids = all.filter((id) => !lib.index.scans[id].missing);
     for (const id of ids) {
       if (gen !== lib.gen) return;
-      if (lib.runs.has(id)) continue;
+      if (lib.summaries.has(id)) continue;
       try {
-        const listed = await lib.store.listRuns(id);
-        lib.runs.set(id, listed.length ? await lib.store.getRun(id) : null);
+        lib.summaries.set(id, await lib.store.latestSummary(id)); // the small summary (Ruling 19), not the full run
+        lib.runErrors.delete(id);
       } catch (e) { lib.runErrors.set(id, e.message); }
       render();
     }
@@ -335,7 +335,7 @@
 
   /** Reads these scans' saved runs again (after a batch saved new ones). */
   function forgetRuns(ids) {
-    for (const id of ids) { lib.runs.delete(id); lib.runErrors.delete(id); }
+    for (const id of ids) { lib.summaries.delete(id); lib.runErrors.delete(id); }
     background(lib.gen);
   }
 
@@ -356,7 +356,7 @@
   function resultLine(r, f) {
     if (f.missing) return `Missing: not found at the last Rescan (last seen ${String(r.entry.last_seen).slice(0, 10)})`;
     if (lib.runErrors.has(r.id)) return `Saved run unreadable: ${lib.runErrors.get(r.id)}`;
-    if (!lib.runs.has(r.id)) return 'Checking for saved runs…';
+    if (!lib.summaries.has(r.id)) return 'Checking for saved runs…';
     if (!f.analyzed) return 'Not analyzed';
     return f.porosity === null ? 'Analyzed; porosity not in the saved run' : `Porosity ${f.porosity.toFixed(2)} %`;
   }
@@ -446,7 +446,15 @@
     card.dataset.state = c.state;
   }
 
+  // Redraws are coalesced to one per frame: the background pass reports each scan, and a library holds hundreds.
+  let frame = 0;
   function render() {
+    if (frame) return;
+    const next = window.requestAnimationFrame ? (fn) => window.requestAnimationFrame(fn) : (fn) => setTimeout(fn, 16);
+    frame = next(() => { frame = 0; renderNow(); });
+  }
+
+  function renderNow() {
     const open = Boolean(lib.dir && lib.index && !lib.refused);
     $('libRoot').textContent = open ? `Library: ${rootName()}` : supported ? 'No library open' : 'Library unavailable in this browser';
     $('libPick').hidden = !(supported && open);
@@ -461,7 +469,8 @@
     $('libIntro').hidden = open;
     notice((typeof lib.refused === 'string' && lib.refused) || (supported ? '' : 'The library needs Chrome or Edge: it reads and writes a folder on your drive, which this browser does not allow. Open a .VOX file… and Open a folder of slices… still open one scan here, with a project file.'));
 
-    const rows = open ? Object.entries(lib.index.scans).map(([id, entry]) => ({ id, entry, record: lib.samples.get(id) || null, run: lib.runs.get(id) || null })) : [];
+    // summary: undefined until this scan's saved runs have been read (or when they could not be), null for none.
+    const rows = open ? Object.entries(lib.index.scans).map(([id, entry]) => ({ id, entry, record: lib.samples.get(id) || null, summary: lib.summaries.get(id) })) : [];
     const key = (r) => (r.entry.info && r.entry.info.scannedAt) || r.entry.first_seen || '';
     rows.sort((a, b) => (key(a) < key(b) ? 1 : key(a) > key(b) ? -1 : 0)); // newest first
     lib.entries = rows;
@@ -492,7 +501,7 @@
     on('pageChanged', (page) => {
       if (page !== 'library') return;
       // A run saved in the studio since: read this scan's runs again.
-      if (state.stack && state.stack.store && state.stack.store === lib.store && state.folder) { lib.runs.delete(state.folder); lib.runErrors.delete(state.folder); background(lib.gen); }
+      if (state.stack && state.stack.store && state.stack.store === lib.store && state.folder) { lib.summaries.delete(state.folder); lib.runErrors.delete(state.folder); background(lib.gen); }
       render();
     });
     on('samplesChanged', () => {

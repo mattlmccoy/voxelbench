@@ -78,37 +78,39 @@ test('index: an unchanged scan needs no read', () => {
 // ---------- Task 4: the library page's pure logic ----------
 const CTCore = require('../app/ct_core.js');
 
-const row = (id, { entry = {}, record = null, run = null } = {}) => ({
+// summary: the scan's saved-run summary (VBStore.runSummary; Ruling 19), null when it has no saved run.
+const row = (id, { entry = {}, record = null, summary = null } = {}) => ({
   id,
   entry: { path: `scans/${id}`, kind: 'vox', bytes: 1, mtime: 1, study: null, first_seen: '2026-01-01', last_seen: '2026-01-01', missing: false, ...entry },
-  record, run,
+  record, summary,
 });
+const RUN_SUMMARY = (porosity) => ({ at: '2026-11-05T14:03:22.123Z', porosity, pore_count: 12, crack_like_count: 3, kv: 80 });
 
 test('cardFacts: the title is the sample name, else the study, else the folder name', () => {
   const entry = { path: 'drive/run 4/part_a', study: 'study-7', info: null };
-  assert.equal(L.cardFacts({ entry, record: { id: 'sa', name: 'Bracket' }, run: null }).title, 'Bracket');
-  assert.equal(L.cardFacts({ entry, record: null, run: null }).title, 'study-7');
-  assert.equal(L.cardFacts({ entry: { ...entry, study: null }, record: null, run: null }).title, 'part_a');
+  assert.equal(L.cardFacts({ entry, record: { id: 'sa', name: 'Bracket' }, summary: null }).title, 'Bracket');
+  assert.equal(L.cardFacts({ entry, record: null, summary: null }).title, 'study-7');
+  assert.equal(L.cardFacts({ entry: { ...entry, study: null }, record: null, summary: null }).title, 'part_a');
   // Saving any field of a record stores name = its id (CT.sampleRecord); that is not a name.
-  assert.equal(L.cardFacts({ entry, record: { id: 'sa', name: 'sa', starred: true }, run: null }).title, 'study-7');
+  assert.equal(L.cardFacts({ entry, record: { id: 'sa', name: 'sa', starred: true }, summary: null }).title, 'study-7');
 });
 
 test('cardFacts: settings from the scan record; porosity only from a saved run', () => {
   const entry = { path: 'a/b', study: null, voxel_um: 41, info: { scannedAt: '2026-10-30T09:00:00', scanSeconds: 256, voxelUm: 40, kv: 80 } };
-  const none = L.cardFacts({ entry, record: null, run: null });
+  const none = L.cardFacts({ entry, record: null, summary: null });
   assert.deepEqual(none, { title: 'b', date: '2026-10-30T09:00:00', scanSeconds: 256, voxelUm: 40, kv: 80, porosity: null, analyzed: false, starred: false, tags: [], missing: false });
-  const ran = L.cardFacts({ entry: { ...entry, missing: true }, record: { id: 's', starred: true, tags: ['x'] }, run: { summary: { all_void_percent_of_body: 3.25 } } });
+  const ran = L.cardFacts({ entry: { ...entry, missing: true }, record: { id: 's', starred: true, tags: ['x'] }, summary: RUN_SUMMARY(3.25) });
   assert.equal(ran.porosity, 3.25);
   assert.equal(ran.analyzed, true);
   assert.equal(ran.starred, true);
   assert.deepEqual(ran.tags, ['x']);
   assert.equal(ran.missing, true);
-  assert.equal(L.cardFacts({ entry, record: null, run: { summary: {} } }).porosity, null, 'a run without the number shows none');
-  assert.equal(L.cardFacts({ entry, record: null, run: { summary: {} } }).analyzed, true);
+  assert.equal(L.cardFacts({ entry, record: null, summary: RUN_SUMMARY(null) }).porosity, null, 'a run without the number shows none');
+  assert.equal(L.cardFacts({ entry, record: null, summary: RUN_SUMMARY(null) }).analyzed, true);
 });
 
 test('cardFacts: without a scanner record, the voxel comes from the slices and the rest is null', () => {
-  const f = L.cardFacts({ entry: { path: 'a', voxel_um: 41.5, info: null }, record: null, run: null });
+  const f = L.cardFacts({ entry: { path: 'a', voxel_um: 41.5, info: null }, record: null, summary: null });
   assert.equal(f.voxelUm, 41.5);
   assert.equal(f.date, null);
   assert.equal(f.kv, null);
@@ -134,7 +136,7 @@ test('filterScans: search over title, study, tags and notes, ignoring case', () 
 test('filterScans: each filter, a tag and a project', () => {
   const rows = [
     row('s1', { record: { id: 's1', starred: true, tags: ['a'], project: 'P1' } }),
-    row('s2', { run: { summary: { all_void_percent_of_body: 1 } }, record: { id: 's2', tags: ['a', 'b'] } }),
+    row('s2', { summary: RUN_SUMMARY(1), record: { id: 's2', tags: ['a', 'b'] } }),
     row('s3', { entry: { missing: true }, record: { id: 's3', project: 'P1' } }),
   ];
   const ids = (o) => L.filterScans(rows, o).map((r) => r.id);
@@ -494,8 +496,8 @@ test('driveCard: a summary saved before the saved runs were read has a scan coun
 });
 
 test('driveSummary: counts the scans present, and the analyzed ones only once every saved run has been read', () => {
-  const row = (id, extra) => ({ id, entry: { path: id, ...(extra.entry || {}) }, record: null, run: extra.run || null });
-  const rows = [row('a', { run: { summary: {} } }), row('b', {}), row('c', { entry: { missing: true }, run: { summary: {} } })];
+  const row = (id, extra) => ({ id, entry: { path: id, ...(extra.entry || {}) }, record: null, summary: extra.summary || null });
+  const rows = [row('a', { summary: RUN_SUMMARY(null) }), row('b', {}), row('c', { entry: { missing: true }, summary: RUN_SUMMARY(null) })];
   const now = '2026-11-05T09:00:00.000Z';
   assert.deepEqual(L.driveSummary('Drive A', rows, () => true, now), { name: 'Drive A', scans: 2, analyzed: 1, opened_at: now });
   assert.deepEqual(L.driveSummary('Drive A', rows, (id) => id !== 'b', now), { name: 'Drive A', scans: 2, analyzed: null, opened_at: now });
@@ -595,4 +597,18 @@ test('sharedTargets: two folders headed for one scan are found, so their records
 test('projectFolders: a sample without a string id falls back to its folder, else is not listed (never "undefined")', () => {
   const p = { samples: [{ folder: 'F' }, { name: 'nameless' }, { id: 7 }, { id: 'A' }] };
   assert.deepEqual(L.projectFolders(p), ['F', 'A']);
+});
+
+// ---------- final review I2 (c): a Rescan forgets the saved-run summaries only of scans it read again ----------
+test('rescan: changed lists only the scans read this time (new or changed), so the others keep their summaries', async () => {
+  const readScan = async (stack) => ({ id: { 'r/a': 'sa', 'r/b': 'sb' }[stack.dir], study: null, info: null, width: 2, height: 2, count: 3, voxel_um: 40 });
+  const opts = { groupStacks: CTCore.groupStacks, readScan };
+  const files = [file('r/a/a.vox', 50, 1), file('r/b/b.vox', 60, 2)];
+  const one = await L.rescan({ files, index: L.emptyIndex('t0'), now: 't1', ...opts });
+  assert.deepEqual([...one.changed].sort(), ['sa', 'sb']);
+  const two = await L.rescan({ files, index: one.index, now: 't2', ...opts });
+  assert.deepEqual(two.changed, [], 'nothing changed: every summary is kept');
+  const touched = [file('r/a/a.vox', 50, 1), file('r/b/b.vox', 61, 2)];
+  const three = await L.rescan({ files: touched, index: two.index, now: 't3', ...opts });
+  assert.deepEqual(three.changed, ['sb']);
 });

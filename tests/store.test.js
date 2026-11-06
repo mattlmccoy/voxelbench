@@ -466,3 +466,59 @@ test('isHidden: dot-names (AppleDouble ._x, .DS_Store) are hidden; ordinary name
   for (const n of ['._s1.json', '.DS_Store', '._2026-11-05T14-03-22.123Z.json', '.Trashes']) assert.equal(FS.isHidden(n), true, n);
   for (const n of ['s1.json', 'VoxelBench', 'scan_._1', '2026-11-05T14-03-22.123Z.json']) assert.equal(FS.isHidden(n), false, n);
 });
+
+// ---------- final review I2 (Ruling 19): a small summary per analyzed scan, so opening a library reads no full run ----------
+const fullRun = (createdAt, porosity, extra = {}) => ({ ...savedRun(createdAt, porosity), scan: { kv: 80, ua: 220, scanSeconds: 240 },
+  summary: { all_void_percent_of_body: porosity, pore_count: 12, crack_like_count: 3, body_volume_mm3: 512 }, ...extra });
+
+test('library store: putRun also writes summaries/<scan>.json, outside the run folder', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.putRun('s1', fullRun('2026-11-05T14:03:00.000Z', 2.5), [{ rows: [1] }]);
+  const [{ at }] = await s.listRuns('s1');
+  assert.deepEqual(JSON.parse(await libText(root, 'summaries/s1.json')), { at, porosity: 2.5, pore_count: 12, crack_like_count: 3, kv: 80 });
+  assert.equal((await s.listRuns('s1')).length, 1, 'the summary is not counted as a run');
+  // an imported older run joins the history but the summary stays the latest run's
+  await s.putRun('s1', fullRun('2020-01-02T03:04:05.678Z', 9), [], { at: '2020-01-02T03:04:05.678Z' });
+  assert.equal(JSON.parse(await libText(root, 'summaries/s1.json')).porosity, 2.5);
+  // a run without a crack count or a scanner record says so with nulls / no field, never a made-up value
+  await s.putRun('s2', savedRun('2026-11-05T15:00:00.000Z', 1.25), []);
+  const two = JSON.parse(await libText(root, 'summaries/s2.json'));
+  assert.equal(two.kv, null);
+  assert.equal('crack_like_count' in two, false);
+  assert.equal(two.pore_count, 12);
+});
+
+test('library store: latestSummary reads the summary, not the run; a run saved before summaries is read once and summarized', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  assert.equal(await s.latestSummary('s1'), null, 'no run: null, not analyzed');
+  // a run saved by the previous version: a run file and no summary
+  const name = '2026-10-30T09-00-00.000Z.json';
+  await FS.writeText(root, `${S.LIBRARY_DIR}/runs/s1/${name}`, JSON.stringify({ doc: fullRun('2026-10-30T08:59:59.000Z', 4.5), chunks: [] }));
+  const again = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  const first = await again.latestSummary('s1');
+  assert.deepEqual(first, { at: '2026-10-30T09:00:00.000Z', porosity: 4.5, pore_count: 12, crack_like_count: 3, kv: 80 });
+  assert.deepEqual(JSON.parse(await libText(root, 'summaries/s1.json')), first, 'the derived summary is written');
+  // from now on the run itself is not read: an unreadable run file does not matter while the summary is current
+  await FS.writeText(root, `${S.LIBRARY_DIR}/runs/s1/${name}`, 'not json');
+  assert.deepEqual(await again.latestSummary('s1'), first);
+});
+
+test('library store: a summary older than the latest run is not trusted; the run is read and the summary rewritten', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.putRun('s1', fullRun('2026-11-05T14:03:00.000Z', 2.5), []);
+  // a newer run filed without its summary (an older VoxelBench, or the summary write failed)
+  await FS.writeText(root, `${S.LIBRARY_DIR}/runs/s1/2030-01-01T00-00-00.000Z.json`, JSON.stringify({ doc: fullRun('2030-01-01T00:00:00.000Z', 7), chunks: [] }));
+  const got = await s.latestSummary('s1');
+  assert.equal(got.at, '2030-01-01T00:00:00.000Z');
+  assert.equal(got.porosity, 7);
+  // a summary file that is not readable is a cache miss, not an error
+  await FS.writeText(root, `${S.LIBRARY_DIR}/summaries/s1.json`, '{oops');
+  assert.equal((await s.latestSummary('s1')).porosity, 7);
+  // an unreadable run with no usable summary is an error, never "not analyzed"
+  await FS.writeText(root, `${S.LIBRARY_DIR}/summaries/s1.json`, '{oops');
+  await FS.writeText(root, `${S.LIBRARY_DIR}/runs/s1/2030-01-01T00-00-00.000Z.json`, 'not json');
+  await assert.rejects(s.latestSummary('s1'), /not readable JSON/);
+});

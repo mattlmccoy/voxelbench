@@ -83,8 +83,9 @@
   const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
   /** What a card shows. The title is the sample's name, else the scanner's study, else the folder name (a record saved
-      without a name stores its id as the name, which is not one). Porosity comes only from a saved run. */
-  function cardFacts({ entry, record, run }) {
+      without a name stores its id as the name, which is not one). Porosity comes only from a saved run, through its
+      summary (VBStore.runSummary): null when the scan has no saved run. */
+  function cardFacts({ entry, record, summary }) {
     const info = entry.info || {};
     const named = record && record.name && record.name !== record.id ? record.name : null;
     return {
@@ -93,8 +94,8 @@
       scanSeconds: num(info.scanSeconds),
       voxelUm: num(info.voxelUm) ?? num(entry.voxel_um),
       kv: num(info.kv),
-      porosity: run && run.summary ? num(run.summary.all_void_percent_of_body) : null,
-      analyzed: Boolean(run),
+      porosity: summary ? num(summary.porosity) : null,
+      analyzed: Boolean(summary),
       starred: Boolean(record && record.starred),
       tags: record && Array.isArray(record.tags) ? [...record.tags] : [],
       missing: Boolean(entry.missing),
@@ -156,10 +157,10 @@
       keeps what is known about it; any other is read with readScan(stack) -> { id, study, info, width, height, count,
       voxel_um }. A scan that cannot be read is reported in failed and left out of this pass (an indexed one is then
       kept as missing, never dropped). Returns the new index, the scans by id (stack.folder = the id), how many scan
-      folders were listed (places, copies included) and read, and what failed. */
+      folders were listed (places, copies included) and read, the ids read this time (changed), and what failed. */
   async function rescan({ files, index, groupStacks, readScan, now, onRead = () => {} }) {
     const stacks = scanFolders(groupStacks(files), files);
-    const seen = [], byPath = new Map(), failed = [];
+    const seen = [], byPath = new Map(), failed = [], changed = new Set();
     let read = 0;
     for (const stack of stacks) {
       const stamp = stampOf(stack);
@@ -172,12 +173,13 @@
         onRead(stack, read);
         try { ({ id, ...meta } = await readScan(stack)); } catch (e) { failed.push({ path: stamp.path, message: e.message }); continue; }
         read++;
+        changed.add(id);
       }
       seen.push({ id, ...stamp, kind: stack.kind, ...Object.fromEntries(CARRIED.map((k) => [k, meta[k] ?? null])) });
     }
     const scans = dedupeScans(seen);
     const byId = new Map(scans.map((s) => [s.id, { ...byPath.get(s.path), folder: s.id }]));
-    return { index: mergeIndex(index, scans, now), stacks: byId, read, places: seen.length, found: scans.length, failed };
+    return { index: mergeIndex(index, scans, now), stacks: byId, read, places: seen.length, found: scans.length, failed, changed: [...changed] };
   }
 
   /** Rescans for one page. open() marks a new root: a Rescan begun before it is stale (it writes nothing, to either
