@@ -125,18 +125,9 @@ window.CTApp = (function () {
   // A failed write is reported where it happened: on the active store, or kept as NOT SAVED with its own store.
   const failed = (store, text) => { if (store === state.store) setDbState('unavailable', text); };
 
-  async function saveRecord(collection, record) {
-    state.unsaved.set(record.id, { ...record, _collection: collection });
-    emit('recordsChanged'); renderSaveState();
-    const store = state.store;
-    if (!store) return;
-    try {
-      await store.put(collection, record);
-      markDirty(store);
-    } catch (e) {
-      failed(store, `the last save failed: ${e.message}`);
-    }
-  }
+  // The returned promise is this save's (vb_recordsave.js), so a caller can show its outcome.
+  const saveRecord = window.VBRecordSave.makeSaveRecord({ store: () => state.store, unsaved: () => state.unsaved,
+    changed: () => { emit('recordsChanged'); renderSaveState(); }, markDirty, failed });
 
   /** Saves fields of the open sample's record, keeping its other fields, including an edit not yet stored. */
   /** The open sample's record as it will be stored, including an edit not yet back from the store. */

@@ -310,10 +310,8 @@
   const saveLibraryRecord = L.makeRecordSaver({ samples: () => lib.samples, put: (record) => lib.store.put('samples', record), sampleRecord: (...a) => CT.sampleRecord(...a) });
   /** Saves fields of a scan's record. Returns the promise of this save; the card's star and tags report a failure in the
       library's status line, the overview shows its own. */
-  function saveScanRecord(id, changes) {
-    if (state.store === lib.store) return App.saveSample(changes, id);
-    return saveLibraryRecord(id, changes);
-  }
+  const saveScanRecord = window.VBRecordSave.makeScanRecordSave({ activeStore: () => state.store, libraryStore: () => lib.store,
+    saveSample: (changes, id) => App.saveSample(changes, id), saveLibrary: saveLibraryRecord });
   const saveFromCard = (id, changes) => Promise.resolve(saveScanRecord(id, changes)).catch((e) => say(`Not saved: ${e.message}`, true));
 
   // Ruling 10: opening a library scan switches records to the library; the project file's unsaved edits are kept in

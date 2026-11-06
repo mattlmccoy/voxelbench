@@ -9,7 +9,9 @@
   const overview = () => (state.page === 'overview' && App.overview ? App.overview : null);
   const targetId = () => (overview() ? overview().id() : state.folder);
   const targetRecord = () => (overview() ? overview().record() : state.folder ? App.sampleNow() : null);
-  const saveTarget = (changes) => (overview() ? overview().save(changes) : App.saveSample(changes));
+  // This save's outcome is shown beside the form (in the overview the studio's save state is hidden).
+  const saveTarget = (changes) => Promise.resolve(overview() ? overview().save(changes) : App.saveSample(changes))
+    .catch((e) => { $('archHint').textContent = `The measurement was not saved: ${e.message}`; });
   // One form, moved by context: in the overview for a scan from the library (shown there and while it is open in the
   // studio), in the studio's Scan information for any other scan (folder, demo, tour).
   const fromLibrary = () => Boolean(state.stack && state.stack.store && state.stack.store.kind === 'library');
