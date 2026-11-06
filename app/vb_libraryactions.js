@@ -218,9 +218,12 @@
   }
 
   on('start', wire);
-  on('libraryRendered', (r) => {
+  // The library's state is current at once (libraryState); the cards' tick boxes follow each drawing (libraryRendered).
+  on('libraryState', (r) => {
     if (!r.open) { selected.clear(); $('libCompareBox').hidden = true; }
     last = r;
+  });
+  on('libraryRendered', () => {
     addPickers();
     renderBar();
   });

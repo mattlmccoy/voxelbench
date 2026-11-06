@@ -16,11 +16,14 @@ function makeFakeDir(name = 'root', shared = { failNextWrite: false, aborts: 0 }
     name,
     shared, // failNextWrite: the next write() throws; aborts: how many writables were aborted
     unreadable: false, // true: listing this folder fails, as a folder the browser may not read does
+    gone: false, // true: the folder is no longer there (drive unplugged): every call on it is NotFoundError
     async *values() {
+      if (dir.gone) throw notFound(name);
       if (dir.unreadable) { const err = new Error(`The requested file could not be read: ${name}`); err.name = 'NotReadableError'; throw err; }
       for (const [n, e] of entries) yield e.kind === 'file' ? fileHandle(n, e) : e.dir;
     },
     async getDirectoryHandle(n, { create = false } = {}) {
+      if (dir.gone) throw notFound(name);
       const e = entries.get(n);
       if (e && e.kind === 'directory') return e.dir;
       if (e) { const err = new Error(`${n} is a file`); err.name = 'TypeMismatchError'; throw err; }
@@ -30,6 +33,7 @@ function makeFakeDir(name = 'root', shared = { failNextWrite: false, aborts: 0 }
       return child;
     },
     async getFileHandle(n, { create = false } = {}) {
+      if (dir.gone) throw notFound(name);
       const e = entries.get(n);
       if (e && e.kind === 'file') return fileHandle(n, e);
       if (e) { const err = new Error(`${n} is a directory`); err.name = 'TypeMismatchError'; throw err; }

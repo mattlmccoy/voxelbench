@@ -362,6 +362,43 @@
     return { name, scans: present.length, analyzed: known ? present.filter((r) => cardFacts(r).analyzed).length : null, opened_at: now };
   }
 
+  /** The library's rows ({ id, entry, record, summary }), newest scan first. summary is undefined until the scan's
+      saved runs have been read (or when they could not be), null for none. */
+  function libraryRows(index, samples, summaries) {
+    const rows = Object.entries(index.scans).map(([id, entry]) => ({ id, entry, record: samples.get(id) || null, summary: summaries.get(id) }));
+    const key = (r) => (r.entry.info && r.entry.info.scannedAt) || r.entry.first_seen || '';
+    return rows.sort((a, b) => (key(a) < key(b) ? 1 : key(a) > key(b) ? -1 : 0));
+  }
+
+  /** render() for a page whose drawing is coalesced to one per frame (schedule, e.g. requestAnimationFrame). sync()
+      works out the page's state (what other code reads: the rows, the scans listed) at once, on every call; only
+      paint(state) waits for the frame, so nothing depends on a frame being drawn (a hidden tab draws none). */
+  function makeFramedRender({ sync, paint, schedule }) {
+    let frame = 0;
+    return function render() {
+      sync();
+      if (frame) return;
+      frame = schedule(() => { frame = 0; paint(sync()); }) || 1;
+    };
+  }
+
+  /** Reads the saved-run summary (store.latestSummary: a listing and a small file; the run itself only as a fallback) of
+      each id not yet in summaries, or in recheck (after a Rescan, so a run saved on another computer shows), one at a
+      time. A re-checked card keeps its old value while it is read; one that fails becomes unknown (removed from
+      summaries) with its error in errors. live() false stops the pass; onEach() after each scan. */
+  async function refreshSummaries({ ids, store, summaries, errors, recheck = new Set(), live = () => true, onEach = () => {} }) {
+    for (const id of ids) {
+      if (!live()) return;
+      if (summaries.has(id) && !recheck.has(id)) continue;
+      try {
+        summaries.set(id, await store.latestSummary(id));
+        errors.delete(id);
+      } catch (e) { summaries.delete(id); errors.set(id, e.message); }
+      recheck.delete(id);
+      onEach(id);
+    }
+  }
+
   // ---------- acting on several scans: import, Compare runs, Batch ----------
   /** Which library scan each folder of a project file is. A folder equal to a scan id is that scan; otherwise the folder
       name (the last path segment) is looked up among each scan's path and its copies' paths. One scan: matched; none:
@@ -429,5 +466,5 @@
   /** Bytes in decimal units, as the drive shows them: "2.5 GB", "420 MB". */
   const bytesText = (b) => (b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`);
 
-  return { sameStamp, matchImport, projectFolders, remapProject, sharedTargets, actionTargets, batchBytes, bytesText, driveCard, driveSummary, refusalMessage, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
+  return { libraryRows, refreshSummaries, makeFramedRender, sameStamp, matchImport, projectFolders, remapProject, sharedTargets, actionTargets, batchBytes, bytesText, driveCard, driveSummary, refusalMessage, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
 }));

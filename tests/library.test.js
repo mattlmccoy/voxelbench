@@ -675,3 +675,26 @@ test('overviewFacts: pores are counted by the run\'s own elongation cutoff, with
   assert.equal(old['Pores, AR ≤ cutoff (not recorded)'], '120', 'a run without its cutoff does not name one');
   assert.equal(Object.keys(old).some((k) => k.startsWith('Pores, AR >')), false, 'no crack-like count in the run: no row');
 });
+
+// ---------- final review round 2, item 1: the library's state is current before any paint ----------
+test('makeFramedRender: rows, entries and the Compare targets are current at once, even when no frame is ever painted', async () => {
+  const S = require('../app/vb_store.js');
+  const { makeFakeDir } = require('./fake_dir.js');
+  const store = await S.makeLibraryStore(makeFakeDir('Lab drive'), { toolVersion: '0.1.0' });
+  const index = L.mergeIndex(L.emptyIndex('t0'), [{ id: 'sa', path: 'r/a', kind: 'vox', bytes: 1, mtime: 1, study: 'study-a' }], 't1');
+  let samples = new Map();
+  store.watch('samples', (m) => { samples = m; });
+  // The page as vb_libraryview.js builds it; requestAnimationFrame never fires (a hidden tab, or a paused frame).
+  const lib = { entries: [] };
+  let last = null, painted = 0;
+  const sync = () => { const rows = L.libraryRows(index, samples, new Map()); lib.entries = rows; last = { open: true, rows, project: null }; return last; };
+  const render = L.makeFramedRender({ sync, paint: () => { painted++; }, schedule: () => 1 });
+  render();
+  assert.equal(painted, 0);
+  // vb_overview.js openOverview(id) opens only a scan listed in lib.entries (Back from the studio goes through it)
+  assert.ok(lib.entries.some((r) => r.id === 'sa'), 'openOverview(sa) lands on the overview');
+  assert.deepEqual(L.actionTargets(last.rows, new Set(['sa']), null).ids, ['sa'], 'Compare and Batch see the scan');
+  await store.put('samples', { id: 'sa', folder: 'sa', name: 'Part A' });
+  render(); // a frame is still pending: the state still updates
+  assert.equal(L.cardFacts(lib.entries[0]).title, 'Part A');
+});

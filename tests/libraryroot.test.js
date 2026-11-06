@@ -36,3 +36,20 @@ test('nestedNote: a nested library is named, with how to open it', () => {
   assert.equal(R.nestedNote(['old lab/VoxelBench']), 'Another VoxelBench library is inside this one at old lab/VoxelBench; its records are separate. Open that folder\'s parent to use it.');
   assert.equal(R.nestedNote(['a/VoxelBench', 'b/VoxelBench']).split('Another').length - 1, 2);
 });
+
+// ---------- final review round 2, item 2: a gone drive is never offered a new library ----------
+test('decideOpen: an unplugged drive is gone, an unreadable one is refused; neither asks to start a library', async () => {
+  const gone = makeFakeDir('Lab drive');
+  gone.gone = true;
+  assert.deepEqual(await R.decideOpen(gone), { action: 'gone' });
+  const locked = makeFakeDir('Lab drive');
+  locked.unreadable = true;
+  const d = await R.decideOpen(locked);
+  assert.equal(d.action, 'refuse');
+  assert.match(d.message, /Lab drive could not be read/);
+  const fresh = makeFakeDir('Empty');
+  assert.equal((await R.decideOpen(fresh)).action, 'confirm');
+  const lab = makeFakeDir('Lab drive');
+  await FS.writeText(lab, 'VoxelBench/library.json', '{}');
+  assert.deepEqual(await R.decideOpen(lab), { action: 'open' });
+});

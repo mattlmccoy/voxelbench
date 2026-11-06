@@ -26,6 +26,20 @@
     return { action: 'confirm', question: `Start a new VoxelBench library in ${nameOf(name)}? If your lab already has one, choose the folder that holds its VoxelBench folder.` };
   }
 
+  /** What to do with a folder about to be opened as a library: rootDecision's open / confirm / refuse, or gone when the
+      folder itself is not there now (an unplugged drive: never offered a new library). A folder that cannot be read is
+      refused, so nothing goes on to write library.json without asking. */
+  async function decideOpen(dir) {
+    const label = nameOf(dir.name);
+    try {
+      await dir.values().next(); // is the folder itself there and readable?
+      return rootDecision(await inspectRoot(dir));
+    } catch (e) {
+      if (e && e.name === 'NotFoundError') return { action: 'gone' };
+      return { action: 'refuse', message: `${label} could not be read (${e.message}); nothing was opened or written.` };
+    }
+  }
+
   /** The Rescan's note on other libraries found inside this one (their VoxelBench folders' paths). */
   const nestedNote = (paths) => paths.map((p) => `Another VoxelBench library is inside this one at ${p}; its records are separate. Open that folder's parent to use it.`).join(' ');
 
@@ -46,5 +60,5 @@
   const keepHandle = (h) => handles('readwrite', (s) => s.put(h, HANDLE_DB.key)).catch(() => {}); // a private window may refuse; the library still opens
   const savedHandle = () => handles('readonly', (s) => s.get(HANDLE_DB.key)).catch(() => null);
 
-  return { inspectRoot, rootDecision, nestedNote, keepHandle, savedHandle };
+  return { inspectRoot, rootDecision, decideOpen, nestedNote, keepHandle, savedHandle };
 }));

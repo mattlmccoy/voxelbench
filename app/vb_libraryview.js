@@ -12,7 +12,7 @@
   const supported = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
   const lib = App.library = {
-    dir: null, index: null, entries: [], store: null, stacks: new Map(), samples: new Map(), summaries: new Map(), runErrors: new Map(),
+    dir: null, index: null, entries: [], store: null, stacks: new Map(), samples: new Map(), summaries: new Map(), runErrors: new Map(), recheck: new Set(),
     thumbs: new Map(), refused: null, lastRescan: null, gen: 0, saved: null, access: 'prompt',
   };
   const view = { query: '', filter: 'all', tag: null, project: null };
@@ -126,7 +126,7 @@
     if (unwatchSamples) unwatchSamples();
     unwatchSamples = null;
     for (const url of lib.thumbs.values()) URL.revokeObjectURL(url);
-    Object.assign(lib, { dir: null, index: null, entries: [], store: null, stacks: new Map(), samples: new Map(), summaries: new Map(), runErrors: new Map(), thumbs: new Map(), refused: null, lastRescan: null });
+    Object.assign(lib, { dir: null, index: null, entries: [], store: null, stacks: new Map(), samples: new Map(), summaries: new Map(), runErrors: new Map(), recheck: new Set(), thumbs: new Map(), refused: null, lastRescan: null });
     thumbQueue.clear();
   }
 
@@ -134,12 +134,12 @@
       unreadable library or scan index; asks before starting a library in a folder without one (vb_libraryroot.js), and
       a refusal or a no leaves the page as it was. Resolves whether the library was opened. */
   async function openLibraryDir(handle) {
-    let d = { action: 'open' }; // a folder that cannot even be inspected is opened below, which says what is wrong
-    try { d = R.rootDecision(await R.inspectRoot(handle)); } catch (e) { /* reported by the open */ }
+    const d = await R.decideOpen(handle);
     if (d.action === 'refuse') { say(d.message, true); return false; }
     if (d.action === 'confirm' && !window.confirm(d.question)) { say(`No library was started in ${handle.name || 'browser storage'}; nothing was written.`); return false; }
     close();
     lib.dir = handle;
+    if (d.action === 'gone') { lib.access = 'gone'; lib.refused = true; say(''); render(); return true; } // the card says the drive is not available
     const gen = lib.gen;
     say(`Opening ${handle.name || 'browser storage'}…`);
     try {
@@ -237,7 +237,8 @@
       const copies = r.places - r.found;
       const nested = r.nested.length ? ` ${R.nestedNote(r.nested)}` : '';
       say(`Rescan: ${r.found} scans found${copies ? ` (${copies} more folder${copies > 1 ? 's are copies' : ' is a copy'})` : ''}; ${r.read} folder${r.read === 1 ? '' : 's'} read (new or changed), ${r.places - r.read} unchanged${missing ? `; ${missing} missing` : ''}.${failed}${nested}`, Boolean(r.failed.length || r.nested.length));
-      for (const id of r.changed) { lib.summaries.delete(id); lib.runErrors.delete(id); } // an unchanged scan keeps what was read
+      for (const id of r.changed) { lib.summaries.delete(id); lib.runErrors.delete(id); } // read again from the start
+      lib.recheck = new Set(r.stacks.keys()); // the others keep their card while their summary is checked again
     } catch (e) {
       if (gen === lib.gen) say(`Rescan stopped: ${e.message}`, true);
     }
@@ -262,15 +263,9 @@
 
   async function backgroundPass(gen) {
     const all = Object.keys(lib.index.scans), ids = all.filter((id) => !lib.index.scans[id].missing);
-    for (const id of ids) {
-      if (gen !== lib.gen) return;
-      if (lib.summaries.has(id)) continue;
-      try {
-        lib.summaries.set(id, await lib.store.latestSummary(id)); // the small summary (Ruling 19), not the full run
-        lib.runErrors.delete(id);
-      } catch (e) { lib.runErrors.set(id, e.message); }
-      render();
-    }
+    // the small summary (Ruling 19), not the full run
+    await L.refreshSummaries({ ids, store: lib.store, summaries: lib.summaries, errors: lib.runErrors, recheck: lib.recheck, live: () => gen === lib.gen, onEach: render });
+    if (gen !== lib.gen) return;
     let unmade = 0;
     for (const id of all) { // a missing scan shows the preview it had; only a present one gets a new one
       if (gen !== lib.gen) return;
@@ -442,15 +437,18 @@
   }
 
   // Redraws are coalesced to one per frame: the background pass reports each scan, and a library holds hundreds.
-  let frame = 0;
-  function render() {
-    if (frame) return;
-    const next = window.requestAnimationFrame ? (fn) => window.requestAnimationFrame(fn) : (fn) => setTimeout(fn, 16);
-    frame = next(() => { frame = 0; renderNow(); });
-  }
-
-  function renderNow() {
+  function syncState() {
     const open = Boolean(lib.dir && lib.index && !lib.refused);
+    const rows = open ? L.libraryRows(lib.index, lib.samples, lib.summaries) : [];
+    lib.entries = rows;
+    const st = { open, rows, project: view.project };
+    App.emit('libraryState', st); // Compare runs, Batch, Import (vb_libraryactions.js) act on this, drawn or not
+    return st;
+  }
+  const render = L.makeFramedRender({ sync: syncState, paint: renderNow,
+    schedule: (fn) => (window.requestAnimationFrame ? window.requestAnimationFrame(fn) : setTimeout(fn, 16)) });
+
+  function renderNow({ open, rows }) {
     $('libRoot').textContent = open ? `Library: ${rootName()}` : supported ? 'No library open' : 'Library unavailable in this browser';
     $('libPick').hidden = !(supported && open);
     $('libPickHero').hidden = !supported;
@@ -464,11 +462,6 @@
     $('libIntro').hidden = open;
     notice((typeof lib.refused === 'string' && lib.refused) || (supported ? '' : 'The library needs Chrome or Edge: it reads and writes a folder on your drive, which this browser does not allow. Open a .VOX file… and Open a folder of slices… still open one scan here, with a project file.'));
 
-    // summary: undefined until this scan's saved runs have been read (or when they could not be), null for none.
-    const rows = open ? Object.entries(lib.index.scans).map(([id, entry]) => ({ id, entry, record: lib.samples.get(id) || null, summary: lib.summaries.get(id) })) : [];
-    const key = (r) => (r.entry.info && r.entry.info.scannedAt) || r.entry.first_seen || '';
-    rows.sort((a, b) => (key(a) < key(b) ? 1 : key(a) > key(b) ? -1 : 0)); // newest first
-    lib.entries = rows;
     const grid = $('libGrid');
     $('libHint').hidden = !(open && rows.length && !readLocal(HINT_KEY));
     if (!open) { grid.replaceChildren(); $('libEmpty').hidden = true; App.emit('libraryRendered', { open, rows, shown: [], project: null }); return; }
