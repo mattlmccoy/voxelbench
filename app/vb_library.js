@@ -19,5 +19,32 @@
     return 's' + Array.from(digest.subarray(0, 8), (v) => v.toString(16).padStart(2, '0')).join('');
   }
 
-  return { scanId };
+  const INDEX_VERSION = 1;
+
+  /** A library with no scans. `now` is passed in (never read from the clock) so callers and tests control time. */
+  function emptyIndex(now) {
+    return { schema: 'voxelbench-library-index', version: INDEX_VERSION, created: now, scans: {} };
+  }
+
+  /** Whether a file seen during a scan of the root must be opened again. Same path, size and modified time as an
+      indexed entry means nothing changed, so the (slow) read that yields the id can be skipped. */
+  function needsRead(index, { path, bytes, mtime }) {
+    return !Object.values(index.scans).some((e) => e.path === path && e.bytes === bytes && e.mtime === mtime);
+  }
+
+  /** Fold the scans found this time into the index. Returns a new index; the input is not changed. Nothing is ever
+      dropped: a scan not found now is kept with missing:true, because its records live elsewhere and must stay
+      attached for when the drive is back or the scan is moved. first_seen survives; last_seen moves only for scans
+      found now. */
+  function mergeIndex(index, scans, now) {
+    const next = {};
+    for (const [id, e] of Object.entries(index.scans)) next[id] = { ...e, missing: true };
+    for (const { id, path, kind, bytes, mtime, study } of scans) {
+      const old = index.scans[id];
+      next[id] = { path, kind, bytes, mtime, study, first_seen: old ? old.first_seen : now, last_seen: now, missing: false };
+    }
+    return { ...index, scans: next };
+  }
+
+  return { scanId, INDEX_VERSION, emptyIndex, needsRead, mergeIndex };
 }));
