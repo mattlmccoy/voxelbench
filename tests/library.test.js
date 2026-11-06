@@ -378,7 +378,7 @@ test('overviewFacts: results come from the latest run, relative densities from i
   assert.equal(res['Porosity'], '3.46 %');
   assert.equal(res['Open'], '1.20 %');
   assert.equal(res['Closed'], '2.26 %');
-  assert.equal(res['Pores'], '120');
+  assert.equal(res['Pores, AR ≤ cutoff (not recorded)'], '120', 'this run has no settings');
   assert.equal(res['Core, relative to m1 dense'], '0.75');
   assert.equal(res['zz_gone (edge), relative to m1 dense'], '0.50', 'a deleted label shows its id');
   assert.equal(f.results.filter(([k]) => /whole|part/i.test(k)).length, 0, 'no whole-part relative density');
@@ -662,4 +662,16 @@ test('findIndexed and sameStamp: same path and size within 2 s of the indexed ti
   assert.equal(L.needsRead(index, { path: 'r/a', bytes: 100, mtime: 1730800001500 }), false);
   assert.equal(L.sameStamp({ path: 'x', bytes: 1, mtime: 0 }, { path: 'x', bytes: 1, mtime: 2000 }), true);
   assert.equal(L.sameStamp({ path: 'x', bytes: 1, mtime: 0 }, { path: 'y', bytes: 1, mtime: 0 }), false);
+});
+
+// ---------- final review M2: the overview's pore counts say which pores they count ----------
+test('overviewFacts: pores are counted by the run\'s own elongation cutoff, with the crack-like count when the run has it', () => {
+  const r = { ...run, settings: { maxElongation: 2.5 }, summary: { all_void_percent_of_body: 3.456, pore_count: 120, crack_like_count: 7 } };
+  const res = asMap(L.overviewFacts({ entry, scanInfo: entry.info, header, run: r, runs: [] }).results);
+  assert.equal(res['Pores, AR ≤ 2.5'], '120');
+  assert.equal(res['Pores, AR > 2.5'], '7');
+  assert.equal(res['Pores'], undefined);
+  const old = asMap(L.overviewFacts({ entry, scanInfo: entry.info, header, run: { ...run, settings: {} }, runs: [] }).results);
+  assert.equal(old['Pores, AR ≤ cutoff (not recorded)'], '120', 'a run without its cutoff does not name one');
+  assert.equal(Object.keys(old).some((k) => k.startsWith('Pores, AR >')), false, 'no crack-like count in the run: no row');
 });

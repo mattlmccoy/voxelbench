@@ -179,7 +179,7 @@
       $('ovPreviews').append(fig);
     }
     $('ovBack').addEventListener('click', () => App.showPage('library'));
-    $('ovAnalyze').addEventListener('click', () => LV.openScan(cur.id));
+    $('ovAnalyze').addEventListener('click', () => LV.openScan(cur.id, (text) => say(text, true)));
     $('ovStar').addEventListener('click', () => { const rec = record(); LV.saveScanRecord(cur.id, { starred: !(rec && rec.starred) }).catch((e) => say(`The star was not saved: ${e.message}`, true)); });
     $('ovSave').addEventListener('click', saveDetails);
     $('ovForm').addEventListener('input', () => { $('ovSaveState').textContent = ''; });

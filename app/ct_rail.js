@@ -687,7 +687,7 @@
     const store = state.store, folder = state.folder;
     try {
       await store.putRun(folder, run, chunks);
-      App.markDirty();
+      App.markDirty(store); // the store the run went to, even if another became active during the save
       App.emit('runSaved');
       if (store.kind === 'library') {
         // A library keeps every run: this one is added, the earlier ones stay (the overview lists them).

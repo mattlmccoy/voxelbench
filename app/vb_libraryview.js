@@ -30,7 +30,7 @@
     const rows = Object.entries(lib.index.scans).map(([id, entry]) => ({ id, entry, record: null, summary: lib.summaries.get(id) }));
     keepLocal(SUMMARY_KEY, JSON.stringify(L.driveSummary(lib.dir.name || 'browser storage', rows, (id) => lib.summaries.has(id) || Boolean(lib.index.scans[id].missing), new Date().toISOString())));
   }
-  const thumbQueue = new Map(); // id -> a thumbnail image made while reading the scan, written once the cards show
+  const thumbQueue = new Map(); // id -> the thumbnail PNG made while reading the scan (small), written once the cards show
   let unwatchSamples = null;
 
   const rootName = () => (lib.dir && lib.dir.name) || 'browser storage'; // a test root (OPFS) has no name
@@ -97,7 +97,7 @@
     const id = await L.scanId({ width: first.width, height: first.height, count, first: first.pixels, middle: middle.pixels });
     let info = null;
     if (stack.dataInfo) { try { info = VX.parseDataInfo(await stack.dataInfo.text()); } catch (e) { info = null; } }
-    thumbQueue.set(id, thumbImage(middle));
+    try { thumbQueue.set(id, await pngOf(thumbImage(middle))); } catch (e) { /* made again from the scan after the listing */ }
     return { id, study: (info && info.study) || null, info, width: first.width, height: first.height, count, voxel_um: first.voxelMm ? first.voxelMm * 1000 : null };
   }
 
@@ -279,9 +279,8 @@
         let blob = await readThumb(id);
         if (!blob && lib.index.scans[id].missing) continue;
         if (!blob) {
-          let img = thumbQueue.get(id);
-          if (!img) { const r = await App.openReader(await stackFor(id)); img = thumbImage(await r.read(r.count >> 1)); }
-          blob = await pngOf(img);
+          blob = thumbQueue.get(id);
+          if (!blob) { const r = await App.openReader(await stackFor(id)); blob = await pngOf(thumbImage(await r.read(r.count >> 1))); }
           if (gen !== lib.gen) return;
           await lib.store.putFile(`thumbs/${id}.png`, blob);
           thumbQueue.delete(id);
@@ -314,7 +313,8 @@
   const UNSAVED_PROJECT = 'The project file has unsaved changes. Open the library scan anyway? Save the project first to keep them.';
   const projectUnsaved = () => Boolean(state.store && state.store.kind === 'file' && (state.unsaved.size || state.projectDirty));
 
-  async function openScan(id) {
+  /** Opens a library scan in the studio; a failure is told by report (the overview passes its own status line). */
+  async function openScan(id, report = (text) => say(text, true)) {
     const row = lib.entries.find((r) => r.id === id);
     if (projectUnsaved() && !window.confirm(UNSAVED_PROJECT)) return;
     try {
@@ -324,7 +324,7 @@
       App.emit('samplesChanged');
       App.loadStack(stack);
     } catch (e) {
-      say(`Could not open ${row ? L.cardFacts(row).title : id}: ${e.message}.`, true);
+      report(`Could not open ${row ? L.cardFacts(row).title : id}: ${e.message}.`);
     }
   }
 

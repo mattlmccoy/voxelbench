@@ -92,14 +92,11 @@ window.CTApp = (function () {
   async function connectStore() {
     const use = window.claude && window.claude.use ? (name) => window.claude.use(name) : null;
     const { store, downloads, note } = await V.connect(use);
-    state.store = store;
     state.fileStore = store; // the project file (or database) that folders and demos use
     state.downloads = downloads;
-    if (store.kind === 'file') setDbState('file');
-    else setTimeout(() => { if (state.dbState === 'connecting') setDbState('unavailable', 'the database sent no records within 10 seconds.'); }, 10000);
+    useStore(store); // the one way a store becomes the active one
+    if (store.kind !== 'file') setTimeout(() => { if (state.dbState === 'connecting') setDbState('unavailable', 'the database sent no records within 10 seconds.'); }, 10000);
     if (note) projectNote(`Not saving to the database: ${note}.`);
-    watchRecords(store);
-    emit('changed');
   }
 
   /** Make store the one records are read from and saved to; the watches of the previous one end. Unsaved edits stay
@@ -112,7 +109,7 @@ window.CTApp = (function () {
     if (state.store) unsavedByStore.set(state.store, state.unsaved);
     state.store = store;
     state.unsaved = unsavedByStore.get(store) || new Map();
-    setDbState(store.kind === 'library' ? 'library' : store.kind === 'file' ? 'file' : 'connected');
+    setDbState(store.kind === 'library' ? 'library' : store.kind === 'file' ? 'file' : 'connecting'); // the database: until its first snapshot
     watchRecords(store);
     emit('changed');
   }
@@ -610,7 +607,8 @@ window.CTApp = (function () {
     return demo.truth;
   }
 
-  function start() {
+  // The store is connected before the page's parts start, so none of them sees a page without one.
+  async function start() {
     $('folder').addEventListener('change', (e) => { state.demoPhantoms = null; openFiles(e.target.files); });
     $('saveProject').addEventListener('click', saveProject);
     $('trySynthetic').addEventListener('click', () => openDemo('scan'));
@@ -619,7 +617,7 @@ window.CTApp = (function () {
     $('trySyntheticFiller').addEventListener('click', () => openDemo('filler'));
     $('trySyntheticCad').addEventListener('click', () => openDemo('cad'));
     $('projectFile').addEventListener('change', (e) => { if (e.target.files[0]) openProject(e.target.files[0]); e.target.value = ''; });
-    connectStore();
+    await connectStore();
     renderSaveState();
     emit('start');
   }

@@ -279,8 +279,11 @@
     if (run) {
       const s = run.summary || {};
       const oc = run.open_closed || {};
+      // Pore counts by elongation, named with the run's own cutoff as the studio's legend names them.
+      const cutoff = num((run.settings || {}).maxElongation), ar = cutoff === null ? 'cutoff (not recorded)' : String(cutoff);
       results.push(['Porosity', percent(s.all_void_percent_of_body)], ['Open', percent(oc.open_percent)], ['Closed', percent(oc.closed_percent)],
-        ['Pores', num(s.pore_count) === null ? NOT_RECORDED : String(s.pore_count)]);
+        [`Pores, AR ≤ ${ar}`, num(s.pore_count) === null ? NOT_RECORDED : String(s.pore_count)]);
+      if (num(s.crack_like_count) !== null) results.push([`Pores, AR > ${ar}`, String(s.crack_like_count)]);
       const names = new Map((run.labels || []).map((l) => [l.id, l.label]));
       for (const r of run.regions || []) {
         const gray = r.stats && num(r.stats.gray_mean);
