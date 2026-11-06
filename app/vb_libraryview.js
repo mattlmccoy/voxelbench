@@ -356,8 +356,8 @@
   function resultLine(r, f) {
     if (f.missing) return `Missing: not found at the last Rescan (last seen ${String(r.entry.last_seen).slice(0, 10)})`;
     if (lib.runErrors.has(r.id)) return `Saved run unreadable: ${lib.runErrors.get(r.id)}`;
-    if (!lib.summaries.has(r.id)) return 'Checking for saved runs…';
-    if (!f.analyzed) return 'Not analyzed';
+    if (f.analyzed === null) return 'Checking for saved runs…';
+    if (f.analyzed === false) return 'Not analyzed';
     return f.porosity === null ? 'Analyzed; porosity not in the saved run' : `Porosity ${f.porosity.toFixed(2)} %`;
   }
 

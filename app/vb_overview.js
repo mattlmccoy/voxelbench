@@ -7,7 +7,8 @@
   const L = window.VBLibrary, LV = window.VBLibraryView, VX = window.VBVox;
   const { state, $, on } = App;
   const PREVIEW_ROWS = 48; // z rows read for the XZ and YZ previews (the thumbnail is 256 px wide); the rest repeat the nearest
-  const cur = { id: null, gen: 0, run: null, runs: [], header: null, unwatch: null };
+  // run: undefined while the saved runs are read, null when there are none; runError when they could not be read.
+  const cur = { id: null, gen: 0, run: undefined, runError: null, runs: [], header: null, unwatch: null };
   const lib = () => App.library;
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
   const say = (text, bad = false) => { const e = $('ovStatus'); e.textContent = text; e.classList.toggle('bad', bad); };
@@ -24,9 +25,9 @@
   function renderFacts() {
     const r = row();
     if (!r) return;
-    const f = L.overviewFacts({ entry: r.entry, scanInfo: r.entry.info || null, header: cur.header, record: record(), run: cur.run, runs: cur.runs });
+    const f = L.overviewFacts({ entry: r.entry, scanInfo: r.entry.info || null, header: cur.header, record: record(), run: cur.run, runs: cur.runs, runError: cur.runError });
     pairs($('ovFacts'), f.rows);
-    pairs($('ovResults'), f.results, cur.run === null ? 'No saved run yet. Analyze the scan and press Save run in the studio.' : '');
+    pairs($('ovResults'), f.results, f.empty);
     const list = $('ovRuns');
     list.replaceChildren(...f.runs.map(({ label }, i) => el('li', '', i === 0 ? `${label} (latest, shown above)` : label)));
     $('ovRunsHead').hidden = !f.runs.length;
@@ -141,7 +142,7 @@
 
   // ---------- opening ----------
   async function loadRuns(gen) {
-    cur.run = null; cur.runs = [];
+    cur.run = undefined; cur.runError = null; cur.runs = [];
     say('Checking for saved runs…');
     try {
       const listed = await lib().store.listRuns(cur.id);
@@ -150,7 +151,7 @@
       cur.runs = listed; cur.run = run;
       say('');
     } catch (e) {
-      if (gen === cur.gen) say(`The saved runs could not be read: ${e.message}`, true);
+      if (gen === cur.gen) { cur.runError = e.message; say(`The saved runs could not be read: ${e.message}`, true); }
     }
     if (gen === cur.gen) renderFacts();
   }
@@ -158,7 +159,7 @@
   function openOverview(id) {
     if (!lib().entries.some((r) => r.id === id)) return;
     if (cur.unwatch) cur.unwatch();
-    Object.assign(cur, { id, gen: cur.gen + 1, run: null, runs: [], header: null });
+    Object.assign(cur, { id, gen: cur.gen + 1, run: undefined, runError: null, runs: [], header: null });
     const gen = cur.gen;
     cur.unwatch = lib().store.watch('samples', () => { if (gen === cur.gen) { renderDetails(); renderFacts(); } });
     $('ovSaveState').textContent = '';

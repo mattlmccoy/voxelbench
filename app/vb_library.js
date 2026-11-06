@@ -84,7 +84,8 @@
 
   /** What a card shows. The title is the sample's name, else the scanner's study, else the folder name (a record saved
       without a name stores its id as the name, which is not one). Porosity comes only from a saved run, through its
-      summary (VBStore.runSummary): null when the scan has no saved run. */
+      summary (VBStore.runSummary): null when the scan has no saved run, undefined while its runs are unknown (not read
+      yet, or unreadable). analyzed is then true, false or null: unknown is never shown as "not analyzed". */
   function cardFacts({ entry, record, summary }) {
     const info = entry.info || {};
     const named = record && record.name && record.name !== record.id ? record.name : null;
@@ -95,7 +96,7 @@
       voxelUm: num(info.voxelUm) ?? num(entry.voxel_um),
       kv: num(info.kv),
       porosity: summary ? num(summary.porosity) : null,
-      analyzed: Boolean(summary),
+      analyzed: summary === undefined ? null : Boolean(summary),
       starred: Boolean(record && record.starred),
       tags: record && Array.isArray(record.tags) ? [...record.tags] : [],
       missing: Boolean(entry.missing),
@@ -105,8 +106,8 @@
   const FILTERS = {
     all: () => true,
     starred: (f) => f.starred,
-    analyzed: (f) => f.analyzed,
-    unanalyzed: (f) => !f.analyzed,
+    analyzed: (f) => f.analyzed === true,
+    unanalyzed: (f) => f.analyzed === false,
     missing: (f) => f.missing,
   };
 
@@ -246,8 +247,10 @@
       parsed DataInfo.xml) and the index entry; the VOX header gives the voxel size when the record has none. Results
       are the latest saved run's: porosity, open and closed, pore count, and for each saved region its relative density
       on each of the run's relative scales (the run's own air and dense-reference grays). A whole-part relative
-      density is not computed anywhere, so it is not listed. runs ([{ at }], any order) become newest-first with a label. */
-  function overviewFacts({ entry, scanInfo, header, record, run, runs }) {
+      density is not computed anywhere, so it is not listed. runs ([{ at }], any order) become newest-first with a label.
+      run is undefined while the saved runs are being read, null when there are none; runError says they could not be
+      read. empty is what the Results box says when there are no results. */
+  function overviewFacts({ entry, scanInfo, header, record, run, runs, runError = null }) {
     const info = scanInfo || {};
     const voxelUm = num(info.voxelUm) ?? num(entry.voxel_um) ?? (header && header.voxelMm ? header.voxelMm[0] * 1000 : null);
     const dims = header ? [header.nx, header.ny, header.nz] : [entry.width, entry.height, entry.count];
@@ -280,7 +283,9 @@
       }
     }
     const history = [...(runs || [])].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).map(({ at }) => ({ at, label: localStamp(at) }));
-    return { rows, results, runs: history };
+    const empty = runError ? `Saved runs could not be read: ${runError}` : run === undefined ? 'Checking for saved runs…'
+      : run === null ? 'No saved run yet. Analyze the scan and press Save run in the studio.' : '';
+    return { rows, results, runs: history, empty };
   }
 
   /** The bytes [start, end) to read for one row of a preview plane of a VOX volume, so the preview needs a few slices'

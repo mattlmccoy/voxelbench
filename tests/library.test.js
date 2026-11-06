@@ -612,3 +612,29 @@ test('rescan: changed lists only the scans read this time (new or changed), so t
   const three = await L.rescan({ files: touched, index: two.index, now: 't3', ...opts });
   assert.deepEqual(three.changed, ['sb']);
 });
+
+// ---------- final review I3: unknown is neither analyzed nor not analyzed ----------
+test('cardFacts: analyzed is true with a saved run, false with none, and null while unknown (not read yet, or unreadable)', () => {
+  const e = { path: 'a/b', study: null, info: null };
+  assert.equal(L.cardFacts({ entry: e, record: null, summary: RUN_SUMMARY(2) }).analyzed, true);
+  assert.equal(L.cardFacts({ entry: e, record: null, summary: null }).analyzed, false);
+  const unknown = L.cardFacts({ entry: e, record: null, summary: undefined });
+  assert.equal(unknown.analyzed, null);
+  assert.equal(unknown.porosity, null);
+});
+
+test('filterScans: a scan whose saved runs are unknown is listed under All only, in neither Analyzed nor Not analyzed', () => {
+  const rows = [row('done', { summary: RUN_SUMMARY(1) }), row('none', { summary: null }), { ...row('unknown'), summary: undefined }];
+  const ids = (filter) => L.filterScans(rows, { filter }).map((r) => r.id);
+  assert.deepEqual(ids('all'), ['done', 'none', 'unknown']);
+  assert.deepEqual(ids('analyzed'), ['done']);
+  assert.deepEqual(ids('unanalyzed'), ['none']);
+});
+
+test('overviewFacts: the Results box says why it is empty: checking, unreadable, or no saved run', () => {
+  const at = (o) => L.overviewFacts({ entry, scanInfo: entry.info, header, runs: [], ...o }).empty;
+  assert.equal(at({ run: undefined }), 'Checking for saved runs…');
+  assert.equal(at({ run: null }), 'No saved run yet. Analyze the scan and press Save run in the studio.');
+  assert.equal(at({ run: undefined, runError: 'VoxelBench/runs/s1/x.json is not readable JSON' }), 'Saved runs could not be read: VoxelBench/runs/s1/x.json is not readable JSON');
+  assert.equal(at({ run }), '', 'a run fills the box');
+});
