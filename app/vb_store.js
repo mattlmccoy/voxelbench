@@ -257,7 +257,10 @@
         const have = await readSummary(folder);
         if (have && have.at === at) return have;
         const fresh = runSummary((await readRun(folder, latest)).doc, at);
-        await serial(async () => { const now = await runNames(folder); if (now[now.length - 1] === latest) await writeSummary(folder, fresh); }); // not over a newer run's
+        await serial(async () => { // not over a newer run's, and never into a library folder that has gone
+          const now = await runNames(folder).catch(() => []);
+          if (now[now.length - 1] === latest) await writeSummary(folder, fresh);
+        });
         return fresh;
       },
       async listRuns(folder) { return (await runNames(folder)).map((n) => ({ at: runTime(n) })); },

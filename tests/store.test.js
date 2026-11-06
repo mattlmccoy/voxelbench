@@ -522,3 +522,12 @@ test('library store: a summary older than the latest run is not trusted; the run
   await FS.writeText(root, `${S.LIBRARY_DIR}/runs/s1/2030-01-01T00-00-00.000Z.json`, 'not json');
   await assert.rejects(s.latestSummary('s1'), /not readable JSON/);
 });
+
+test('library store: latestSummary on an unplugged library throws and recreates nothing', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.putRun('s1', fullRun('2026-11-05T14:03:00.000Z', 2.5), []);
+  await root.removeEntry(S.LIBRARY_DIR);
+  await assert.rejects(s.latestSummary('s1'), /library drive is not available/);
+  await assert.rejects(root.getDirectoryHandle(S.LIBRARY_DIR), /could not be found/, 'nothing was recreated');
+});
