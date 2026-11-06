@@ -86,9 +86,20 @@ test('a sample counts as described by a name of its own, a material or a process
   assert.equal(C.described({ folder: 'scan_a', name: 'scan_a', material: '', process: 'SLS' }), true);
 });
 
-test('Back returns to the overview for a library scan and to the library otherwise', () => {
-  assert.deepEqual(C.backTarget('library'), { page: 'overview', label: '‹ Overview', title: "Back to this scan's overview" });
-  for (const kind of ['file', 'db', undefined]) assert.deepEqual(C.backTarget(kind), { page: 'library', label: '‹ Library', title: 'Back to the scan library' });
+test('Back returns to the overview for an open library scan and to the library otherwise', () => {
+  assert.deepEqual(C.backTarget('library', 'scan-id'), { page: 'overview', label: '‹ Overview', title: "Back to this scan's overview" });
+  const library = { page: 'library', label: '‹ Library', title: 'Back to the scan library' };
+  for (const kind of ['file', 'db', undefined]) assert.deepEqual(C.backTarget(kind, 'scan-id'), library);
+  assert.deepEqual(C.backTarget('library', null), library, 'no scan open: there is no overview to go back to');
+});
+
+test('scan info is done when the scanner record was read (kV or voxel size) or the sample is described', () => {
+  const sample = { folder: 'scan_a', name: 'scan_a', material: '', process: '' };
+  assert.equal(C.scanInfoDone({ kv: 120, voxelUm: null }, sample), true, 'kV read');
+  assert.equal(C.scanInfoDone({ kv: null, voxelUm: 40 }, sample), true, 'voxel size read');
+  assert.equal(C.scanInfoDone(null, { ...sample, material: 'PA12' }), true, 'described');
+  assert.equal(C.scanInfoDone(null, sample), false, 'neither');
+  assert.equal(C.scanInfoDone({ valueScale: 1, valueOffset: 0 }, sample), false, 'a VOX value scale alone is not a scanner record');
 });
 
 test('the top bar sums up the scan as in the mockup: kV, scan time, voxel; missing facts are left out', () => {

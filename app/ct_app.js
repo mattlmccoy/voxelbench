@@ -70,7 +70,7 @@ window.CTApp = (function () {
     const good = (state.dbState === 'connected' || state.dbState === 'library' || (state.dbState === 'file' && state.projectFile && !state.projectDirty)) && !state.unsaved.size;
     $('dbDot').className = `dot ${good ? 'live' : state.dbState === 'connecting' || state.dbState === 'file' ? 'warn' : 'err'}`;
     $('saveProject').hidden = !state.store;
-    $('saveProject').textContent = state.store && state.store.kind !== 'file' ? 'Export project' : 'Save project';
+    $('saveProject').textContent = state.store && state.store.kind !== 'file' ? 'Export project…' : 'Save project…';
   }
 
   let unwatch = [];

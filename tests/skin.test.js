@@ -119,3 +119,24 @@ test('a click on a mode picks the mode; a heading or anything outside the menu p
   assert.equal(K.menuPick(t.outside, t.menu), null);
   assert.equal(K.menuPick(null, t.menu), null);
 });
+
+test('opening one top-bar popover closes any other that is open', () => {
+  const on = () => { const l = {}; return { l, addEventListener: (n, f) => { (l[n] = l[n] || []).push(f); } }; };
+  const doc = on();
+  const make = () => {
+    const button = { ...on(), attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k] ?? null; }, focus() {} };
+    const panel = { hidden: true, contains: () => false };
+    return { button, panel, click: () => button.l.click.forEach((f) => f({ stopPropagation() {} })) };
+  };
+  const a = make(), b = make();
+  K.wirePopover({ doc, button: a.button, panel: a.panel });
+  K.wirePopover({ doc, button: b.button, panel: b.panel });
+  a.click();
+  assert.equal(a.panel.hidden, false);
+  b.click();
+  assert.equal(b.panel.hidden, false);
+  assert.equal(a.panel.hidden, true, 'the first one closed');
+  assert.equal(a.button.attrs['aria-expanded'], 'false');
+  b.click();
+  assert.equal(b.panel.hidden, true, 'a second click closes it');
+});

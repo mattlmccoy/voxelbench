@@ -49,9 +49,15 @@
     return Boolean((info.name && info.name !== info.folder) || info.material || info.process);
   }
 
-  /** Where the studio's Back goes for the active store's kind: a library scan's overview, else the library. */
-  function backTarget(storeKind) {
-    return storeKind === 'library'
+  /** Scan info is done when the scanner's record was read (its kV or voxel size) or the sample is described. */
+  function scanInfoDone(record, sample) {
+    return Boolean(record && (Number.isFinite(record.kv) || Number.isFinite(record.voxelUm))) || described(sample);
+  }
+
+  /** Where the studio's Back goes: an open library scan's overview (the store is the library and a scan is open),
+      else the library. */
+  function backTarget(storeKind, folder) {
+    return storeKind === 'library' && folder
       ? { page: 'overview', label: '‹ Overview', title: "Back to this scan's overview" }
       : { page: 'library', label: '‹ Library', title: 'Back to the scan library' };
   }
@@ -65,16 +71,6 @@
   }
 
   // ---------- drawing (browser only) ----------
-
-  /** A button that shows and hides a panel under it; outside clicks and Escape close it. Returns close(). */
-  function wireMenu(doc, button, panel) {
-    const close = () => { panel.hidden = true; button.setAttribute('aria-expanded', 'false'); };
-    button.setAttribute('aria-expanded', 'false');
-    button.addEventListener('click', (e) => { e.stopPropagation(); panel.hidden = !panel.hidden; button.setAttribute('aria-expanded', String(!panel.hidden)); });
-    doc.addEventListener('click', (e) => { if (!panel.hidden && !panel.contains(e.target)) close(); });
-    doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) { close(); button.focus(); } });
-    return close;
-  }
 
   /** Mirrors a control's disabled state onto its copy in the top bar. */
   function mirrorDisabled(source, copy) {
@@ -93,7 +89,7 @@
       if (!folder) return { scanInfo: false, leveled: false, crops: [], pores: null, regions: [], dense: 0, sheetSaved: false };
       const fit = app.calibration();
       return {
-        scanInfo: described(CT.sampleInfo(folder, state.samples)), // saved details only, as the form's "saved"
+        scanInfo: scanInfoDone(state.scanInfo, CT.sampleInfo(folder, state.samples)), // the scanner record, or saved details
         leveled: Boolean(state.orientation),
         crops: app.cropsOf(folder),
         pores: state.pores,
@@ -164,13 +160,13 @@
 
     // ---------- the top bar and the sample details ----------
     const back = $('studioBack');
-    const libraryScan = () => Boolean(state.store && state.store.kind === 'library');
+    const target = () => backTarget(state.store && state.store.kind, state.folder);
     function renderStudio() {
-      const target = backTarget(state.store && state.store.kind);
-      back.textContent = target.label; back.title = target.title;
+      const t = target();
+      back.textContent = t.label; back.title = t.title;
       $('crumbFacts').textContent = state.folder ? scanFacts(state.scanInfo, state.nativeVoxelMm, window.VBVox.duration) : '';
       // Ruling 13: a library scan's details are edited in its overview, the record the library shows.
-      const lib = libraryScan() && Boolean(state.folder);
+      const lib = t.page === 'overview';
       $('sampleForm').hidden = lib;
       $('sampleLibrary').hidden = !lib;
       if (lib) {
@@ -179,7 +175,7 @@
       }
     }
     function goBack() {
-      if (backTarget(state.store && state.store.kind).page === 'overview' && state.folder && app.openOverview) app.openOverview(state.folder);
+      if (target().page === 'overview' && app.openOverview) app.openOverview(state.folder);
       if (state.page !== 'overview') app.showPage('library'); // not a library scan, or no longer listed
     }
     back.addEventListener('click', goBack);
@@ -192,18 +188,23 @@
       mirrorDisabled($(sourceId), $(copyId));
       $(copyId).addEventListener('click', viaStep4($(sourceId)));
     }
+    const popover = (button, panel) => window.VBSkin.wirePopover({ doc, button: $(button), panel: $(panel) });
     const menu = $('tbExportMenu');
-    const closeExports = wireMenu(doc, $('tbExports'), menu);
+    const closeExports = popover('tbExports', 'tbExportMenu');
     for (const source of $('step4').querySelectorAll('.exportrow button')) {
       if (source.id === 'savePoreRun' || source.id === 'exportSheet') continue;
       const item = el('button');
       item.type = 'button'; item.setAttribute('role', 'menuitem');
-      item.append(el('span', 'skintitle', source.textContent));
+      item.textContent = source.textContent;
       mirrorDisabled(source, item);
       item.addEventListener('click', () => { closeExports(); viaStep4(source)(); });
       menu.append(item);
     }
-    wireMenu(doc, $('tbBookmarks'), $('tbBookmarkPanel'));
+    popover('tbBookmarks', 'tbBookmarkPanel');
+    // File: openers, the project and the tour. A pick closes it (a file input on its change, after the dialog).
+    const closeFile = popover('tbFile', 'tbFileMenu');
+    for (const input of $('tbFileMenu').querySelectorAll('input[type=file]')) input.addEventListener('change', closeFile);
+    for (const b of $('tbFileMenu').querySelectorAll('button')) b.addEventListener('click', closeFile);
 
     for (const name of ['loaded', 'poresChanged', 'modelChanged', 'recordsChanged', 'samplesChanged', 'changed', 'sheetSaved']) on(name, refresh);
     for (const name of ['loaded', 'recordsChanged', 'samplesChanged', 'changed', 'pageChanged']) on(name, renderStudio);
@@ -211,5 +212,5 @@
     refresh(); renderStudio();
   }
 
-  return { checklist, nowStep, MORE, described, backTarget, scanFacts, wire };
+  return { checklist, nowStep, MORE, described, scanInfoDone, backTarget, scanFacts, wire };
 }));

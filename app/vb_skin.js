@@ -77,6 +77,27 @@
 
   const current = (doc) => doc.documentElement.getAttribute('data-skin') || 'lab';
 
+  // The top bars' popovers (Appearance, Exports, Bookmarks, File): at most one is open; opening one closes the others.
+  const openPopovers = new Set();
+
+  /** A button that shows and hides the panel under it; a second click, an outside click or Escape closes it, and
+      opening it closes any other popover. onOpen runs as it opens. Returns close(). */
+  function wirePopover({ doc, button, panel, onOpen }) {
+    const close = () => { panel.hidden = true; button.setAttribute('aria-expanded', 'false'); openPopovers.delete(close); };
+    if (!button.getAttribute('aria-haspopup')) button.setAttribute('aria-haspopup', 'menu');
+    button.setAttribute('aria-expanded', 'false');
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!panel.hidden) { close(); return; }
+      for (const other of [...openPopovers]) other();
+      panel.hidden = false; button.setAttribute('aria-expanded', 'true'); openPopovers.add(close);
+      if (onOpen) onOpen();
+    });
+    doc.addEventListener('click', (e) => { if (!panel.hidden && !panel.contains(e.target)) close(); });
+    doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) { close(); button.focus(); } });
+    return close;
+  }
+
   /** The Appearance menu: one choice per look. Emits 'vbskin' on the document when the look changes. */
   function wireSettings({ doc, storage, button, menu, win = typeof window !== 'undefined' ? window : null }) {
     menu.innerHTML = `<p class="skinmenuhead">Appearance</p>${SKINS.map((s) => `<button type="button" role="menuitemradio" data-skin="${s}"><span class="skintitle">${SKIN_LABELS[s]}</span><span class="skinnote">${SKIN_NOTES[s]}</span></button>`).join('')}`
@@ -85,9 +106,7 @@
       for (const b of menu.querySelectorAll('[data-skin]')) b.setAttribute('aria-checked', String(b.dataset.skin === current(doc)));
       for (const b of menu.querySelectorAll('[data-mode]')) b.setAttribute('aria-checked', String(b.dataset.mode === pickMode(readMode(storage))));
     };
-    const close = () => { menu.hidden = true; button.setAttribute('aria-expanded', 'false'); };
-    button.setAttribute('aria-haspopup', 'menu'); button.setAttribute('aria-expanded', 'false');
-    button.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; button.setAttribute('aria-expanded', String(!menu.hidden)); show(); });
+    const close = wirePopover({ doc, button, panel: menu, onOpen: show });
     menu.addEventListener('click', (e) => {
       const pick = menuPick(e.target, menu);
       if (!pick) return;
@@ -102,8 +121,6 @@
       show(); close();
       doc.dispatchEvent(new CustomEvent('vbskin', { detail: pick.skin }));
     });
-    doc.addEventListener('click', (e) => { if (!menu.hidden && !menu.contains(e.target)) close(); });
-    doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) { close(); button.focus(); } });
     show();
   }
 
@@ -214,5 +231,5 @@
     if (b.dataset.skin) return { skin: b.dataset.skin };
     return null;
   }
-  return { SKINS, SKIN_LABELS, MODES, pickMode, resolveMode, bootMode, wireTopbarHeight, pickSkin, stepDone, nextFor, clampRailWidth, openOnly, boot, wireSettings, wireSections, wireRailResize, wireBackdrop, menuPick };
+  return { SKINS, SKIN_LABELS, MODES, pickMode, resolveMode, bootMode, wireTopbarHeight, pickSkin, stepDone, nextFor, clampRailWidth, openOnly, boot, wireSettings, wirePopover, wireSections, wireRailResize, wireBackdrop, menuPick };
 }));
