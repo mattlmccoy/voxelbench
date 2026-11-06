@@ -333,3 +333,86 @@ test('rescanner: a scans.json changed on the drive since it was read is refused'
   await same.r.run({ name: 'A' }, mine);
   assert.equal(same.writes.length, 1, 'the index this page read (or last wrote) is replaced as before');
 });
+
+// ---------- scan overview ----------
+const entry = { id: 's1', path: 'a/b', kind: 'vox', width: 3, height: 2, count: 2, voxel_um: 12.5, info: { scannedAt: '2026-10-20T14:30:05', kv: 80, ua: 220, scanSeconds: 256, voxelUm: 12.5 } };
+const header = { nx: 3, ny: 2, nz: 2, voxelMm: [0.0125, 0.0125, 0.0125], dataStart: 100, littleEndian: true };
+const asMap = (pairs) => Object.fromEntries(pairs);
+
+test('overviewFacts: no run lists the scanner record and no results, and nothing is invented', () => {
+  const f = L.overviewFacts({ entry, scanInfo: entry.info, header, run: null, runs: [] });
+  const rows = asMap(f.rows);
+  assert.equal(rows['Scanned'], '2026-10-20 14:30');
+  assert.equal(rows['Tube'], '80 kV, 220 µA');
+  assert.equal(rows['Scan time'], '4 min 16 s');
+  assert.equal(rows['Voxel'], '12.5 µm');
+  assert.equal(rows['Size'], '3 × 2 × 2 voxels');
+  assert.equal(rows['Format'], 'VOX');
+  assert.equal(rows['Leveled'], 'not recorded', 'without a run there is no record of leveling');
+  assert.deepEqual(f.results, []);
+  assert.deepEqual(f.runs, []);
+});
+
+test('overviewFacts: a missing scanner record shows "not recorded", never a guess', () => {
+  const bare = { id: 's2', path: 'x', kind: 'tiff', width: 5, height: 4, count: 3, voxel_um: null, info: null };
+  const rows = asMap(L.overviewFacts({ entry: bare, scanInfo: null, header: null, run: null, runs: [] }).rows);
+  for (const k of ['Scanned', 'Tube', 'Scan time', 'Voxel']) assert.equal(rows[k], 'not recorded', k);
+  assert.equal(rows['Size'], '5 × 4 × 3 voxels');
+  assert.equal(rows['Format'], 'TIFF stack');
+});
+
+const run = {
+  created_at: '2026-11-05T10:00:00.000Z', leveled: null,
+  summary: { all_void_percent_of_body: 3.456, pore_count: 120 },
+  open_closed: { open_percent: 1.2, closed_percent: 2.256 },
+  labels: [{ id: 'region_a', label: 'Core' }],
+  relative_scale: [{ material: 'm1', airGray: 100, denseGray: 300 }],
+  regions: [{ id: 'r1', label: 'region_a', note: '', stats: { gray_mean: 250 } }, { id: 'r2', label: 'zz_gone', note: 'edge', stats: { gray_mean: 200 } }],
+};
+
+test('overviewFacts: results come from the latest run, relative densities from its scales and regions', () => {
+  const f = L.overviewFacts({ entry, scanInfo: entry.info, header, run, runs: [{ at: '2026-11-04T09:00:00.000Z' }, { at: '2026-11-05T10:00:00.000Z' }] });
+  const res = asMap(f.results);
+  assert.equal(res['Porosity'], '3.46 %');
+  assert.equal(res['Open'], '1.20 %');
+  assert.equal(res['Closed'], '2.26 %');
+  assert.equal(res['Pores'], '120');
+  assert.equal(res['Core, relative to m1 dense'], '0.75');
+  assert.equal(res['zz_gone (edge), relative to m1 dense'], '0.50', 'a deleted label shows its id');
+  assert.equal(f.results.filter(([k]) => /whole|part/i.test(k)).length, 0, 'no whole-part relative density');
+  assert.equal(asMap(f.rows)['Leveled'], 'no');
+  assert.deepEqual(f.runs.map((r) => r.at), ['2026-11-05T10:00:00.000Z', '2026-11-04T09:00:00.000Z'], 'newest first');
+  assert.equal(f.runs[0].label, '2026-11-05 10:00');
+});
+
+test('overviewFacts: a run without dense references lists no relative densities; one without open/closed says so', () => {
+  const plain = { ...run, relative_scale: [], open_closed: null, leveled: { angles_deg: [1, 2, 3] } };
+  const f = L.overviewFacts({ entry, scanInfo: entry.info, header, run: plain, runs: [{ at: plain.created_at }] });
+  const res = asMap(f.results);
+  assert.equal(f.results.some(([k]) => /relative/.test(k)), false);
+  assert.equal(res['Open'], 'not recorded');
+  assert.equal(res['Closed'], 'not recorded');
+  assert.equal(asMap(f.rows)['Leveled'], 'yes');
+});
+
+test('overviewFacts: a run with no porosity says not recorded', () => {
+  const f = L.overviewFacts({ entry, scanInfo: entry.info, header, run: { created_at: 'x', summary: {} }, runs: [] });
+  assert.equal(asMap(f.results)['Porosity'], 'not recorded');
+});
+
+test('voxRowRange: XZ rows are one contiguous x-run; YZ rows span the slice from the first to the last y at that x', () => {
+  const h = header; // slice = 2 * 3 * 2 = 12 bytes; a row of x = 6 bytes
+  assert.deepEqual(L.voxRowRange(h, 'XY', 0, 0), [100, 112]);
+  assert.deepEqual(L.voxRowRange(h, 'XY', 1, 0), [112, 124]);
+  // XZ at y = index, row = z
+  assert.deepEqual(L.voxRowRange(h, 'XZ', 0, 0), [100, 106]);
+  assert.deepEqual(L.voxRowRange(h, 'XZ', 1, 0), [106, 112]);
+  assert.deepEqual(L.voxRowRange(h, 'XZ', 1, 1), [118, 124]);
+  // YZ at x = index, row = z: voxel (x, y=0) .. (x, y=ny-1) in slice z
+  assert.deepEqual(L.voxRowRange(h, 'YZ', 0, 0), [100, 108]);
+  assert.deepEqual(L.voxRowRange(h, 'YZ', 2, 1), [100 + 12 + 4, 100 + 12 + 2 * (3 + 2 + 1)]);
+  assert.throws(() => L.voxRowRange(h, 'XZ', 2, 0), /outside/);
+  assert.throws(() => L.voxRowRange(h, 'YZ', 3, 0), /outside/);
+  assert.throws(() => L.voxRowRange(h, 'XZ', 0, 2), /outside/);
+  assert.throws(() => L.voxRowRange(h, 'AB', 0, 0), /plane/);
+});

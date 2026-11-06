@@ -460,6 +460,30 @@ html:is([data-skin="mac"], [data-skin="glass"]) .rail .stepbar button { position
   html[data-skin="lab"] .stepbar, html[data-skin="lab"] .rail .steps, html[data-skin="lab"] .legend { grid-column: 1; grid-row: auto; }
 }
 
+/* ---------- The scan overview (vb_overview.js), between the library and the studio. ---------- */
+.overview[hidden] { display: none !important; }
+.overview { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); position: relative; z-index: 1; min-width: 0; }
+.ovmain { overflow: auto; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); display: grid; align-content: start; gap: 12px; min-width: 0; }
+.ovmain > p { margin: 0; }
+.overview .link { all: unset; box-sizing: border-box; cursor: pointer; }
+.overview .link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.overview .ovstar { font-size: 20px; line-height: 1; padding: 2px 6px; color: var(--muted); }
+.overview .ovstar[aria-pressed="true"] { color: var(--accent); }
+.ovpreviews { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 12px; }
+.ovpreviews figure { margin: 0; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.ovpreviews canvas { width: 100%; max-height: 360px; object-fit: contain; background: var(--image-bg); border: 1px solid var(--line); border-radius: var(--radius); }
+.ovpreviews figcaption, .ovnote { font-size: 12px; color: var(--muted); margin: 0; }
+.ovcols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px; align-items: start; }
+.ovcard { display: grid; gap: 8px; padding: 12px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.ovcard h2 { margin: 0; font: 600 13px var(--font-ui); color: var(--fg-strong); }
+.ovcard h3 { margin: 4px 0 0; font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ovruns { margin: 0; padding-left: 18px; }
+.overview .sub { border: 1px solid var(--line); border-radius: var(--radius); }
+.overview .sub > summary { font: 500 12px var(--font-ui); padding: 6px 8px; color: var(--fg); cursor: pointer; }
+.overview .sub > div { padding: 2px 8px 8px; display: grid; gap: 8px; }
+html[data-skin="mac"] .ovcard { background: var(--card); border: 0; border-radius: 12px; box-shadow: var(--card-shadow); }
+@media (max-width: 900px) { .overview { height: auto; } .ovmain { overflow: visible; } }
+
 /* ---------- The library (vb_libraryview.js), the first screen: a bar, filters on the side, scan cards. ---------- */
 .library[hidden], .studio[hidden] { display: none !important; }
 .library { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); position: relative; z-index: 1; min-width: 0; }
@@ -639,6 +663,58 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
       </section>
     </main>
   </div>
+</div>
+
+<div class="overview" id="overviewPage" hidden>
+  <header class="libbar">
+    <span class="wordmark" aria-label="VoxelBench"><span class="cap">V</span>OXEL<span class="cap">B</span>ENCH</span>
+    <button id="ovBack" title="Back to the scan library">Library</button>
+    <span class="libroot" id="ovTitle"></span>
+    <button id="ovStar" class="link ovstar" type="button" aria-pressed="false">☆</button>
+    <button id="ovAnalyze" class="primary" title="Opens this scan in the studio; nothing is loaded before this">Analyze</button>
+  </header>
+  <main class="ovmain">
+    <p class="mono muted" id="ovPath"></p>
+    <p class="notice" id="ovMissing" hidden>This scan was not found at the last Rescan. Its records are kept; press Rescan in the library when the drive is back.</p>
+    <p class="libstatus mono" id="ovStatus" role="status"></p>
+    <section class="ovpreviews" id="ovPreviews" aria-label="Middle slices"></section>
+    <div class="ovcols">
+      <section class="ovcard">
+        <h2>Scan</h2>
+        <div class="kv mono" id="ovFacts"></div>
+      </section>
+      <section class="ovcard">
+        <h2>Latest saved run</h2>
+        <div class="kv mono" id="ovResults"></div>
+        <h3 id="ovRunsHead" hidden>All runs</h3>
+        <ul class="ovruns mono" id="ovRuns"></ul>
+      </section>
+      <section class="ovcard">
+        <h2>Sample details</h2>
+        <div class="sampleform" id="ovForm">
+          <label>Name <input type="text" id="ovName" autocomplete="off"></label>
+          <label>Material <input type="text" id="ovMaterial" autocomplete="off"></label>
+          <label>Process <input type="text" id="ovProcess" autocomplete="off"></label>
+          <label>Project <input type="text" id="ovProject" autocomplete="off"></label>
+          <label>Tags <input type="text" id="ovTags" placeholder="comma separated" autocomplete="off"></label>
+          <label>Notes <input type="text" id="ovNotes" autocomplete="off"></label>
+          <div class="row"><button id="ovSave">Save sample details</button><span class="mono muted" id="ovSaveState"></span></div>
+        </div>
+        <details class="sub">
+          <summary>Archimedes density (optional)</summary>
+          <div>
+            <div class="row">
+              <label>Measured <input type="text" inputmode="decimal" id="archDensity" placeholder="g/cm³" style="width:64px" autocomplete="off"></label>
+              <label>Solid <input type="text" inputmode="decimal" id="archSolid" placeholder="g/cm³" style="width:64px" autocomplete="off"></label>
+              <select id="archMethod"><option value="sealed">sealed (bulk)</option><option value="unsealed">unsealed (apparent)</option></select>
+              <button id="archSave" disabled>Save</button>
+            </div>
+            <p class="hint" id="archHint">Archimedes porosity is 1 − measured/solid density. A sealed sample keeps water out of every pore, so it compares with CT total porosity; an unsealed one lets water into the open pores, so it compares with CT closed porosity. Solid density: the fully dense material (for PA12 about 1.01 g/cm³; use your material's datasheet).</p>
+          </div>
+        </details>
+      </section>
+    </div>
+  </main>
 </div>
 
 <div class="studio" id="studio" hidden>
@@ -917,18 +993,6 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
             <label>Notes <input type="text" id="sampleNotes" autocomplete="off"></label>
             <div class="row"><button id="saveSample" disabled>Save sample details</button><span class="mono muted" id="sampleState"></span></div>
           </div>
-          <details class="sub">
-            <summary>Archimedes density (optional)</summary>
-            <div>
-              <div class="row">
-                <label>Measured <input type="text" inputmode="decimal" id="archDensity" placeholder="g/cm³" style="width:64px" autocomplete="off"></label>
-                <label>Solid <input type="text" inputmode="decimal" id="archSolid" placeholder="g/cm³" style="width:64px" autocomplete="off"></label>
-                <select id="archMethod"><option value="sealed">sealed (bulk)</option><option value="unsealed">unsealed (apparent)</option></select>
-                <button id="archSave" disabled>Save</button>
-              </div>
-              <p class="hint" id="archHint">Archimedes porosity is 1 − measured/solid density. A sealed sample keeps water out of every pore, so it compares with CT total porosity; an unsealed one lets water into the open pores, so it compares with CT closed porosity. Solid density: the fully dense material (for PA12 about 1.01 g/cm³; use your material's datasheet).</p>
-            </div>
-          </details>
           <details class="sub" id="orientBox">
             <summary>Orientation <span class="mono muted" id="orientState">scan axes</span></summary>
             <div>
@@ -1028,6 +1092,7 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
 <script src="vb_bookmarks.js"></script>
 <script src="vb_batch.js"></script>
 <script src="vb_libraryview.js"></script>
+<script src="vb_overview.js"></script>
 <script src="vb_archimedes.js"></script>
 <script src="vb_orientrail.js"></script>
 <script src="ct_sheet.js"></script>

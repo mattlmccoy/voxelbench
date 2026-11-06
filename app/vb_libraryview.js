@@ -310,7 +310,7 @@
     }
   }
 
-  window.VBLibraryView = { thumbImage, wrap, rescan, openLibraryDir, openScan, saveScanRecord };
+  window.VBLibraryView = { thumbImage, wrap, rescan, openLibraryDir, openScan, saveScanRecord, stackFor };
   App.openLibrary = () => (supported ? pick() : undefined);
   App.openLibraryDir = openLibraryDir;
   App.rescanLibrary = rescan;
@@ -357,7 +357,7 @@
     const thumb = el('button', 'link libthumb');
     thumb.type = 'button'; thumb.disabled = f.missing; thumb.setAttribute('aria-label', `Open ${f.title}`);
     if (lib.thumbs.has(r.id)) { const img = el('img'); img.src = lib.thumbs.get(r.id); img.alt = ''; thumb.append(img); } else thumb.append(el('span', 'muted', f.missing ? 'Missing' : 'No preview yet'));
-    thumb.addEventListener('click', () => openScan(r.id));
+    thumb.addEventListener('click', () => App.openOverview(r.id));
     const head = el('div', 'libcardhead');
     const title = el('b', 'libtitle', f.title);
     title.title = r.entry.path + (r.entry.copies ? `\nAlso at: ${r.entry.copies.join(', ')}` : '');

@@ -5,6 +5,11 @@
   const CT = window.CT, P = window.CTPores, K = window.VBConnectivity;
   const { state, $, on } = App;
   let hint = null; // the explanation, put back after an input error is fixed
+  // On the scan overview the form acts on the overview's scan (its record in the library); in the studio, on the open scan.
+  const overview = () => (state.page === 'overview' && App.overview ? App.overview : null);
+  const targetId = () => (overview() ? overview().id() : state.folder);
+  const targetRecord = () => (overview() ? overview().record() : state.folder ? App.sampleNow() : null);
+  const saveTarget = (changes) => (overview() ? overview().save(changes) : App.saveSample(changes));
   const num = (id) => { const t = $(id).value.trim(); return t === '' ? null : Number(t); };
 
   /** The comparison for the open sample, or null without a measurement or segmentation. */
@@ -18,8 +23,8 @@
   }
 
   function renderForm() {
-    const arch = state.folder ? App.sampleNow().archimedes : null;
-    $('archSave').disabled = !state.folder;
+    const rec = targetRecord(), arch = rec ? rec.archimedes || null : null;
+    $('archSave').disabled = !targetId();
     if (document.activeElement !== $('archDensity')) $('archDensity').value = arch ? arch.density_g_cm3 : '';
     if (document.activeElement !== $('archSolid')) $('archSolid').value = arch ? arch.solid_g_cm3 : '';
     $('archMethod').value = arch ? arch.method : 'sealed';
@@ -35,14 +40,14 @@
 
   function save() {
     const density = num('archDensity'), solid = num('archSolid');
-    if (density === null && solid === null) { App.saveSample({ archimedes: null }); return; }
+    if (density === null && solid === null) { saveTarget({ archimedes: null }); return; }
     if (!(density > 0) || !(solid > 0)) { $('archHint').textContent = 'Enter both densities in g/cm³ (numbers above 0), or clear both to remove the measurement.'; return; }
     if (hint !== null) $('archHint').textContent = hint;
-    App.saveSample({ archimedes: { density_g_cm3: density, solid_g_cm3: solid, method: $('archMethod').value, saved_at: new Date().toISOString() } });
+    saveTarget({ archimedes: { density_g_cm3: density, solid_g_cm3: solid, method: $('archMethod').value, saved_at: new Date().toISOString() } });
   }
 
   on('start', () => { hint = $('archHint').textContent; $('archSave').addEventListener('click', save); });
-  for (const e of ['loaded', 'recordsChanged']) on(e, () => { renderForm(); renderLine(); });
+  for (const e of ['loaded', 'recordsChanged', 'overviewChanged', 'pageChanged']) on(e, () => { renderForm(); renderLine(); });
   on('poresChanged', renderLine);
   App.archimedesNow = archimedesNow;
 }(window.CTApp));
