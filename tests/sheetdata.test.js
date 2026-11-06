@@ -82,3 +82,15 @@ test('extents give box lengths, a circle cut only on the facing axis, and princi
   const p = D.extents(t, { nx: 80, ny: 80, nz: 30 }, 1.0, null).principal_mm;
   assert.ok(p[0] > 1.5 * p[1], `principal ${p}`);
 });
+
+test('methods line names where the voxel size and scan settings came from', () => {
+  const VX = require('../app/vb_vox.js');
+  const m = (o) => D.methodsSourceLine({ voxelMm: 0.0123, binFactor: 1, scanInfo: null, kind: 'tiff', settingsText: VX.settingsText, ...o });
+  assert.equal(m({}), 'Voxel 12.30 µm (TIFF tag). Acquisition parameters not recorded.');
+  assert.equal(m({ binFactor: 2 }), 'Voxel 12.30 µm (2× the TIFF tag, binned). Acquisition parameters not recorded.');
+  const info = { kv: 80, ua: 220, scanSeconds: 256 };
+  assert.equal(m({ kind: 'vox', scanInfo: info }), 'Voxel 12.30 µm (from the scan file). Scanned at 80 kV, 220 µA, 4 min 16 s scan.');
+  assert.equal(m({ kind: 'vox' }), 'Voxel 12.30 µm (from the scan file). Acquisition parameters not recorded.');
+  assert.equal(m({ kind: 'vox', binFactor: 2 }), 'Voxel 12.30 µm (2× the scan file spacing, binned). Acquisition parameters not recorded.');
+  assert.match(m({ scanInfo: info }), /^Voxel 12\.30 µm \(TIFF tag\)\. Scanned at 80 kV/);
+});

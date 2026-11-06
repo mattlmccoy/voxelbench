@@ -987,13 +987,13 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
         <div class="body">
           <p class="hint">Outline each reference phantom where it is solid and enter its measured density. VoxelBench fits density to the median gray of each phantom, and to air if included. The result is the equivalent density of the phantom material: doped or filled material does not read its true density. Crop the phantoms out of the sample in step 1 if they are as dense as the part; calibration reads them either way. Scan protocol: docs/PHANTOM_PROTOCOL.md in the repository.</p>
           <div class="row">
-            <label>Name <input type="text" id="phantomName" list="phantomMaterials" placeholder="e.g. resin holder" autocomplete="off" style="width:110px"></label><datalist id="phantomMaterials"></datalist>
+            <label>Name <input type="text" id="phantomName" list="phantomMaterials" placeholder="material name" autocomplete="off" style="width:110px"></label><datalist id="phantomMaterials"></datalist>
             <label>g/cm³ <input type="number" id="phantomDensity" step="0.001" min="0" style="width:72px"></label>
             <button id="drawPhantom" disabled>Draw phantom</button>
           </div>
-          <p class="hint">No phantoms? A relative scale needs only air and the part's own fully dense material: 0 = air, 1 = dense. Outline glossy, pore-free material once per material (natural, doped); every gray then also reads as a fraction of dense, in this scan's own units, whatever the scan settings.</p>
+          <p class="hint">No phantoms? A relative scale needs only air and the part's own fully dense material: 0 = air, 1 = dense. Outline glossy, pore-free material once per material; every gray then also reads as a fraction of dense, in this scan's own units, whatever the scan settings.</p>
           <div class="row">
-            <label>Dense material <input type="text" id="denseMaterial" list="denseMaterials" placeholder="natural or doped" autocomplete="off" style="width:110px"></label><datalist id="denseMaterials"><option value="natural"></option><option value="doped"></option></datalist>
+            <label>Dense material <input type="text" id="denseMaterial" list="denseMaterials" placeholder="material name" autocomplete="off" style="width:110px"></label><datalist id="denseMaterials"></datalist>
             <button id="drawDense" disabled>Outline dense material</button>
           </div>
           <p class="mono" id="relNote"></p>
@@ -1078,7 +1078,7 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
           </div>
           <div class="sampleform" id="sampleForm">
             <label>Name <input type="text" id="sampleName" autocomplete="off"></label>
-            <label>Material <input type="text" id="sampleMaterial" placeholder="e.g. PA12" autocomplete="off"></label>
+            <label>Material <input type="text" id="sampleMaterial" placeholder="material name" autocomplete="off"></label>
             <label>Process <input type="text" id="sampleProcess" placeholder="e.g. SLS, as printed" autocomplete="off"></label>
             <label>Notes <input type="text" id="sampleNotes" autocomplete="off"></label>
             <div class="row"><button id="saveSample" disabled>Save sample details</button><span class="mono muted" id="sampleState"></span></div>
@@ -1093,7 +1093,7 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
             <select id="archMethod"><option value="sealed">sealed (bulk)</option><option value="unsealed">unsealed (apparent)</option></select>
             <button id="archSave" disabled>Save</button>
           </div>
-          <p class="hint" id="archHint">Archimedes porosity is 1 − measured/solid density. A sealed sample keeps water out of every pore, so it compares with CT total porosity; an unsealed one lets water into the open pores, so it compares with CT closed porosity. Solid density: the fully dense material (for PA12 about 1.01 g/cm³; use your material's datasheet).</p>
+          <p class="hint" id="archHint">Archimedes porosity is 1 − measured/solid density. A sealed sample keeps water out of every pore, so it compares with CT total porosity; an unsealed one lets water into the open pores, so it compares with CT closed porosity. Solid density: the fully dense material (see the material's datasheet).</p>
         </div>
       </details>
           </div>

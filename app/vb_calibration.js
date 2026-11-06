@@ -70,12 +70,19 @@
     return (d ? ` ≈ ${g3(d)} eq.` : ' uncalibrated') + relative.map((s) => ` · ${relativeDensity(s, gray).toFixed(2)} of ${s.material} dense`).join('');
   }
 
-  /** The phantom materials used in a project, most recent first, with the density last entered for each, so a lab
-      reference such as the printed holder is typed once and offered again. */
+  /** The phantom materials used in a project, most recent first, with the density last entered for each, so a reference
+      material is typed once and offered again. */
   function knownMaterials(regions) {
     const latest = new Map();
     for (const r of [...regions].filter((x) => x.phantom).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))) latest.set(r.phantom.name, { at: r.created_at, density: r.phantom.density_g_cm3 });
     return [...latest].sort((a, b) => String(b[1].at).localeCompare(String(a[1].at))).map(([name, v]) => ({ name, density_g_cm3: v.density }));
+  }
+
+  /** The dense-reference materials used in a project, most recent first; none until one has been outlined. */
+  function knownDenseMaterials(regions) {
+    const latest = new Map();
+    for (const r of [...regions].filter((x) => x.dense && x.dense.material).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))) latest.set(r.dense.material, r.created_at);
+    return [...latest].sort((a, b) => String(b[1]).localeCompare(String(a[1]))).map(([material]) => material);
   }
 
   /** What a calibration gives for the open scan: the solid matrix at its mean gray, the bulk with the pores (air in
@@ -93,5 +100,5 @@
     return { rows, todo: null };
   }
 
-  return { AIR_DENSITY, calibrationPoints, fitCalibration, applyCalibration, relativeDensity, relativeScale, grayReadout, knownMaterials, calibrationResults };
+  return { AIR_DENSITY, calibrationPoints, fitCalibration, applyCalibration, relativeDensity, relativeScale, grayReadout, knownMaterials, knownDenseMaterials, calibrationResults };
 }));

@@ -59,7 +59,7 @@
     const x = S.MARGIN + 3.7;
     S.heading(ctx, x, y, 'Methods');
     const st = state.settings;
-    [`Voxel ${(1000 * state.voxelMm).toFixed(2)} µm (${state.binFactor > 1 ? `${state.binFactor}× the TIFF tag, binned` : 'TIFF tag'}). Acquisition parameters not recorded.`, (() => { const c = App.calibration(); return c && c.ok ? `Equivalent density: ${c.intercept.toFixed(4)} + ${c.slope.toExponential(3)} × gray, ${c.n} points${c.r2 === null ? '' : `, R² ${c.r2.toFixed(3)}`}; not true density for doped or filled material.` : 'Gray values uncalibrated; no reference phantoms.'; })(),
+    [D.methodsSourceLine({ voxelMm: state.voxelMm, binFactor: state.binFactor, scanInfo: state.scanInfo, kind: state.stack && state.stack.kind, settingsText: window.VBVox.settingsText }), (() => { const c = App.calibration(); return c && c.ok ? `Equivalent density: ${c.intercept.toFixed(4)} + ${c.slope.toExponential(3)} × gray, ${c.n} points${c.r2 === null ? '' : `, R² ${c.r2.toFixed(3)}`}; not true density for doped or filled material.` : 'Gray values uncalibrated; no reference phantoms.'; })(),
       `Sample mask: gray > ${st.bodyThreshold}; crop: ${crops.map((c) => `${c.plane} polygon`).join(', ') || 'none'}.`, `Pores: gray < ${st.poreThreshold}, σ = ${st.fineSigma} voxel, min. ${st.minVolumeMm3} mm³.`,
       `AR > ${st.maxElongation} classed as elongated. Rejected on review: ${state.rejected.size}.`, '*Gray < 0.8 of matrix (air = 0); not porosity.', `Generated in VoxelBench ${window.VB_VERSION}.`]
       .forEach((l, k) => G.text(ctx, x, y + 0.42 + k * 0.17, l, { size: 8, weight: 'normal' }));

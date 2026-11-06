@@ -53,9 +53,9 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
   (a Vox1999a header, then 16-bit voxels; the TIFF copy beside it is not listed twice) and DataInfo.xml, so Scan
   information, the review sheet and every saved run state the kV, current and scan time the gray values depend on.
   Comparing runs scanned differently says so.
-- Relative density in every scan without phantoms (step 5): outline fully dense material once per material
-  (natural, doped); with air it sets a scale, 0 = air, 1 = dense, shown in the status bar, region cards and step 3.
-  Phantom materials used before (for example the printed holder) are offered again with their density.
+- Relative density in every scan without phantoms (step 5): outline fully dense material once per material;
+  with air it sets a scale, 0 = air, 1 = dense, shown in the status bar, region cards and step 3.
+  Phantom materials used before are offered again with their density.
 - The sample envelope is closed with a ball (Segmentation parameters > Mask closing shape), so open porosity does not
   change with the part's angle in the scanner. Runs saved before 2026-11-05 used a box and keep it when reopened.
 - Dragonfly 3D cross-check in the page (step 4): download the kit, load Dragonfly's pore mask, read Dice and the

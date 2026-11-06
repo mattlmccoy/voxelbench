@@ -56,3 +56,14 @@ test('checkHistory finds a banned string added in an earlier commit', () => {
   assert.equal(found[0].text, BANNED_TEXT[4]);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('no lab vocabulary in the tool or its README', () => {
+  const LAB = ['natural or doped', '(natural, doped)', 'resin holder', 'printed holder', 'PA12'];
+  const bad = [];
+  for (const f of files().filter((x) => x === 'README.md' || x.startsWith('app/'))) {
+    if (!/\.(js|html|css|md)$/.test(f)) continue;
+    const text = fs.readFileSync(path.join(ROOT, f), 'utf8');
+    for (const s of LAB) if (text.includes(s)) bad.push(`${f}: ${s}`);
+  }
+  assert.deepEqual(bad, []);
+});

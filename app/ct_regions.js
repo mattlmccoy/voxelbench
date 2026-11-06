@@ -46,7 +46,7 @@
     if (label === PHANTOM.id && !(phantom && String(phantom.name || '').trim() && Number.isFinite(phantom.density_g_cm3) && phantom.density_g_cm3 > 0)) {
       throw new Error('A phantom needs a name and a measured density above 0 g/cm³.');
     }
-    if (label === DENSE.id && !(dense && String(dense.material || '').trim())) throw new Error('A dense reference needs its material (for example natural or doped).');
+    if (label === DENSE.id && !(dense && String(dense.material || '').trim())) throw new Error('A dense reference needs its material.');
     if (points.length < 3) throw new Error('An outline needs at least 3 points.');
     const depth = CT.planeShape(plane, dims).depth;
     const from = Math.max(0, Math.min(sliceFrom, sliceTo));

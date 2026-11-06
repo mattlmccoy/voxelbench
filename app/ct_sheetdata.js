@@ -146,5 +146,13 @@
     return out;
   }
 
-  return { SIZE_EDGES_MM, columnPorosity, axialProfile, sliceAreaFilter, extents, sizeBins, sizeDistribution, magmaR, niceTicks };
+  /** The Methods line on the review sheet: where the voxel size came from (the VOX header or the TIFF resolution tag) and
+      the scanner settings when a DataInfo record was read. settingsText formats the record (VBVox.settingsText). */
+  function methodsSourceLine({ voxelMm, binFactor, scanInfo, kind, settingsText }) {
+    const source = kind === 'vox' ? 'the scan file spacing' : 'the TIFF tag';
+    const how = binFactor > 1 ? `${binFactor}× ${source}, binned` : (kind === 'vox' ? 'from the scan file' : 'TIFF tag');
+    return `Voxel ${(1000 * voxelMm).toFixed(2)} µm (${how}). ${scanInfo ? `Scanned at ${settingsText(scanInfo)}.` : 'Acquisition parameters not recorded.'}`;
+  }
+
+  return { methodsSourceLine, SIZE_EDGES_MM, columnPorosity, axialProfile, sliceAreaFilter, extents, sizeBins, sizeDistribution, magmaR, niceTicks };
 }));

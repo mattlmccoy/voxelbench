@@ -124,3 +124,15 @@ test('phantom materials used before are offered again with their density (the ho
   ];
   assert.deepEqual(C.knownMaterials(regions), [{ name: 'clear resin holder', density_g_cm3: 1.185 }, { name: 'PA12 rod', density_g_cm3: 1.01 }]);
 });
+
+test('dense materials used before are offered, most recent first; none by default', () => {
+  assert.deepEqual(C.knownDenseMaterials([]), []);
+  const regions = [
+    { label: 'dense', dense: { material: 'alpha' }, created_at: '2026-11-04T10:00' },
+    { label: 'dense', dense: { material: 'beta' }, created_at: '2026-11-05T10:00' },
+    { label: 'dense', dense: { material: 'alpha' }, created_at: '2026-11-06T10:00' },
+    { label: 'phantom', phantom: { name: 'rod', density_g_cm3: 1 }, created_at: '2026-11-07T10:00' },
+    { label: 'region_a', created_at: '2026-11-08T10:00' },
+  ];
+  assert.deepEqual(C.knownDenseMaterials(regions), ['alpha', 'beta']);
+});

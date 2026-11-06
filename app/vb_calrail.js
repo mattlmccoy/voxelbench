@@ -21,7 +21,7 @@
 
   function startDense() {
     const material = $('denseMaterial').value.trim();
-    if (!material) { $('calNote').textContent = 'Enter the dense material first (for example natural or doped).'; return; }
+    if (!material) { $('calNote').textContent = 'Enter the dense material first.'; return; }
     state.denseDraft = { material };
     $('calNote').textContent = `Outline fully dense ${material} material on a slice where it is glossy and pore-free, set its slice range, then Save.`;
     emit('startDrawing', 'dense');
@@ -29,10 +29,14 @@
 
   /** Phantom materials used before in this project fill the name list; picking one fills its density. */
   function renderMaterials() {
-    const known = Cal.knownMaterials([...state.regions.values(), ...[...state.unsaved.values()].filter((r) => r._collection === 'regions')]);
+    const regions = [...state.regions.values(), ...[...state.unsaved.values()].filter((r) => r._collection === 'regions')];
+    const known = Cal.knownMaterials(regions);
     const list = $('phantomMaterials');
     list.textContent = '';
     for (const m of known) { const o = document.createElement('option'); o.value = m.name; o.label = `${m.density_g_cm3} g/cm³`; list.append(o); }
+    const dense = $('denseMaterials');
+    dense.textContent = '';
+    for (const m of Cal.knownDenseMaterials(regions)) { const o = document.createElement('option'); o.value = m; dense.append(o); }
     return known;
   }
 
