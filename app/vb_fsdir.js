@@ -20,12 +20,39 @@
       and .DS_Store that macOS writes on an exFAT drive. Every listing of the library and the scan walk skips them. */
   const isHidden = (name) => String(name).startsWith('.');
 
-  /** Every file under dir as { path, file }; dot-files, dot-folders and the VoxelBench folder are skipped. */
-  async function* walk(dir, prefix = '') {
-    for await (const h of dir.values()) {
-      if (isHidden(h.name) || (h.kind === 'directory' && h.name === LIBRARY_FOLDER)) continue;
-      if (h.kind === 'file') yield { path: prefix + h.name, file: await h.getFile() };
-      else yield* walk(h, `${prefix}${h.name}/`);
+  async function entriesOf(dir) {
+    const out = [];
+    for await (const h of dir.values()) out.push(h);
+    return out;
+  }
+  async function holdsFile(dir, name) {
+    try { await dir.getFileHandle(name); return true; } catch (e) { return false; }
+  }
+
+  /** Every file under dir as { path, file }. Dot-files and dot-folders are skipped, and so is dir's own VoxelBench
+      folder (the library's data). A VoxelBench folder deeper down that holds library.json is another library: it is
+      reported to report.nested(path) and not listed; one without library.json is an ordinary folder. A folder that
+      cannot be listed is reported to report.unreadable(path, error) and skipped (without that report the walk stops).
+      Each folder is listed whole before its files are handed on, so a skipped folder hands on none of them. */
+  async function* walk(dir, prefix = '', report = {}) {
+    yield* walkEntries(await entriesOf(dir), prefix, report, true);
+  }
+  async function* walkEntries(entries, prefix, report, top) {
+    for (const h of entries) {
+      if (isHidden(h.name)) continue;
+      if (h.kind === 'file') { yield { path: prefix + h.name, file: await h.getFile() }; continue; }
+      const path = prefix + h.name;
+      if (h.name === LIBRARY_FOLDER && (top || await holdsFile(h, 'library.json'))) {
+        if (!top && report.nested) report.nested(path);
+        continue;
+      }
+      let inner;
+      try { inner = await entriesOf(h); } catch (e) {
+        if (!report.unreadable) throw e;
+        report.unreadable(path, e);
+        continue;
+      }
+      yield* walkEntries(inner, `${path}/`, report, false);
     }
   }
 

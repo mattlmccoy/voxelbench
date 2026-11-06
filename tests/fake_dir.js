@@ -15,7 +15,9 @@ function makeFakeDir(name = 'root', shared = { failNextWrite: false, aborts: 0 }
     kind: 'directory',
     name,
     shared, // failNextWrite: the next write() throws; aborts: how many writables were aborted
+    unreadable: false, // true: listing this folder fails, as a folder the browser may not read does
     async *values() {
+      if (dir.unreadable) { const err = new Error(`The requested file could not be read: ${name}`); err.name = 'NotReadableError'; throw err; }
       for (const [n, e] of entries) yield e.kind === 'file' ? fileHandle(n, e) : e.dir;
     },
     async getDirectoryHandle(n, { create = false } = {}) {

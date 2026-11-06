@@ -59,3 +59,33 @@ test('a failed first write of a new file leaves no file behind', async () => {
   assert.deepEqual((await D.list(root, 'x')).map((e) => e.name), []);
   assert.equal(await D.readText(root, 'x/new.json'), null);
 });
+
+// ---------- final review I4 (c) and M4: which VoxelBench folders the walk skips, and folders it cannot read ----------
+test('walk skips only the root\'s own VoxelBench; a nested library is reported and not listed; a nested VoxelBench without library.json is walked', async () => {
+  const root = makeFakeDir('Lab drive');
+  await D.writeText(root, 'VoxelBench/library.json', '{}');
+  await D.writeText(root, 'VoxelBench/thumbs/s1.png', 'p');
+  await D.writeText(root, 'old lab/VoxelBench/library.json', '{}');
+  await D.writeText(root, 'old lab/VoxelBench/runs/s9/2026-01-01T00-00-00.000Z.json', '{}');
+  await D.writeText(root, 'old lab/scan9/a.vox', 'v');
+  await D.writeText(root, 'exports/VoxelBench/scan3/a.vox', 'v'); // a user's folder that happens to be named VoxelBench
+  const nested = [];
+  const paths = [];
+  for await (const { path } of D.walk(root, '', { nested: (p) => nested.push(p) })) paths.push(path);
+  assert.deepEqual(paths.sort(), ['exports/VoxelBench/scan3/a.vox', 'old lab/scan9/a.vox']);
+  assert.deepEqual(nested, ['old lab/VoxelBench']);
+});
+
+test('walk skips a folder it cannot read and reports it; without a report the walk stops as before', async () => {
+  const root = makeFakeDir();
+  await D.writeText(root, 'A/scan1/a.vox', 'v');
+  await D.writeText(root, 'B/locked/s.vox', 'v');
+  await D.writeText(root, 'C/scan2/b.vox', 'v');
+  (await (await root.getDirectoryHandle('B')).getDirectoryHandle('locked')).unreadable = true;
+  const unreadable = [];
+  const paths = [];
+  for await (const { path } of D.walk(root, '', { unreadable: (p, e) => unreadable.push([p, e.name]) })) paths.push(path);
+  assert.deepEqual(paths.sort(), ['A/scan1/a.vox', 'C/scan2/b.vox']);
+  assert.deepEqual(unreadable, [['B/locked', 'NotReadableError']]);
+  await assert.rejects((async () => { for await (const x of D.walk(root)) void x; })(), /could not be read/);
+});

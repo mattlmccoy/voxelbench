@@ -188,7 +188,8 @@
       before writing and refuses (writing nothing) one that is now newer, unreadable, or changed on the drive since this
       page read or wrote it. I/O is passed in: listFiles(dir), ensureDrive(dir), readIndex(dir) -> text | null,
       writeIndex(dir, text), plus rescan()'s groupStacks, readScan and onRead, and now() for the time stamp. listFiles gets
-      live(), false once the Rescan is stale. */
+      live(), false once the Rescan is stale, and returns the files or { files, failed: [{ path, message }] (folders it
+      could not read), nested: [paths] (other libraries inside this one) }; both are passed on in the result. */
   function makeRescanner(io) {
     let gen = 0, running = 0;
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(JSON.parse(JSON.stringify(b)));
@@ -198,9 +199,12 @@
       running = mine;
       try {
         const live = () => mine === gen; // progress from a stale Rescan is not shown
-        const files = await io.listFiles(dir, live);
+        const listed = await io.listFiles(dir, live); // the files, or { files, failed, nested } with what the walk skipped
         if (!live()) return { stale: true };
+        const files = Array.isArray(listed) ? listed : listed.files;
         const r = await rescan({ files, index, groupStacks: io.groupStacks, readScan: io.readScan, now: io.now(), onRead: (...a) => { if (live() && io.onRead) io.onRead(...a); } });
+        r.failed = [...((listed && listed.failed) || []), ...r.failed];
+        r.nested = (listed && listed.nested) || [];
         if (mine !== gen) return { stale: true };
         await io.ensureDrive(dir);
         const text = await io.readIndex(dir);

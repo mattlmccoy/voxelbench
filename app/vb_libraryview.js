@@ -5,11 +5,10 @@
    vb_library.js; this file reads the drive and draws. */
 (function (App) {
   'use strict';
-  const CT = window.CT, L = window.VBLibrary, FS = window.VBFsDir, V = window.VBStore, VX = window.VBVox;
+  const CT = window.CT, L = window.VBLibrary, FS = window.VBFsDir, V = window.VBStore, VX = window.VBVox, R = window.VBLibraryRoot;
   const { state, $, on } = App;
   const INDEX_PATH = `${V.LIBRARY_DIR}/scans.json`;
   const THUMB_WIDTH = 256;
-  const HANDLE_DB = { name: 'voxelbench', store: 'handles', key: 'libraryRoot' };
   const supported = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
   const lib = App.library = {
@@ -38,30 +37,14 @@
   const say = (text, bad = false) => { const el = $('libStatus'); el.textContent = text; el.classList.toggle('bad', bad); };
   const notice = (text) => { $('libNotice').hidden = !text; $('libNotice').textContent = text || ''; };
 
-  // ---------- the root folder's handle, kept between visits ----------
-  function handles(mode, fn) {
-    return new Promise((resolve, reject) => {
-      const open = indexedDB.open(HANDLE_DB.name, 1);
-      open.onupgradeneeded = () => open.result.createObjectStore(HANDLE_DB.store);
-      open.onerror = () => reject(open.error);
-      open.onsuccess = () => {
-        const db = open.result, tx = db.transaction(HANDLE_DB.store, mode), req = fn(tx.objectStore(HANDLE_DB.store));
-        tx.oncomplete = () => { db.close(); resolve(req.result); };
-        tx.onerror = () => { db.close(); reject(tx.error); };
-      };
-    });
-  }
-  const keepHandle = (h) => handles('readwrite', (s) => s.put(h, HANDLE_DB.key)).catch(() => {}); // a private window may refuse; the library still opens
-  const savedHandle = () => handles('readonly', (s) => s.get(HANDLE_DB.key)).catch(() => null);
-
   // ---------- reading the drive ----------
   // Ruling 1: a walked file looks like a file from a folder input, so CT.groupStacks and loadStack take it unchanged.
   const wrap = (path, file) => ({ webkitRelativePath: path, name: file.name, size: file.size, lastModified: file.lastModified, type: file.type,
     arrayBuffer: () => file.arrayBuffer(), slice: (...a) => file.slice(...a), text: () => file.text() });
 
-  async function listFiles(dir, prefix = '', live = () => true) {
+  async function listFiles(dir, prefix = '', live = () => true, report = {}) {
     const out = [];
-    for await (const { path, file } of FS.walk(dir, prefix)) {
+    for await (const { path, file } of FS.walk(dir, prefix, report)) {
       out.push(wrap(path, file));
       if (out.length % 500 === 0 && live()) say(`Listing files: ${out.length}…`);
     }
@@ -148,8 +131,13 @@
   }
 
   /** Opens handle as the library root, without the picker (also the test hook). Refuses, writing nothing, a newer or
-      unreadable library or scan index. */
+      unreadable library or scan index; asks before starting a library in a folder without one (vb_libraryroot.js), and
+      a refusal or a no leaves the page as it was. Resolves whether the library was opened. */
   async function openLibraryDir(handle) {
+    let d = { action: 'open' }; // a folder that cannot even be inspected is opened below, which says what is wrong
+    try { d = R.rootDecision(await R.inspectRoot(handle)); } catch (e) { /* reported by the open */ }
+    if (d.action === 'refuse') { say(d.message, true); return false; }
+    if (d.action === 'confirm' && !window.confirm(d.question)) { say(`No library was started in ${handle.name || 'browser storage'}; nothing was written.`); return false; }
     close();
     lib.dir = handle;
     const gen = lib.gen;
@@ -174,7 +162,7 @@
       lib.refused = L.refusalMessage(handle.name || 'browser storage', e) || true; // true: the drive is gone, said by the card
       say('');
       render();
-      return;
+      return true;
     }
     say(`${Object.keys(lib.index.scans).length} scans in the index.`);
     lib.access = 'granted';
@@ -182,6 +170,7 @@
     render();
     if (!Object.keys(lib.index.scans).length) await rescan();
     else background(gen);
+    return true;
   }
 
   async function pick() {
@@ -190,14 +179,15 @@
       if (e.name !== 'AbortError') say(`Could not open that folder: ${e.message}`, true);
       return;
     }
-    await keepHandle(h);
+    if (!(await openLibraryDir(h))) return; // refused or declined: not remembered
+    await R.keepHandle(h);
     lib.saved = h;
-    lib.access = 'granted';
-    await openLibraryDir(h);
+    lib.access = 'granted'; // picked just now: this session may read it
+    render();
   }
 
   async function resume() {
-    const h = await savedHandle();
+    const h = await R.savedHandle();
     if (!h) return;
     lib.saved = h;
     const allowed = h.queryPermission ? await h.queryPermission({ mode: 'readwrite' }).catch(() => 'prompt') : 'prompt';
@@ -218,7 +208,11 @@
   // The Rescan works on the root it started with (Ruling 9); see makeRescanner in vb_library.js.
   const rescanner = L.makeRescanner({
     groupStacks: CT.groupStacks, readScan,
-    listFiles: (dir, live) => listFiles(dir, '', live),
+    listFiles: async (dir, live) => { // folders it cannot read, and other libraries inside this one, are reported
+      const failed = [], nested = [];
+      const files = await listFiles(dir, '', live, { unreadable: (path, e) => failed.push({ path, message: `folder not readable: ${e.message}` }), nested: (path) => nested.push(path) });
+      return { files, failed, nested };
+    },
     ensureDrive: (dir) => ensureDrive(dir),
     readIndex: (dir) => FS.readText(dir, INDEX_PATH),
     writeIndex: (dir, text) => FS.writeText(dir, INDEX_PATH, text),
@@ -241,7 +235,8 @@
       lib.lastRescan = { found: r.found, places: r.places, read: r.read, missing, failed: r.failed };
       const failed = r.failed.length ? ` Could not read ${r.failed.length}: ${r.failed.map((f) => `${f.path} (${f.message})`).join('; ')}.` : '';
       const copies = r.places - r.found;
-      say(`Rescan: ${r.found} scans found${copies ? ` (${copies} more folder${copies > 1 ? 's are copies' : ' is a copy'})` : ''}; ${r.read} folder${r.read === 1 ? '' : 's'} read (new or changed), ${r.places - r.read} unchanged${missing ? `; ${missing} missing` : ''}.${failed}`, Boolean(r.failed.length));
+      const nested = r.nested.length ? ` ${R.nestedNote(r.nested)}` : '';
+      say(`Rescan: ${r.found} scans found${copies ? ` (${copies} more folder${copies > 1 ? 's are copies' : ' is a copy'})` : ''}; ${r.read} folder${r.read === 1 ? '' : 's'} read (new or changed), ${r.places - r.read} unchanged${missing ? `; ${missing} missing` : ''}.${failed}${nested}`, Boolean(r.failed.length || r.nested.length));
       for (const id of r.changed) { lib.summaries.delete(id); lib.runErrors.delete(id); } // an unchanged scan keeps what was read
     } catch (e) {
       if (gen === lib.gen) say(`Rescan stopped: ${e.message}`, true);

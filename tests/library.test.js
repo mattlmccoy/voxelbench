@@ -638,3 +638,14 @@ test('overviewFacts: the Results box says why it is empty: checking, unreadable,
   assert.equal(at({ run: undefined, runError: 'VoxelBench/runs/s1/x.json is not readable JSON' }), 'Saved runs could not be read: VoxelBench/runs/s1/x.json is not readable JSON');
   assert.equal(at({ run }), '', 'a run fills the box');
 });
+
+// ---------- final review M4 and I4 (c): the listing's skipped folders reach the Rescan's report ----------
+test('rescanner: folders the listing could not read are in failed; nested libraries are reported', async () => {
+  const { io, r } = rescanRig();
+  io.listFiles = async (dir) => ({ files: [file(`${dir.name}/v/a.vox`)], failed: [{ path: 'B/locked', message: 'could not be read' }], nested: ['old lab/VoxelBench'] });
+  r.open();
+  const out = await r.run({ name: 'A' }, L.emptyIndex('t0'));
+  assert.equal(out.found, 1);
+  assert.deepEqual(out.failed, [{ path: 'B/locked', message: 'could not be read' }]);
+  assert.deepEqual(out.nested, ['old lab/VoxelBench']);
+});
