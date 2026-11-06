@@ -531,3 +531,36 @@ test('library store: latestSummary on an unplugged library throws and recreates 
   await assert.rejects(s.latestSummary('s1'), /library drive is not available/);
   await assert.rejects(root.getDirectoryHandle(S.LIBRARY_DIR), /could not be found/, 'nothing was recreated');
 });
+
+// ---------- final review round 2, items 3 and 4 ----------
+test('refreshSummaries: a re-check reads the summary again (a run saved on another computer), and an unreadable one becomes unknown', async () => {
+  const L = require('../app/vb_library.js');
+  const root = makeFakeDir();
+  const here = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await here.putRun('s1', fullRun('2026-11-05T14:03:00.000Z', 2.5), []);
+  const summaries = new Map(), errors = new Map();
+  await L.refreshSummaries({ ids: ['s1', 's2'], store: here, summaries, errors });
+  assert.equal(summaries.get('s1').porosity, 2.5);
+  assert.equal(summaries.get('s2'), null);
+  const elsewhere = await S.makeLibraryStore(root, { toolVersion: '0.1.0' }); // another laptop on the same drive
+  await elsewhere.putRun('s2', fullRun('2026-11-06T09:00:00.000Z', 4), []);
+  await L.refreshSummaries({ ids: ['s1', 's2'], store: here, summaries, errors });
+  assert.equal(summaries.get('s2'), null, 'without a re-check nothing is read again');
+  await L.refreshSummaries({ ids: ['s1', 's2'], store: here, summaries, errors, recheck: new Set(['s1', 's2']) });
+  assert.equal(summaries.get('s2').porosity, 4, 'the Rescan\'s re-check finds it');
+  await FS.writeText(root, `${S.LIBRARY_DIR}/summaries/s2.json`, '{oops');
+  await FS.writeText(root, `${S.LIBRARY_DIR}/runs/s2/${(await FS.list(root, `${S.LIBRARY_DIR}/runs/s2`))[0].name}`, 'not json');
+  const recheck = new Set(['s2']);
+  await L.refreshSummaries({ ids: ['s2'], store: here, summaries, errors, recheck });
+  assert.equal(summaries.has('s2'), false, 'unreadable now: unknown, not the old value');
+  assert.match(errors.get('s2'), /not readable JSON/);
+  assert.equal(recheck.size, 0, 're-checked ids are done');
+});
+
+test('connect: a downloads capability that never answers does not hold up the page', async () => {
+  const hung = S.connect(async (name) => (name === 'db' ? makeFakeDb() : new Promise(() => {})), 30);
+  const out = await Promise.race([hung, new Promise((r) => setTimeout(() => r('still waiting'), 500))]);
+  assert.notEqual(out, 'still waiting');
+  assert.equal(out.store.kind, 'artifact');
+  assert.equal(out.downloads, null);
+});

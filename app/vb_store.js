@@ -383,7 +383,11 @@
       new Promise((r) => setTimeout(() => { note = note || `the database did not answer within ${timeoutMs / 1000} s; records go to a project file`; r(null); }, timeoutMs)),
     ]);
     if (!db) return { store: makeFileStore(), downloads: null, note };
-    const downloads = await Promise.resolve().then(() => use('downloads')).catch(() => null);
+    // A downloads capability that never answers must not hold up the page: without it, files are offered as links.
+    const downloads = await Promise.race([
+      Promise.resolve().then(() => use('downloads')).catch(() => null),
+      new Promise((r) => { const t = setTimeout(() => r(null), timeoutMs); if (t && t.unref) t.unref(); }),
+    ]);
     return { store: makeArtifactStore(db), downloads, note: '' };
   }
 
