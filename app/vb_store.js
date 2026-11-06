@@ -1,10 +1,10 @@
-/* Where records live. One interface, two back ends: the claude.ai artifact database when the page is served as an
-   artifact, otherwise a project file the user saves next to the scan. A project moves between the two through
+/* Where records live. One interface, three back ends: the claude.ai artifact database when the page is served as an
+   artifact, otherwise a project file the user saves next to the scan, or a library folder on a shared drive. A project moves between the two through
    exportProject / importProject. Runs keep version 10's database paths: pore_runs/<folder>, chunks in a subcollection. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.VBStore = factory();
-}(typeof self !== 'undefined' ? self : this, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_fsdir.js'));
+  else root.VBStore = factory(root.VBFsDir);
+}(typeof self !== 'undefined' ? self : this, function (FS) {
   'use strict';
 
   const PROJECT_SCHEMA = 'voxelbench-project';
@@ -101,6 +101,124 @@
     return store;
   }
 
+  // ---- The library: a folder on a shared drive ----
+  const LIBRARY_DIR = 'VoxelBench';
+  const LIBRARY_SCHEMA = 'voxelbench-library';
+  const LIBRARY_VERSION = 1;
+  const PER_SCAN = ['samples', 'regions', 'annotations']; // stored together in records/<scan folder>.json
+  const GLOBAL_FILE = { labels: 'labels.json', presets: 'presets.json' };
+  const enc = encodeURIComponent;
+  // Records of a scan's own collections belong to the folder they name; a sample's id is its folder.
+  const folderOf = (c, r) => (c === 'samples' ? r.id : (r.sample && r.sample.folder) || '_unfiled');
+  // ISO times sort as text; ':' is not allowed in file names on every drive, so the file name uses '-' there.
+  const runFileName = (d) => `${d.toISOString().replace(/:/g, '-')}.json`;
+  const runTime = (name) => name.slice(0, -5).replace(/T(\d\d)-(\d\d)-(\d\d)/, 'T$1:$2:$3');
+
+  async function readJson(root, path) {
+    const text = await FS.readText(root, path);
+    if (text === null) return null;
+    try { return JSON.parse(text); } catch (e) { throw new Error(`${path} is not readable JSON (${e.message}); it was left untouched`); }
+  }
+
+  /** Open (or start) the library under dir. Refuses, writing nothing, when it cannot be read safely. */
+  async function makeLibraryStore(dir, opts = {}) {
+    const base = (p) => `${LIBRARY_DIR}/${p}`;
+    const lib = await readJson(dir, base('library.json'));
+    if (lib) {
+      if (lib.schema !== LIBRARY_SCHEMA) throw new Error(`${LIBRARY_DIR}/library.json is not a VoxelBench library; it was left untouched`);
+      if (!(lib.version <= LIBRARY_VERSION)) throw new Error(`The library is from a newer VoxelBench (library version ${lib.version}, this one reads ${LIBRARY_VERSION}); open it with the newer VoxelBench`);
+    }
+
+    const data = Object.fromEntries(COLLECTIONS.map((c) => [c, new Map()]));
+    const watchers = Object.fromEntries(COLLECTIONS.map((c) => [c, new Set()]));
+    // Load everything before writing anything, so a bad file refuses the whole open.
+    for (const e of await FS.list(dir, base('records'))) {
+      if (e.kind !== 'file' || !e.name.endsWith('.json')) continue;
+      const path = base(`records/${e.name}`);
+      const doc = await readJson(dir, path);
+      if (!doc || typeof doc !== 'object' || PER_SCAN.some((c) => doc[c] !== undefined && !Array.isArray(doc[c]))) throw new Error(`${path} is not a VoxelBench records file; it was left untouched`);
+      for (const c of PER_SCAN) for (const r of doc[c] || []) data[c].set(r.id, r);
+    }
+    for (const [c, file] of Object.entries(GLOBAL_FILE)) {
+      const arr = await readJson(dir, base(file));
+      if (arr === null) continue;
+      if (!Array.isArray(arr)) throw new Error(`${base(file)} is not a VoxelBench records file; it was left untouched`);
+      for (const r of arr) data[c].set(r.id, r);
+    }
+    const runFolders = new Set();
+    for (const e of await FS.list(dir, base('runs'))) if (e.kind === 'directory') runFolders.add(decodeURIComponent(e.name));
+
+    if (!lib) await FS.writeText(dir, base('library.json'), JSON.stringify({ schema: LIBRARY_SCHEMA, version: LIBRARY_VERSION, created: new Date().toISOString() }, null, 2));
+
+    const view = (c) => new Map([...data[c]].map(([id, r]) => [id, copy(r)]));
+    const notify = (c) => { for (const fn of watchers[c]) fn(view(c)); };
+    // Writes go one at a time so two changes to the same file cannot interleave.
+    let queue = Promise.resolve();
+    const serial = (fn) => { const p = queue.then(fn); queue = p.catch(() => {}); return p; };
+
+    async function writeRecords(c, folder) {
+      if (GLOBAL_FILE[c]) return FS.writeText(dir, base(GLOBAL_FILE[c]), JSON.stringify([...data[c].values()], null, 2));
+      const doc = Object.fromEntries(PER_SCAN.map((k) => [k, [...data[k].values()].filter((r) => folderOf(k, r) === folder)]));
+      return FS.writeText(dir, base(`records/${enc(folder)}.json`), JSON.stringify(doc, null, 2));
+    }
+
+    // Change memory, write the file, and put memory back if the write fails, so the page never shows what the drive lacks.
+    async function change(c, id, next, folder) {
+      const prev = data[c].get(id);
+      if (next) data[c].set(id, next); else data[c].delete(id);
+      try {
+        await writeRecords(c, folder);
+      } catch (e) {
+        if (prev) data[c].set(id, prev); else data[c].delete(id);
+        throw e;
+      }
+      notify(c);
+    }
+
+    const runDir = (folder) => base(`runs/${enc(folder)}`);
+    const runNames = async (folder) => (await FS.list(dir, runDir(folder))).filter((e) => e.kind === 'file' && e.name.endsWith('.json')).map((e) => e.name).sort();
+
+    const store = {
+      kind: 'library',
+      watch(c, fn) { watchers[c].add(fn); fn(view(c)); return () => watchers[c].delete(fn); },
+      put: (c, record) => serial(() => change(c, record.id, copy(record), folderOf(c, record))),
+      remove: (c, id) => serial(() => {
+        const r = data[c].get(id);
+        return r ? change(c, id, null, folderOf(c, r)) : undefined;
+      }),
+      async getRun(folder) {
+        const names = await runNames(folder);
+        if (!names.length) return null;
+        return (await readJson(dir, `${runDir(folder)}/${names[names.length - 1]}`)).doc;
+      },
+      putRun: (folder, doc, chunks) => serial(async () => {
+        const have = new Set(await runNames(folder));
+        const t = new Date();
+        while (have.has(runFileName(t))) t.setTime(t.getTime() + 1); // two runs in one millisecond still get two files
+        await FS.writeText(dir, `${runDir(folder)}/${runFileName(t)}`, JSON.stringify({ doc, chunks }));
+        runFolders.add(folder);
+      }),
+      async listRuns(folder) { return (await runNames(folder)).map((n) => ({ at: runTime(n) })); },
+      putFile(path, blob) {
+        if (path === 'library.json') return Promise.reject(new Error('library.json is written only by the library itself'));
+        return serial(() => FS.writeBlob(dir, base(path), blob));
+      },
+      async exportProject(toolVersion = opts.toolVersion) {
+        const out = header(toolVersion);
+        for (const c of COLLECTIONS) out[c] = [...data[c].values()].map(copy);
+        out.runs = {};
+        for (const f of runFolders) {
+          const names = await runNames(f);
+          if (names.length) out.runs[f] = await readJson(dir, `${runDir(f)}/${names[names.length - 1]}`);
+        }
+        return out;
+      },
+      importProject: (obj) => importInto(store, obj),
+      isEmpty: () => !runFolders.size && COLLECTIONS.every((c) => !data[c].size),
+    };
+    return store;
+  }
+
   /** Offer a file to the viewer: the downloads capability when there is one, else a plain download link. */
   async function saveBlob(downloads, filename, blob) {
     if (downloads) {
@@ -137,5 +255,5 @@
     return { store: makeArtifactStore(db), downloads, note: '' };
   }
 
-  return { PROJECT_SCHEMA, PROJECT_VERSION, COLLECTIONS, makeFileStore, makeArtifactStore, connect, saveBlob };
+  return { PROJECT_SCHEMA, PROJECT_VERSION, COLLECTIONS, LIBRARY_DIR, makeFileStore, makeArtifactStore, makeLibraryStore, connect, saveBlob };
 }));

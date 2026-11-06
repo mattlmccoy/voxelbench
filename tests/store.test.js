@@ -130,3 +130,110 @@ test('presets are their own collection: kept, exported and imported; a project f
   await again.importProject(old);
   assert.deepEqual((await again.exportProject('0.1.0')).presets, []);
 });
+
+// ---- library store (a shared drive folder) ----
+const { makeFakeDir } = require('./fake_dir.js');
+const FS = require('../app/vb_fsdir.js');
+const libText = (root, path) => FS.readText(root, `${S.LIBRARY_DIR}/${path}`);
+
+test('library store: a region put is written to its scan\'s record file and watched back', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  assert.equal(s.kind, 'library');
+  assert.ok(s.isEmpty());
+  const seen = [];
+  s.watch('regions', (m) => seen.push([...m.keys()]));
+  assert.deepEqual(seen, [[]], 'watch calls at once');
+  await s.put('samples', sample('S 1/a'));
+  await s.put('regions', { ...region('r1'), sample: { folder: 'S 1/a' } });
+  assert.deepEqual(seen.at(-1), ['r1']);
+  const file = JSON.parse(await libText(root, `records/${encodeURIComponent('S 1/a')}.json`));
+  assert.equal(file.samples.length, 1);
+  assert.deepEqual(file.regions.map((r) => r.id), ['r1']);
+  await s.put('labels', { id: 'region_a', label: 'Region A', color: '#6ec3ff' });
+  assert.equal(JSON.parse(await libText(root, 'labels.json')).length, 1);
+  assert.equal(JSON.parse(await libText(root, 'library.json')).schema, 'voxelbench-library');
+  // a second open reads everything back whole
+  const again = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  let got; again.watch('regions', (m) => { got = m; });
+  assert.equal(got.get('r1').points[0].col, 1);
+  await s.remove('regions', 'r1');
+  assert.deepEqual(seen.at(-1), []);
+  assert.equal(JSON.parse(await libText(root, `records/${encodeURIComponent('S 1/a')}.json`)).regions.length, 0);
+});
+
+test('library store: a failing write leaves the old file and the in-memory view unchanged', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.put('regions', region('r1'));
+  root.shared.failNextWrite = true;
+  await assert.rejects(s.put('regions', region('r2')), /simulated/);
+  let got; s.watch('regions', (m) => { got = m; });
+  assert.deepEqual([...got.keys()], ['r1']);
+  assert.equal(JSON.parse(await libText(root, 'records/S1.json')).regions.length, 1);
+});
+
+test('library store: putRun appends and getRun returns the latest; listRuns lists both', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  assert.equal(await s.getRun('S1'), null);
+  await s.putRun('S1', { schema: 2, n: 1 }, [{ rows: [1] }]);
+  await s.putRun('S1', { schema: 2, n: 2 }, [{ rows: [2] }]);
+  assert.equal((await s.getRun('S1')).n, 2);
+  const runs = await s.listRuns('S1');
+  assert.equal(runs.length, 2);
+  assert.ok(runs[0].at < runs[1].at);
+  assert.match(runs[0].at, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+  const names = (await FS.list(root, `${S.LIBRARY_DIR}/runs/S1`)).map((e) => e.name);
+  const stored = JSON.parse(await libText(root, `runs/S1/${names.sort()[1]}`));
+  assert.deepEqual(stored.chunks, [{ rows: [2] }]);
+  assert.deepEqual(await s.listRuns('nope'), []);
+  assert.ok(!s.isEmpty());
+});
+
+test('library store: a library.json from a newer version refuses to open; unreadable JSON refuses', async () => {
+  const newer = makeFakeDir();
+  await FS.writeText(newer, 'VoxelBench/library.json', JSON.stringify({ schema: 'voxelbench-library', version: 2, created: 'x' }));
+  await assert.rejects(S.makeLibraryStore(newer, { toolVersion: '0.1.0' }), /newer/);
+  assert.equal(JSON.parse(await libText(newer, 'library.json')).version, 2, 'nothing was rewritten');
+
+  const junk = makeFakeDir();
+  await FS.writeText(junk, 'VoxelBench/library.json', '{not json');
+  await assert.rejects(S.makeLibraryStore(junk, { toolVersion: '0.1.0' }), /library\.json/);
+  assert.equal(await libText(junk, 'library.json'), '{not json');
+
+  const badRecords = makeFakeDir();
+  await S.makeLibraryStore(badRecords, { toolVersion: '0.1.0' });
+  await FS.writeText(badRecords, 'VoxelBench/records/S1.json', 'oops');
+  await assert.rejects(S.makeLibraryStore(badRecords, { toolVersion: '0.1.0' }), /S1\.json/);
+  assert.equal(await libText(badRecords, 'records/S1.json'), 'oops');
+
+  const foreign = makeFakeDir();
+  await FS.writeText(foreign, 'VoxelBench/library.json', JSON.stringify({ schema: 'something-else', version: 1 }));
+  await assert.rejects(S.makeLibraryStore(foreign, { toolVersion: '0.1.0' }));
+});
+
+test('library store: importProject keeps runs and records', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  const p = await (await filled()).exportProject('0.1.0');
+  const res = await s.importProject(p);
+  assert.equal(res.added, 6);
+  const out = await s.exportProject('0.1.0');
+  assert.deepEqual(out.runs, { S1: run });
+  assert.equal(out.regions.length, 3);
+  assert.equal(out.samples.length, 2);
+  assert.equal(out.labels.length, 1);
+  // importing again keeps the earlier run under a free name
+  const res2 = await s.importProject(p);
+  assert.deepEqual(res2.renamedRuns, ['S1 (imported 1)']);
+});
+
+test('library store: putFile writes under VoxelBench and refuses library.json', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.putFile('thumbs/S1.png', new Blob([new Uint8Array([7])]));
+  const f = await (await (await (await root.getDirectoryHandle('VoxelBench')).getDirectoryHandle('thumbs')).getFileHandle('S1.png')).getFile();
+  assert.equal(f.size, 1);
+  await assert.rejects(s.putFile('library.json', new Blob(['x'])));
+});
