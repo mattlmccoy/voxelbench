@@ -500,3 +500,19 @@ test('driveSummary: counts the scans present, and the analyzed ones only once ev
   assert.deepEqual(L.driveSummary('Drive A', rows, () => true, now), { name: 'Drive A', scans: 2, analyzed: 1, opened_at: now });
   assert.deepEqual(L.driveSummary('Drive A', rows, (id) => id !== 'b', now), { name: 'Drive A', scans: 2, analyzed: null, opened_at: now });
 });
+
+test('driveCard: the card names the remembered folder, and shows the saved counts only when they are for that folder', () => {
+  const same = L.driveCard(SUMMARY, 'granted', 'Drive A');
+  assert.equal(same.facts, '12 scans, 5 analyzed at last visit · last opened 2026-11-03');
+  const other = L.driveCard(SUMMARY, 'prompt', 'Folder B'); // another folder was picked since: the summary belongs to Drive A
+  assert.equal(other.title, 'Folder B');
+  assert.doesNotMatch(other.facts, /12|analyzed|2026/);
+  assert.equal(L.driveCard(SUMMARY, 'denied', 'Folder B').title, 'Folder B');
+});
+
+test('refusalMessage: a drive that is gone is left to the card; other refusals keep their words with one period', () => {
+  const gone = Object.assign(new Error('A requested file or directory could not be found.'), { name: 'NotFoundError' });
+  assert.equal(L.refusalMessage('Drive A', gone), null);
+  assert.equal(L.refusalMessage('Drive A', new Error('index version 9 is newer than this page')), 'The library in Drive A was not opened: index version 9 is newer than this page.');
+  assert.equal(L.refusalMessage('Drive A', new Error('it is not readable.')), 'The library in Drive A was not opened: it is not readable.');
+});

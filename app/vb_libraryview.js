@@ -171,7 +171,7 @@
     } catch (e) {
       if (gen !== lib.gen) return;
       if (e && e.name === 'NotFoundError') lib.access = 'gone';
-      lib.refused = `The library in ${handle.name || 'browser storage'} was not opened: ${e.message}.`;
+      lib.refused = L.refusalMessage(handle.name || 'browser storage', e) || true; // true: the drive is gone, said by the card
       say('');
       render();
       return;
@@ -431,8 +431,10 @@
   function renderDriveCard(open) {
     const card = $('driveCard');
     card.hidden = open || !lib.saved;
+    $('driveLabel').hidden = card.hidden;
+    $('libQuiet').classList.toggle('centered', !open);
     if (card.hidden) return;
-    const c = L.driveCard(readSummary(), lib.access, lib.saved.name);
+    const c = L.driveCard(readSummary(), lib.access, lib.saved.name); // the remembered folder names the card
     $('driveTitle').textContent = c.title;
     $('driveFacts').textContent = c.facts;
     $('driveAct').textContent = c.state === 'open' ? 'Open ›' : c.state === 'allow' ? 'Allow access ›' : '';
@@ -442,7 +444,7 @@
 
   function render() {
     const open = Boolean(lib.dir && lib.index && !lib.refused);
-    $('libRoot').textContent = lib.dir ? `Library: ${rootName()}` : supported ? 'No library open' : 'Library unavailable in this browser';
+    $('libRoot').textContent = open ? `Library: ${rootName()}` : supported ? 'No library open' : 'Library unavailable in this browser';
     $('libPick').hidden = !(supported && open);
     $('libPickHero').hidden = !supported;
     renderDriveCard(open);
@@ -453,7 +455,7 @@
     $('libStudio').textContent = 'Back to the open scan';
     $('libSide').hidden = !open;
     $('libIntro').hidden = open;
-    notice(lib.refused || (supported ? '' : 'The library needs Chrome or Edge: it reads and writes a folder on your drive, which this browser does not allow. Open a .VOX file… and Open a folder of slices… still open one scan here, with a project file.'));
+    notice((typeof lib.refused === 'string' && lib.refused) || (supported ? '' : 'The library needs Chrome or Edge: it reads and writes a folder on your drive, which this browser does not allow. Open a .VOX file… and Open a folder of slices… still open one scan here, with a project file.'));
 
     const rows = open ? Object.entries(lib.index.scans).map(([id, entry]) => ({ id, entry, record: lib.samples.get(id) || null, run: lib.runs.get(id) || null })) : [];
     const key = (r) => (r.entry.info && r.entry.info.scannedAt) || r.entry.first_seen || '';
@@ -477,6 +479,7 @@
     $('driveCard').addEventListener('click', () => { if (lib.access === 'granted') openLibraryDir(lib.saved); else allowSaved(); });
     $('libVox').addEventListener('change', (e) => { state.demoPhantoms = null; App.openFiles(e.target.files); e.target.value = ''; });
     $('libRescan').addEventListener('click', rescan);
+    VBSkin.wireSettings({ doc: document, storage: (() => { try { return window.localStorage; } catch (e) { return null; } })(), button: $('libSkinButton'), menu: $('libSkinMenu') }); // the same Appearance menu as the studio's
     $('libStudio').addEventListener('click', () => App.showPage('studio'));
     $('toLibrary').addEventListener('click', () => App.showPage('library'));
     $('libFolder').addEventListener('change', (e) => { state.demoPhantoms = null; App.openFiles(e.target.files); e.target.value = ''; });

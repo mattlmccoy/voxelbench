@@ -315,7 +315,8 @@
       'denied' or 'gone'. The remembered counts are always labeled "at last visit", and a drive that cannot be read now
       shows none. state: 'open' (one click opens it), 'allow' (the browser asks first), 'unavailable'. */
   function driveCard(summary, access, handleName = null) {
-    const title = (summary && summary.name) || handleName || 'Your scan drive';
+    if (summary && handleName && summary.name !== handleName) summary = null; // saved for another folder: no counts for this one
+    const title = handleName || (summary && summary.name) || 'Your scan drive';
     if (access === 'denied') return { title, state: 'unavailable', facts: 'Access was not allowed. Choose your scan drive… to pick it again.' };
     if (access === 'gone') return { title, state: 'unavailable', facts: 'This folder is not available now (unplugged, moved or renamed). Choose your scan drive… to pick it again.' };
     const state = access === 'granted' ? 'open' : 'allow';
@@ -327,6 +328,12 @@
     return { title, state, facts };
   }
 
+  /** The banner for a library that would not open, or null when the drive is simply gone (the card says that). */
+  function refusalMessage(name, e) {
+    if (e && e.name === 'NotFoundError') return null;
+    return `The library in ${name} was not opened: ${String(e.message).replace(/\.+$/, '')}.`;
+  }
+
   /** What the page keeps per browser for the card: the drive's folder name, how many scans it had and how many were
       analyzed. rows are the library rows; loaded(id) says whether that scan's saved runs have been read yet, and until
       every one has, analyzed is null (unknown) rather than a low count. */
@@ -336,5 +343,5 @@
     return { name, scans: present.length, analyzed: known ? present.filter((r) => cardFacts(r).analyzed).length : null, opened_at: now };
   }
 
-  return { driveCard, driveSummary, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
+  return { driveCard, driveSummary, refusalMessage, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
 }));

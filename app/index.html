@@ -201,7 +201,7 @@ td .link:focus-visible { outline: 2px solid var(--accent); }
 .orientviews figcaption { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .orientslider { display: grid; grid-template-columns: 7.5em 1fr 3.5em; align-items: center; gap: 6px; margin: 4px 0; }
 .orientslider input { width: 100%; }
-#skinButton { display: inline-flex; align-items: center; gap: 6px; }
+#skinButton, #libSkinButton { display: inline-flex; align-items: center; gap: 6px; }
 .skinmenu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 100; width: 270px; padding: 6px; display: grid; gap: 2px;
   background: var(--panel); border: 1px solid var(--line-control); border-radius: 10px; box-shadow: 0 14px 34px rgba(0, 0, 0, .4); }
 /* The hidden attribute wins over every display rule (.row, .draftpanel, .setting set display). */
@@ -230,9 +230,9 @@ html[data-skin="glass"] .resultcard { background: var(--g-sheet); border-radius:
 html:is([data-skin="mac"], [data-skin="glass"]) .resultcard .kv { grid-template-columns: minmax(0, auto) minmax(0, 1fr); font-size: 12px; }
 html:is([data-skin="mac"], [data-skin="glass"]) .resultcard .kv > * { padding: 5px 10px; }
 .skinmenuhead { margin: 4px 10px 6px; font-size: 11px; font-weight: 600; color: var(--muted); }
-html .studio .topbar .skinmenu button { all: unset; position: relative; display: grid; gap: 1px; padding: 7px 10px 7px 30px; border-radius: 7px; cursor: pointer; }
-html .studio .topbar .skinmenu button:hover, html .studio .topbar .skinmenu button:focus-visible { background: var(--warn-bg); }
-html .studio .topbar .skinmenu button[aria-checked="true"]::before { content: "✓"; position: absolute; left: 11px; top: 7px; color: var(--accent); font-weight: 700; }
+html :is(.studio .topbar, .libbar) .skinmenu button { all: unset; position: relative; display: grid; gap: 1px; padding: 7px 10px 7px 30px; border-radius: 7px; cursor: pointer; }
+html :is(.studio .topbar, .libbar) .skinmenu button:hover, html :is(.studio .topbar, .libbar) .skinmenu button:focus-visible { background: var(--warn-bg); }
+html :is(.studio .topbar, .libbar) .skinmenu button[aria-checked="true"]::before { content: "✓"; position: absolute; left: 11px; top: 7px; color: var(--accent); font-weight: 700; }
 .skintitle { font-weight: 600; color: var(--fg-strong); }
 .skinnote { font-size: 11.5px; color: var(--muted); }
 .stepbar, .skinbackdrop { display: none; }
@@ -502,18 +502,25 @@ html[data-skin="mac"] .ovcard { background: var(--card); border: 0; border-radiu
 .library .libfilter[aria-pressed="true"] { background: var(--warn-bg); color: var(--accent); font-weight: 600; }
 .libmain { grid-column: 2; overflow: auto; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 24px 16px; display: grid; align-content: start; gap: 12px; min-width: 0; }
 .libmain > p { margin: 0; }
-.welcome { max-width: 62ch; display: grid; justify-items: start; gap: 10px; padding-top: 6vh; }
-.welcome h1 { margin: 0; font: 700 20px var(--font-mono); letter-spacing: .06em; color: var(--fg-strong); }
+.welcome { width: min(100%, 560px); margin: 0 auto; display: grid; justify-items: center; text-align: center; gap: 10px; padding-top: clamp(24px, 9vh, 88px); }
+.welcome h1 { margin: 0; font: 700 22px var(--font-mono); letter-spacing: .04em; color: var(--fg-strong); }
 .welcome p { margin: 0; }
-.welcome .lede { color: var(--fg); line-height: 1.5; }
-.welcome .hint { font-size: 12px; margin-top: -4px; }
-.welcome button.big { font-size: 15px; padding: 9px 20px; margin-top: 6px; }
-.drivecard { display: grid; gap: 2px; width: min(100%, 36ch); margin-top: 10px; padding: 10px 14px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
-.drivecard .drivetitle { color: var(--fg-strong); font-weight: 600; overflow-wrap: anywhere; }
-.drivecard .drivefacts { font-size: 12px; }
-.drivecard .driveact { color: var(--accent); font-weight: 600; }
-.drivecard:disabled { cursor: default; }
+.welcome .lede { color: var(--muted); line-height: 1.55; margin-bottom: 10px; }
+.welcome .hint { font-size: 12px; margin: -4px 0 16px; }
+html .library .welcome button.big { font-size: 15px; padding: 10px 24px; }
+.welcome .drivelabel { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; margin: 0; }
+.library button.drivecard { display: flex; align-items: center; gap: 12px; width: min(100%, 380px); box-sizing: border-box; padding: 10px 14px; text-align: left; cursor: pointer; background: var(--panel); color: var(--fg); border: 1px solid var(--line-strong, var(--line)); border-radius: var(--radius); font-weight: 400; opacity: 1; }
+.library button.drivecard:hover:not(:disabled) { border-color: var(--accent); }
+.library button.drivecard:disabled { cursor: default; opacity: 1; }
+.drivecard .driveico { flex: none; width: 30px; height: 22px; border-radius: 3px; background: var(--bg-deep); border: 1px solid var(--line-control); }
+.drivecard .drivetext { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.drivecard .drivetitle { color: var(--fg-strong); overflow-wrap: anywhere; }
+.drivecard .drivefacts { font-size: 12px; color: var(--muted); }
+.drivecard[data-state="unavailable"] .drivefacts { color: var(--fg); }
+.drivecard[data-state="unavailable"] .driveico { border-style: dashed; }
+.drivecard .driveact { flex: none; color: var(--accent); font-weight: 600; font-size: 12px; }
 .libquiet { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; margin: 0; font-size: 13px; }
+.libquiet.centered { justify-content: center; margin-top: 14px; }
 .library .link.quiet { color: var(--accent); }
 .library label.quiet:focus-within, .library .demomenu summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .library label.quiet input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -522,6 +529,7 @@ html[data-skin="mac"] .ovcard { background: var(--card); border: 0; border-radiu
 .demomenu summary { list-style: none; }
 .demomenu summary::-webkit-details-marker { display: none; }
 .demomenu summary::after { content: " ▾"; }
+.libquiet.centered .demolist { left: 50%; transform: translateX(-50%); }
 .demolist { display: grid; gap: 4px; margin-top: 6px; min-width: 0; }
 @media (min-width: 640px) { .demolist { position: absolute; z-index: 5; left: 0; min-width: 190px; padding: 6px; background: var(--card, var(--panel)); border: 1px solid var(--line-strong, var(--line)); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0, 0, 0, .25); } }
 .libstatus:empty { display: none; }
@@ -571,9 +579,9 @@ html[data-skin="glass"] .libcard { background: var(--card); border: 0; border-ra
 html[data-skin="glass"] .library .libfilter { border-radius: 12px; }
 html[data-skin="glass"] .library .libfilter[aria-pressed="true"] { background: var(--g-current); color: var(--fg-strong); }
 html[data-skin="glass"] .libside input[type=search] { background: var(--g-field); border: 1px solid var(--g-field-line); border-radius: 12px; }
-html:is([data-skin="mac"], [data-skin="glass"]) .welcome h1 { font: 600 28px/1.2 var(--font-ui); letter-spacing: -.02em; }
-html[data-skin="mac"] .drivecard { background: var(--card); border: 0; border-radius: 12px; box-shadow: var(--card-shadow); }
-html[data-skin="glass"] .drivecard { background: var(--card); border: 0; border-radius: 20px; box-shadow: var(--glass-edge); }
+html:is([data-skin="mac"], [data-skin="glass"]) .welcome h1 { font: 600 30px/1.2 var(--font-ui); letter-spacing: -.02em; }
+html[data-skin="mac"] .library button.drivecard { background: var(--card); border: 0; border-radius: 12px; box-shadow: var(--card-shadow); padding: 10px 14px; font-weight: 400; }
+html[data-skin="glass"] .library button.drivecard { background: var(--card); color: var(--fg); border: 0; border-radius: 20px; box-shadow: var(--glass-edge); padding: 10px 14px; font-weight: 400; }
 html[data-skin="glass"] .demolist { background: var(--g-menu); }
 @media (max-width: 900px) {
   html[data-skin="glass"] .libbar { margin: 8px 8px 0; }
@@ -585,9 +593,9 @@ html[data-skin="glass"] .demolist { background: var(--g-menu); }
 /* ===== Light and dark (Appearance > Mode; data-mode is set before the page renders). Image areas stay black. ===== */
 .modechoice { display: flex; gap: 4px; padding: 0 6px 6px; }
 @media (max-width: 900px) { .skinmenu { position: fixed; top: 8px; left: 8px; right: 8px; width: auto; max-height: calc(100vh - 16px); overflow-y: auto; } } /* on a phone the button is not at the right edge */
-html .studio .topbar .skinmenu .modechoice button { flex: 1 1 0; padding: 6px 0; text-align: center; justify-items: center; border: 1px solid var(--line); }
-html .studio .topbar .skinmenu .modechoice button[aria-checked="true"] { border-color: var(--accent); color: var(--accent); }
-html .studio .topbar .skinmenu .modechoice button[aria-checked="true"]::before { content: none; }
+html :is(.studio .topbar, .libbar) .skinmenu .modechoice button { flex: 1 1 0; padding: 6px 0; text-align: center; justify-items: center; border: 1px solid var(--line); }
+html :is(.studio .topbar, .libbar) .skinmenu .modechoice button[aria-checked="true"] { border-color: var(--accent); color: var(--accent); }
+html :is(.studio .topbar, .libbar) .skinmenu .modechoice button[aria-checked="true"]::before { content: none; }
 
 html[data-skin="lab"][data-mode="light"] {
   color-scheme: light;
@@ -651,6 +659,7 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
     <button id="libPick" hidden title="The folder on the lab drive that holds the scans; every scan anywhere under it is listed">Choose another folder…</button>
     <button id="libRescan" hidden title="Look for new, moved and removed scans under the library folder; unchanged scans are not read again">Rescan</button>
     <button id="libStudio" hidden>Back to the open scan</button>
+    <span class="skinwrap libskin"><button id="libSkinButton" type="button" title="Appearance: Lab, Mac or Glass; light or dark"><svg class="skinicon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.3"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M3.4 12.6l1.3-1.3M11.3 4.7l1.3-1.3"/></svg><span>Appearance</span></button><div class="skinmenu" id="libSkinMenu" role="menu" hidden></div></span>
   </header>
   <div class="libbody">
     <nav class="libside" id="libSide" aria-label="Find scans" hidden>
@@ -662,12 +671,15 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
     <main class="libmain">
       <p class="notice" id="libNotice" hidden></p>
       <section class="welcome" id="libIntro">
-        <h1>Look inside your CT scans</h1>
-        <p class="lede">VoxelBench measures pores, density and walls in micro-CT scans of printed parts. Scans stay on your drive; nothing is uploaded.</p>
+        <h1>Welcome to VoxelBench</h1>
+        <p class="lede">Measure porosity and density in CT scans, right in your browser.<br>Scans stay on your drive; nothing is uploaded.</p>
         <button id="libPickHero" class="primary big">Choose your scan drive…</button>
         <p class="muted hint">The drive or folder that holds your CT scan folders.</p>
+        <p class="drivelabel muted" id="driveLabel" hidden>Used on this laptop</p>
         <button id="driveCard" class="drivecard" type="button" hidden aria-live="polite">
-          <span class="drivetitle" id="driveTitle"></span><span class="drivefacts muted" id="driveFacts"></span><span class="driveact" id="driveAct"></span>
+          <span class="driveico" aria-hidden="true"></span>
+          <span class="drivetext"><b class="drivetitle" id="driveTitle"></b><span class="drivefacts" id="driveFacts"></span></span>
+          <span class="driveact" id="driveAct"></span>
         </button>
       </section>
       <div class="libquiet" id="libQuiet">

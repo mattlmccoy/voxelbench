@@ -98,6 +98,7 @@
       TIFF copy inside it is not listed again. Any other folder of TIFF slices is a scan sorted by the number in the
       name. Each scan carries the scanner's DataInfo.xml from its folder or the folder above, when there is one. */
   function groupStacks(files) {
+    // A pick that mixes loose .vox files with folder files takes this branch; a real picker does not produce that mix.
     // Files picked one by one (no folder, so no relative path): one .vox is a scan, with the DataInfo.xml picked beside it.
     const looseVox = files.filter((f) => !f.webkitRelativePath && /\.vox$/i.test(f.name));
     if (looseVox.length) {

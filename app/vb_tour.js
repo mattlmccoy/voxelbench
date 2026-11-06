@@ -124,7 +124,7 @@
         'Each stop points at the controls it describes. Press the button in this card to have the tour do the step, or do it yourself and press Next. Scans are generated in this browser; nothing is uploaded.',
         'Esc closes the tour; the arrow keys move between stops.'] },
     { title: 'Open a scan', target: () => (state.folder && state.page === 'studio' ? $('crumb') : $('libDemos')),
-      body: ['A real scan is a folder of 16-bit TIFF slices (Open scan folder). The tour uses the generated dense-band scan: a 16 mm cylinder at 0.1 mm voxels with 40 spherical pores and a band over the middle 30 % of its length that reads 10 % denser.'],
+      body: ['A real scan is a folder of 16-bit TIFF slices (Open a folder of slices…). The tour uses the generated dense-band scan: a 16 mm cylinder at 0.1 mm voxels with 40 spherical pores and a band over the middle 30 % of its length that reads 10 % denser.'],
       actions: [{ label: 'Load the dense-band scan', run: () => load('dense'), done: () => on('dense') }],
       result: () => (on('dense') ? `Loaded ${state.dims.nx} × ${state.dims.ny} × ${state.dims.nz} voxels at ${fmt(state.voxelMm * 1000, 0)} µm.` : '') },
     { title: 'Views', target: () => $('center'),
@@ -200,7 +200,7 @@
         { label: 'Measure walls', run: async () => { $('runWall').click(); await until(wallDone, RUN_TIMEOUT_MS, 'Wall measurement'); }, done: () => on('cad') && Boolean(wallDone()) }],
       result: () => (on('cad') ? wallLine() : '') },
     { title: 'Your own scan', target: () => $('folder').parentElement,
-      body: ['The Library button opens the scan library: in Chrome or Edge, choose the folder that holds your scans and every scan under it is listed as a card. Open scan folder reads one folder of 16-bit TIFF slices (or a Rigaku .VOX) without a library; a folder of scan folders lists each one. Large scans load block-mean binned, and the page says so first.',
+      body: ['The Library button opens the scan library: in Chrome or Edge, choose the folder that holds your scans and every scan under it is listed as a card. Open a .VOX file… reads a Rigaku scan, and Open a folder of slices… reads a folder of 16-bit TIFF slices, without a library; a folder of scan folders lists each one. Large scans load block-mean binned, and the page says so first.',
         'Save project writes the regions, annotations and runs to a file kept next to the scan. The tour is under Guided tour in the top bar.'] },
   ];
 
