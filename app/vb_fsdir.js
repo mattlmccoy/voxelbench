@@ -16,11 +16,14 @@
   }
 
   const isNotFound = (e) => e && e.name === 'NotFoundError';
+  /** Names the drive's owner never made: dot-files and dot-folders, among them the AppleDouble "._<name>" companions
+      and .DS_Store that macOS writes on an exFAT drive. Every listing of the library and the scan walk skips them. */
+  const isHidden = (name) => String(name).startsWith('.');
 
   /** Every file under dir as { path, file }; dot-files, dot-folders and the VoxelBench folder are skipped. */
   async function* walk(dir, prefix = '') {
     for await (const h of dir.values()) {
-      if (h.name.startsWith('.') || (h.kind === 'directory' && h.name === LIBRARY_FOLDER)) continue;
+      if (isHidden(h.name) || (h.kind === 'directory' && h.name === LIBRARY_FOLDER)) continue;
       if (h.kind === 'file') yield { path: prefix + h.name, file: await h.getFile() };
       else yield* walk(h, `${prefix}${h.name}/`);
     }
@@ -75,5 +78,5 @@
   const writeText = (dir, path, text) => writeData(dir, path, text);
   const writeBlob = (dir, path, blob) => writeData(dir, path, blob);
 
-  return { LIBRARY_FOLDER, segments, walk, list, readText, writeText, writeBlob };
+  return { LIBRARY_FOLDER, isHidden, segments, walk, list, readText, writeText, writeBlob };
 }));

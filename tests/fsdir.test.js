@@ -11,6 +11,7 @@ test('walk lists files with relative paths and skips dot-files and VoxelBench', 
   await D.writeText(root, 'top.txt', 't');
   await D.writeText(root, '.hidden/skip.txt', 's');
   await D.writeText(root, 'A/.DS_Store', 's');
+  await D.writeText(root, 'A/scan1/._slice_0001.tif', 'AppleDouble'); // macOS's companion file on an exFAT drive
   await D.writeText(root, 'VoxelBench/library.json', '{}');
   const paths = [];
   for await (const { path, file } of D.walk(root)) { paths.push(path); assert.equal(typeof file.text, 'function'); }

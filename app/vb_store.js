@@ -140,7 +140,7 @@
     const watchers = Object.fromEntries(COLLECTIONS.map((c) => [c, new Set()]));
     // Load everything before writing anything, so a bad file refuses the whole open.
     for (const e of await FS.list(dir, base('records'))) {
-      if (e.kind !== 'file' || !e.name.endsWith('.json')) continue;
+      if (e.kind !== 'file' || FS.isHidden(e.name) || !e.name.endsWith('.json')) continue;
       const path = base(`records/${e.name}`);
       const doc = await readJson(dir, path);
       if (!doc || typeof doc !== 'object' || PER_SCAN.some((c) => doc[c] !== undefined && !Array.isArray(doc[c]))) throw new Error(`${path} is not a VoxelBench records file; it was left untouched`);
@@ -153,7 +153,7 @@
       for (const r of arr) data[c].set(r.id, r);
     }
     const runFolders = new Set();
-    for (const e of await FS.list(dir, base('runs'))) if (e.kind === 'directory') runFolders.add(decodeURIComponent(e.name));
+    for (const e of await FS.list(dir, base('runs'))) if (e.kind === 'directory' && !FS.isHidden(e.name)) runFolders.add(decodeURIComponent(e.name));
 
     if (lib === undefined) await FS.writeText(dir, base('library.json'), JSON.stringify({ schema: LIBRARY_SCHEMA, version: LIBRARY_VERSION, created: new Date().toISOString() }, null, 2));
 
@@ -199,7 +199,7 @@
     const runNames = async (folder) => {
       const entries = await FS.list(dir, runDir(folder));
       if (!entries.length) await ensureLibrary();
-      return entries.filter((e) => e.kind === 'file' && e.name.endsWith('.json')).map((e) => e.name).sort();
+      return entries.filter((e) => e.kind === 'file' && !FS.isHidden(e.name) && e.name.endsWith('.json')).map((e) => e.name).sort();
     };
 
     const store = {
@@ -232,7 +232,7 @@
       async listSheets(folder) {
         const entries = await FS.list(dir, runDir(folder));
         if (!entries.length) await ensureLibrary();
-        return entries.filter((e) => e.kind === 'file' && e.name.toLowerCase().endsWith(SHEET_SUFFIX)).map((e) => e.name).sort()
+        return entries.filter((e) => e.kind === 'file' && !FS.isHidden(e.name) && e.name.toLowerCase().endsWith(SHEET_SUFFIX)).map((e) => e.name).sort()
           .map((name) => ({ at: sheetTime(name), name }));
       },
       // Only two places take loose files: thumbnails, and non-JSON files (review sheets) beside a scan's runs. Records,

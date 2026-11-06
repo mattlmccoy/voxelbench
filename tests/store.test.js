@@ -432,3 +432,37 @@ test('fileSafe: a name usable as a file name on every drive', () => {
   assert.equal(S.fileSafe('  '), '');
   assert.equal(S.fileSafe('a\\b*c"d<e>f|g'), 'a_b_c_d_e_f_g');
 });
+
+// ---------- final review C1: macOS AppleDouble files (._<name>) and .DS_Store on an exFAT drive ----------
+// macOS writes a "._<name>" companion beside every file it touches on a drive without extended attributes. Its bytes
+// start with the AppleDouble magic 00 05 16 07, so it is never JSON.
+const APPLE_DOUBLE = new Blob([new Uint8Array([0x00, 0x05, 0x16, 0x07, 0x00, 0x02, 0x00, 0x00, 0x4d, 0x61, 0x63, 0x20, 0x4f, 0x53, 0x20, 0x58])]);
+
+test('library store: AppleDouble and .DS_Store files are not records, runs or sheets', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.put('samples', { id: 's1', folder: 's1', name: 'Part one' });
+  await s.putRun('s1', savedRun('2026-11-05T14:03:22.123Z', 2.5), [{ rows: [1] }]);
+  await s.putFile('runs/s1/2026-11-05T14-10-00.000Z-review.pdf', new Blob(['%PDF']));
+  const [runName] = (await FS.list(root, `${S.LIBRARY_DIR}/runs/s1`)).map((e) => e.name).filter((n) => n.endsWith('.json'));
+  for (const p of ['records/._s1.json', 'records/.DS_Store', `runs/s1/._${runName}`, 'runs/s1/._2026-11-05T14-10-00.000Z-review.pdf', 'runs/s1/.DS_Store', 'runs/._s1', '._library.json']) {
+    await FS.writeBlob(root, `${S.LIBRARY_DIR}/${p}`, APPLE_DOUBLE);
+  }
+  const again = await S.makeLibraryStore(root, { toolVersion: '0.1.0' }); // opens: the ._s1.json is not read as a records file
+  let samples; again.watch('samples', (m) => { samples = m; });
+  assert.deepEqual([...samples.keys()], ['s1']);
+  const runs = await again.listRuns('s1');
+  assert.equal(runs.length, 1, 'the ._ companion of a run is not a run');
+  assert.equal((await again.getRun('s1')).summary.all_void_percent_of_body, 2.5, 'the latest run is the real one, not ._<time>.json');
+  assert.deepEqual((await again.listSheets('s1')).map((x) => x.name), ['2026-11-05T14-10-00.000Z-review.pdf']);
+  const out = await again.exportProject('0.1.0');
+  assert.deepEqual(Object.keys(out.runs), ['s1'], 'no run folder named ._s1');
+  // an import compares against the real runs only (a ._ file would throw "not a saved run")
+  const res = await again.importProject(await again.exportProject('0.1.0', ['s1']));
+  assert.deepEqual(res.runsAlready, ['s1']);
+});
+
+test('isHidden: dot-names (AppleDouble ._x, .DS_Store) are hidden; ordinary names are not', () => {
+  for (const n of ['._s1.json', '.DS_Store', '._2026-11-05T14-03-22.123Z.json', '.Trashes']) assert.equal(FS.isHidden(n), true, n);
+  for (const n of ['s1.json', 'VoxelBench', 'scan_._1', '2026-11-05T14-03-22.123Z.json']) assert.equal(FS.isHidden(n), false, n);
+});
