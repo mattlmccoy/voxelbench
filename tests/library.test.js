@@ -71,7 +71,7 @@ test('index: an unchanged scan needs no read', () => {
   const idx = L.mergeIndex(L.emptyIndex(1), [found()], 10);
   assert.equal(L.needsRead(idx, { path: 'scans/a', bytes: 100, mtime: 1000 }), false);
   assert.equal(L.needsRead(idx, { path: 'scans/a', bytes: 101, mtime: 1000 }), true);
-  assert.equal(L.needsRead(idx, { path: 'scans/a', bytes: 100, mtime: 2000 }), true);
+  assert.equal(L.needsRead(idx, { path: 'scans/a', bytes: 100, mtime: 3001 }), true); // more than exFAT's 2 s (M5)
   assert.equal(L.needsRead(idx, { path: 'scans/z', bytes: 100, mtime: 1000 }), true);
 });
 
@@ -182,7 +182,7 @@ test('index: fields beyond the basics (scanner record, copies) are kept', () => 
 test('index: an unchanged copy needs no read and resolves to its scan', () => {
   const idx = L.mergeIndex(L.emptyIndex(1), [found({ copies: ['t'], copy_stamps: [{ path: 't', bytes: 3, mtime: 4 }] })], 10);
   assert.equal(L.needsRead(idx, { path: 't', bytes: 3, mtime: 4 }), false);
-  assert.equal(L.needsRead(idx, { path: 't', bytes: 3, mtime: 5 }), true);
+  assert.equal(L.needsRead(idx, { path: 't', bytes: 3, mtime: 2005 }), true); // more than exFAT's 2 s (M5)
   assert.equal(L.findIndexed(idx, { path: 't', bytes: 3, mtime: 4 }), 'sa');
   assert.equal(L.findIndexed(idx, { path: 'scans/a', bytes: 100, mtime: 1000 }), 'sa');
   assert.equal(L.findIndexed(idx, { path: 'nowhere', bytes: 1, mtime: 1 }), null);
@@ -648,4 +648,18 @@ test('rescanner: folders the listing could not read are in failed; nested librar
   assert.equal(out.found, 1);
   assert.deepEqual(out.failed, [{ path: 'B/locked', message: 'could not be read' }]);
   assert.deepEqual(out.nested, ['old lab/VoxelBench']);
+});
+
+// ---------- final review M5: exFAT keeps modified times to 2 s ----------
+test('findIndexed and sameStamp: same path and size within 2 s of the indexed time is unchanged; more, or another size, is changed', () => {
+  const index = L.mergeIndex(L.emptyIndex('t0'), [{ id: 'sa', path: 'r/a', kind: 'vox', bytes: 100, mtime: 1730800000000, study: null,
+    copy_stamps: [{ path: 'r/a_tiff', bytes: 50, mtime: 1730800001000 }] }], 't1');
+  assert.equal(L.findIndexed(index, { path: 'r/a', bytes: 100, mtime: 1730800002000 }), 'sa', '+2000 ms: the drive rounded the time');
+  assert.equal(L.findIndexed(index, { path: 'r/a', bytes: 100, mtime: 1730799998000 }), 'sa', '-2000 ms');
+  assert.equal(L.findIndexed(index, { path: 'r/a', bytes: 100, mtime: 1730800002001 }), null, 'more than 2 s: changed');
+  assert.equal(L.findIndexed(index, { path: 'r/a', bytes: 101, mtime: 1730800000000 }), null, 'another size: changed');
+  assert.equal(L.findIndexed(index, { path: 'r/a_tiff', bytes: 50, mtime: 1730800000000 }), 'sa', 'copies too');
+  assert.equal(L.needsRead(index, { path: 'r/a', bytes: 100, mtime: 1730800001500 }), false);
+  assert.equal(L.sameStamp({ path: 'x', bytes: 1, mtime: 0 }, { path: 'x', bytes: 1, mtime: 2000 }), true);
+  assert.equal(L.sameStamp({ path: 'x', bytes: 1, mtime: 0 }, { path: 'y', bytes: 1, mtime: 0 }), false);
 });

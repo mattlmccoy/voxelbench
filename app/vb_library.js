@@ -32,10 +32,15 @@
     return findIndexed(index, stamp) === null;
   }
 
+  /** Whether two stamps are the same files: same path and size, modified times within 2 s (exFAT keeps times to 2 s,
+      so a drive moved between computers may round them). */
+  const MTIME_SLACK_MS = 2000;
+  const sameStamp = (a, b) => a.path === b.path && a.bytes === b.bytes && Math.abs(a.mtime - b.mtime) <= MTIME_SLACK_MS;
+
   /** The id of the indexed scan seen at this path with this size and modified time, as its own file or as one of its
       copies (copy_stamps), or null. */
-  function findIndexed(index, { path, bytes, mtime }) {
-    const same = (s) => s.path === path && s.bytes === bytes && s.mtime === mtime;
+  function findIndexed(index, stamp) {
+    const same = (s) => sameStamp(s, stamp);
     for (const [id, e] of Object.entries(index.scans)) if (same(e) || (e.copy_stamps || []).some(same)) return id;
     return null;
   }
@@ -421,5 +426,5 @@
   /** Bytes in decimal units, as the drive shows them: "2.5 GB", "420 MB". */
   const bytesText = (b) => (b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`);
 
-  return { matchImport, projectFolders, remapProject, sharedTargets, actionTargets, batchBytes, bytesText, driveCard, driveSummary, refusalMessage, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
+  return { sameStamp, matchImport, projectFolders, remapProject, sharedTargets, actionTargets, batchBytes, bytesText, driveCard, driveSummary, refusalMessage, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
 }));

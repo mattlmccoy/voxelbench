@@ -114,7 +114,7 @@
     const stack = L.scanFolders(CT.groupStacks(files), files).find((s) => s.dir === e.path);
     if (!stack) throw new Error(`no scan was found in ${e.path}; press Rescan`);
     const now = L.stampOf(stack);
-    if (now.bytes !== e.bytes || now.mtime !== e.mtime) throw new Error(`${e.path} changed since the last Rescan; press Rescan`);
+    if (!L.sameStamp(now, e)) throw new Error(`${e.path} changed since the last Rescan; press Rescan`);
     const s = { ...stack, folder: id };
     lib.stacks.set(id, s);
     return s;
