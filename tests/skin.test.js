@@ -69,6 +69,13 @@ test('the rail width stays between 320 px and 60 % of the window', () => {
   assert.equal(K.clampRailWidth(NaN, 1440), null);
 });
 
+test('while leveling, the rail widens to fit three previews side by side, within the usual limits', () => {
+  assert.equal(K.levelingRailWidth(380, 1440), 680);
+  assert.equal(K.levelingRailWidth(800, 1440), 800); // a rail the viewer already widened stays as it is
+  assert.equal(K.levelingRailWidth(380, 1000), 600); // never past 60 % of the window
+  assert.equal(K.levelingRailWidth(NaN, 1440), 680);
+});
+
 test('the mode is system, light or dark; system by default and for anything unknown', () => {
   assert.deepEqual(K.MODES, ['system', 'light', 'dark']);
   assert.equal(K.pickMode(null), 'system');

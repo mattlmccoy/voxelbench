@@ -49,6 +49,12 @@
     return Math.round(Math.min(Math.max(px, 320), Math.max(320, 0.6 * viewport)));
   }
 
+  /** Rail width while leveling a part: wide enough for the three previews side by side above the sliders (680 px),
+      never narrower than the rail already is, within clampRailWidth's limits. */
+  function levelingRailWidth(px, viewport) {
+    return clampRailWidth(Math.max(Number.isFinite(px) ? px : 0, 680), viewport);
+  }
+
   /** Open state after picking one section: that one open, every other closed. */
   function openOnly(ids, pick) { return Object.fromEntries(ids.map((id) => [id, id === pick])); }
 
@@ -231,5 +237,5 @@
     if (b.dataset.skin) return { skin: b.dataset.skin };
     return null;
   }
-  return { SKINS, SKIN_LABELS, MODES, pickMode, resolveMode, bootMode, wireTopbarHeight, pickSkin, stepDone, nextFor, clampRailWidth, openOnly, boot, wireSettings, wirePopover, wireSections, wireRailResize, wireBackdrop, menuPick };
+  return { SKINS, SKIN_LABELS, MODES, pickMode, resolveMode, bootMode, wireTopbarHeight, pickSkin, stepDone, nextFor, clampRailWidth, levelingRailWidth, openOnly, boot, wireSettings, wirePopover, wireSections, wireRailResize, wireBackdrop, menuPick };
 }));

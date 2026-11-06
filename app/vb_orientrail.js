@@ -19,14 +19,32 @@
     return { R, center: draft.center, ...O.gridForPoints({ R, center: draft.center }, draft.pts, draft.bin, Math.round(MARGIN_MM / state.voxelMm)) };
   }
 
+  // While leveling, the rail widens (VBSkin.levelingRailWidth) and html.leveling puts the three previews side by side,
+  // so the previews and the sliders fit on screen together; the viewer's own width comes back afterwards.
+  let railBefore = null; // the page's --rail-w before leveling widened it ('' when none was set)
+  function widenRail(wide) {
+    const root = document.documentElement;
+    if (wide === (railBefore !== null)) return;
+    if (wide) {
+      railBefore = root.style.getPropertyValue('--rail-w');
+      root.style.setProperty('--rail-w', `${window.VBSkin.levelingRailWidth($('rail').getBoundingClientRect().width, window.innerWidth)}px`);
+    } else {
+      if (railBefore) root.style.setProperty('--rail-w', railBefore); else root.style.removeProperty('--rail-w');
+      railBefore = null;
+    }
+    root.classList.toggle('leveling', wide);
+    window.dispatchEvent(new Event('resize')); // the views refit their canvases, as after dragging the rail's grip
+  }
+
   function render() {
     const leveled = Boolean(state.orientation), hidden = state.folder ? App.hiddenMarks(state.folder) : 0;
     $('orientState').textContent = leveled ? 'leveled' : 'scan axes';
     $('orientLevel').disabled = !state.folder || !state.model || busy || leveled;
-    $('orientLevel').hidden = leveled;
+    $('orientLevel').hidden = leveled || Boolean(draft); // the editor below replaces it while leveling
     $('orientReset').hidden = !leveled;
     $('orientReset').disabled = busy;
     $('orientEdit').hidden = !draft;
+    widenRail(Boolean(draft));
     const d = state.dims, mm = (n) => (n * state.voxelMm).toFixed(1);
     const parts = [];
     if (leveled) parts.push(`Leveled in the part's frame: x is the long axis, z the thinnest direction (up). The leveled scan is ${mm(d.nx)} × ${mm(d.ny)} × ${mm(d.nz)} mm with ${MARGIN_MM} mm of air around the part; everything outside the original scan reads gray 0. Saved with the sample, so reopening the scan levels it again.`);
@@ -75,7 +93,10 @@
       emit('statusText', 'Part axes found: check the previews, then Apply');
     } catch (e) {
       emit('statusText', `Could not level the part: ${e.message}`);
-    } finally { busy = false; render(); preview(); }
+    } finally {
+      busy = false; render(); preview();
+      if (draft) $('orientBox').scrollIntoView({ block: 'start' }); // the editor from its top: previews, then sliders
+    }
   }
 
   /** Saves the orientation (native voxels) with the sample, then reopens the scan so it is rebuilt leveled. */
