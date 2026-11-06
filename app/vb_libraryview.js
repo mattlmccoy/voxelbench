@@ -335,7 +335,13 @@
     }
   }
 
-  window.VBLibraryView = { thumbImage, wrap, rescan, openLibraryDir, openScan, saveScanRecord, stackFor };
+  /** Reads these scans' saved runs again (after a batch saved new ones). */
+  function forgetRuns(ids) {
+    for (const id of ids) { lib.runs.delete(id); lib.runErrors.delete(id); }
+    background(lib.gen);
+  }
+
+  window.VBLibraryView = { thumbImage, wrap, rescan, openLibraryDir, openScan, saveScanRecord, stackFor, forgetRuns };
   App.openLibrary = () => (supported ? pick() : undefined);
   App.openLibraryDir = openLibraryDir;
   App.rescanLibrary = rescan;
@@ -463,7 +469,7 @@
     lib.entries = rows;
     const grid = $('libGrid');
     $('libHint').hidden = !(open && rows.length && !readLocal(HINT_KEY));
-    if (!open) { grid.replaceChildren(); $('libEmpty').hidden = true; return; }
+    if (!open) { grid.replaceChildren(); $('libEmpty').hidden = true; App.emit('libraryRendered', { open, rows, shown: [], project: null }); return; }
     // An edit in progress (a tag field) is not redrawn away under the cursor.
     if (grid.contains(document.activeElement) && document.activeElement.matches('input')) return;
     renderSide(rows);
@@ -471,6 +477,7 @@
     grid.replaceChildren(...shown.map(card));
     $('libEmpty').hidden = Boolean(shown.length) || rescanner.busy();
     $('libEmpty').textContent = rows.length ? 'No scans match the search and filters.' : `No scans found under ${rootName()}. A scan is a folder holding a .VOX file, or a folder of TIFF slices.`;
+    App.emit('libraryRendered', { open, rows, shown, project: view.project }); // selection, Compare runs, Batch, Import: vb_libraryactions.js
   }
 
   function wire() {

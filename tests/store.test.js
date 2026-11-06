@@ -224,9 +224,13 @@ test('library store: importProject keeps runs and records', async () => {
   assert.equal(out.regions.length, 3);
   assert.equal(out.samples.length, 2);
   assert.equal(out.labels.length, 1);
-  // importing again keeps the earlier run under a free name
+  // in a library runs keep a history: importing again adds no run that is already there (same scan, same time)
+  // and never renames one into a folder of no scan
   const res2 = await s.importProject(p);
-  assert.deepEqual(res2.renamedRuns, ['S1 (imported 1)']);
+  assert.deepEqual(res2.renamedRuns, []);
+  assert.deepEqual(res2.runsAlready, ['S1']);
+  assert.equal((await s.listRuns('S1')).length, 1);
+  assert.deepEqual((await FS.list(root, `${S.LIBRARY_DIR}/runs`)).map((e) => e.name), ['S1']);
 });
 
 test('library store: putFile writes under VoxelBench and refuses library.json', async () => {
@@ -309,4 +313,72 @@ test('library store: reads and writes throw when the library folder is gone, rat
   await assert.rejects(s.putRun('S1', { n: 2 }, []), /library drive is not available/);
   await assert.rejects(s.put('samples', sample('S9')), /library drive is not available/);
   await assert.rejects(root.getDirectoryHandle(S.LIBRARY_DIR), /could not be found/, 'nothing was recreated');
+});
+
+// ---------- Task 7: run history on import, review sheets beside runs, export of a selection ----------
+test('library store: putRun files a run at its own time when given; an imported older run does not become the latest', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.putRun('S1', { n: 'new' }, []);
+  await s.putRun('S1', { n: 'old', created_at: '2020-01-02T03:04:05.678Z' }, [], { at: '2020-01-02T03:04:05.678Z' });
+  const runs = await s.listRuns('S1');
+  assert.equal(runs.length, 2);
+  assert.equal(runs[0].at, '2020-01-02T03:04:05.678Z');
+  assert.equal((await s.getRun('S1')).n, 'new');
+  // a second run at the same instant gets its own file, never replacing the first
+  await s.putRun('S1', { n: 'old2' }, [], { at: '2020-01-02T03:04:05.678Z' });
+  assert.equal((await s.listRuns('S1')).length, 3);
+});
+
+test('library store: importProject keeps the library\'s own sample details, fills the missing ones, and adds runs to the history', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.put('samples', { id: 'S1', folder: 'S1', name: 'Kept name', starred: true });
+  await s.put('regions', { ...region('r1'), note: 'library' });
+  await s.putRun('S1', { n: 'library run' }, []);
+  const p = await (await filled()).exportProject('0.1.0');
+  p.runs.S1.doc.created_at = '2021-05-06T07:08:09.010Z';
+  const res = await s.importProject(p);
+  let samples; s.watch('samples', (m) => { samples = m; });
+  assert.equal(samples.get('S1').name, 'Kept name');
+  assert.equal(samples.get('S1').material, 'PA12', 'a field the library lacked is filled from the project');
+  assert.equal(samples.get('S1').starred, true);
+  let regions; s.watch('regions', (m) => { regions = m; });
+  assert.equal(regions.get('r1').note, 'library', 'a record already in the library is not overwritten');
+  assert.deepEqual(res.keptRecords, ['samples/S1', 'regions/r1']);
+  assert.deepEqual(res.runsAdded, ['S1']);
+  const runs = await s.listRuns('S1');
+  assert.deepEqual(runs.map((r) => r.at)[0], '2021-05-06T07:08:09.010Z');
+  assert.equal((await s.getRun('S1')).n, 'library run', 'the imported older run is history, not the latest');
+});
+
+test('library store: listSheets lists the review sheets saved beside a scan\'s runs, and nothing else', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  assert.deepEqual(await s.listSheets('S 1'), []);
+  await s.putRun('S 1', { n: 1 }, []);
+  assert.deepEqual(await s.listSheets('S 1'), [], 'a run alone is not a sheet');
+  const at = new Date('2026-11-05T12:00:00.000Z');
+  assert.equal(S.sheetPath('S 1', at), `runs/${encodeURIComponent('S 1')}/2026-11-05T12-00-00.000Z-review.pdf`);
+  await s.putFile(S.sheetPath('S 1', at), new Blob(['pdf']));
+  await s.putFile(`runs/${encodeURIComponent('S 1')}/notes.pdf`, new Blob(['other']));
+  assert.deepEqual(await s.listSheets('S 1'), [{ at: '2026-11-05T12:00:00.000Z', name: '2026-11-05T12-00-00.000Z-review.pdf' }]);
+  assert.equal((await s.listRuns('S 1')).length, 1, 'the sheet is not a run');
+  assert.deepEqual(await s.listSheets('S2'), []);
+});
+
+test('library store: exportProject(folders) exports only those scans\' records and runs, plus labels and presets', async () => {
+  const root = makeFakeDir();
+  const s = await S.makeLibraryStore(root, { toolVersion: '0.1.0' });
+  await s.put('samples', sample('S1')); await s.put('samples', sample('S2'));
+  await s.put('regions', region('r1')); await s.put('regions', { ...region('r2'), sample: { folder: 'S2' } });
+  await s.put('labels', { id: 'region_a', label: 'Region A' });
+  await s.putRun('S1', { n: 1 }, []); await s.putRun('S2', { n: 2 }, []);
+  const p = await s.exportProject('0.1.0', ['S2']);
+  assert.deepEqual(p.samples.map((r) => r.id), ['S2']);
+  assert.deepEqual(p.regions.map((r) => r.id), ['r2']);
+  assert.deepEqual(Object.keys(p.runs), ['S2']);
+  assert.equal(p.labels.length, 1);
+  const all = await s.exportProject('0.1.0');
+  assert.deepEqual(Object.keys(all.runs).sort(), ['S1', 'S2'], 'no folders: the whole library, as before');
 });

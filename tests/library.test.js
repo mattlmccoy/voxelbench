@@ -516,3 +516,78 @@ test('refusalMessage: a drive that is gone is left to the card; other refusals k
   assert.equal(L.refusalMessage('Drive A', new Error('index version 9 is newer than this page')), 'The library in Drive A was not opened: index version 9 is newer than this page.');
   assert.equal(L.refusalMessage('Drive A', new Error('it is not readable.')), 'The library in Drive A was not opened: it is not readable.');
 });
+
+// ---------- Task 7: import, selection, batch size ----------
+const scans = {
+  sa: { path: 'scans/2026/PartA', bytes: 2e9 },
+  sb: { path: 'scans/2026/Cube', bytes: 5e8, copies: ['exports/Cube_tif'] },
+  sc: { path: 'scans/2025/Cube', bytes: 1e9 },
+  sd: { path: 'old/Ring', bytes: 3e9, missing: true },
+};
+
+test('matchImport: one library scan with that folder name matches it', () => {
+  assert.deepEqual(L.matchImport(['PartA'], scans), { matched: { PartA: 'sa' }, unmatched: [], ambiguous: {} });
+});
+
+test('matchImport: no scan with that folder name is unmatched; nothing is invented', () => {
+  assert.deepEqual(L.matchImport(['Bar'], scans), { matched: {}, unmatched: ['Bar'], ambiguous: {} });
+});
+
+test('matchImport: two scans with that folder name are ambiguous, never picked silently', () => {
+  assert.deepEqual(L.matchImport(['Cube'], scans), { matched: {}, unmatched: [], ambiguous: { Cube: ['sb', 'sc'] } });
+});
+
+test('matchImport: the last path segment is the name; a copy\'s folder counts once; an id matches itself; a missing scan still matches', () => {
+  const r = L.matchImport(['Cube_tif', 'sc', 'Ring', 'scans'], scans);
+  assert.deepEqual(r, { matched: { Cube_tif: 'sb', sc: 'sc', Ring: 'sd' }, unmatched: ['scans'], ambiguous: {} });
+  assert.deepEqual(L.matchImport(['Cube'], { sb: { path: 'a/Cube', copies: ['b/Cube'] } }).matched, { Cube: 'sb' });
+});
+
+test('projectFolders: every folder a project names, from samples, regions, annotations and runs, once each', () => {
+  const p = { samples: [{ id: 'A', folder: 'A' }], regions: [{ id: 'r', sample: { folder: 'B' } }], annotations: [{ id: 'n', sample: { folder: 'A' } }], runs: { C: {} } };
+  assert.deepEqual(L.projectFolders(p), ['A', 'B', 'C']);
+  assert.deepEqual(L.projectFolders({}), []);
+});
+
+test('remapProject: records and runs move to the chosen ids; folders not chosen are left out; labels and presets stay', () => {
+  const p = {
+    schema: 'voxelbench-project', version: 1, tool_version: 'x',
+    samples: [{ id: 'A', folder: 'A', name: 'A' }, { id: 'B', folder: 'B', name: 'Bee' }],
+    regions: [{ id: 'r1', sample: { folder: 'A', name: 'A' } }, { id: 'r2', sample: { folder: 'B' } }],
+    annotations: [{ id: 'n1', sample: { folder: 'B' } }],
+    labels: [{ id: 'l' }], presets: [{ id: 'p' }],
+    runs: { A: { doc: { n: 1 }, chunks: [] }, B: { doc: { n: 2 }, chunks: [] } },
+  };
+  const before = JSON.stringify(p);
+  const out = L.remapProject(p, { A: 'sa' });
+  assert.equal(JSON.stringify(p), before, 'the input is not changed');
+  assert.deepEqual(out.samples, [{ id: 'sa', folder: 'sa', name: 'A' }]);
+  assert.deepEqual(out.regions, [{ id: 'r1', sample: { folder: 'sa', name: 'A' } }]);
+  assert.deepEqual(out.annotations, []);
+  assert.deepEqual(out.runs, { sa: { doc: { n: 1 }, chunks: [] } });
+  assert.deepEqual([out.labels, out.presets, out.schema, out.version], [[{ id: 'l' }], [{ id: 'p' }], 'voxelbench-project', 1]);
+  // the identity mapping keeps a part of the project as it was (the file kept for later)
+  const kept = L.remapProject(p, { B: 'B' });
+  assert.deepEqual(kept.samples.map((s) => s.id), ['B']);
+  assert.deepEqual(Object.keys(kept.runs), ['B']);
+  assert.deepEqual(kept.annotations, [{ id: 'n1', sample: { folder: 'B' } }]);
+});
+
+test('actionTargets: selected cards first; else the open project\'s scans; else none', () => {
+  const rows = [{ id: 'sa', record: { project: 'P' } }, { id: 'sb', record: null }, { id: 'sc', record: { project: 'P' } }];
+  assert.deepEqual(L.actionTargets(rows, new Set(['sb', 'gone']), 'P'), { ids: ['sb'], from: 'selected' });
+  assert.deepEqual(L.actionTargets(rows, new Set(), 'P'), { ids: ['sa', 'sc'], from: 'project' });
+  assert.deepEqual(L.actionTargets(rows, new Set(), null), { ids: [], from: null });
+});
+
+test('batchBytes: the total of the scans to read, from the index; missing scans are left out and named', () => {
+  assert.deepEqual(L.batchBytes(['sa', 'sb', 'sd', 'zz'], scans), { ids: ['sa', 'sb'], bytes: 2.5e9, missing: ['sd', 'zz'] });
+  assert.equal(L.bytesText(2.5e9), '2.5 GB');
+  assert.equal(L.bytesText(4.2e8), '420 MB');
+  assert.equal(L.bytesText(0), '0 MB');
+});
+
+test('sharedTargets: two folders headed for one scan are found, so their records are never merged silently', () => {
+  assert.deepEqual(L.sharedTargets({ Cube: 'sb', Cube_tif: 'sb', PartA: 'sa' }), [['sb', ['Cube', 'Cube_tif']]]);
+  assert.deepEqual(L.sharedTargets({ A: 'sa' }), []);
+});

@@ -114,6 +114,11 @@
   // ISO times sort as text; ':' is not allowed in file names on every drive, so the file name uses '-' there.
   const runFileName = (d) => `${d.toISOString().replace(/:/g, '-')}.json`;
   const runTime = (name) => name.slice(0, -5).replace(/T(\d\d)-(\d\d)-(\d\d)/, 'T$1:$2:$3');
+  // A review sheet sits beside the scan's runs, named by the time it was made: runs/<scan>/<time>-review.pdf.
+  const SHEET_SUFFIX = '-review.pdf';
+  const sheetPath = (folder, d) => `runs/${enc(folder)}/${d.toISOString().replace(/:/g, '-')}${SHEET_SUFFIX}`;
+  const sheetTime = (name) => name.slice(0, -SHEET_SUFFIX.length).replace(/T(\d\d)-(\d\d)-(\d\d)/, 'T$1:$2:$3');
+  const validTime = (iso) => typeof iso === 'string' && !Number.isNaN(new Date(iso).getTime());
 
   // undefined means the file is absent; a file holding JSON null is present and is returned as null.
   async function readJson(root, path) {
@@ -212,15 +217,24 @@
         if (!names.length) return null;
         return (await readRun(folder, names[names.length - 1])).doc;
       },
-      putRun: (folder, doc, chunks) => serial(async () => {
+      // A run is filed at the time it was made: now, or opts.at for a run made earlier (an import), so the latest run is
+      // always the one made last, whatever order they arrive in.
+      putRun: (folder, doc, chunks, opts = {}) => serial(async () => {
         await ensureLibrary();
         const have = new Set(await runNames(folder));
-        const t = new Date();
+        const t = validTime(opts.at) ? new Date(opts.at) : new Date();
         while (have.has(runFileName(t))) t.setTime(t.getTime() + 1); // two runs in one millisecond still get two files
         await FS.writeText(dir, `${runDir(folder)}/${runFileName(t)}`, JSON.stringify({ doc, chunks }));
         runFolders.add(folder);
       }),
       async listRuns(folder) { return (await runNames(folder)).map((n) => ({ at: runTime(n) })); },
+      /** The review sheets saved beside a scan's runs, oldest first: [{ at, name }]. */
+      async listSheets(folder) {
+        const entries = await FS.list(dir, runDir(folder));
+        if (!entries.length) await ensureLibrary();
+        return entries.filter((e) => e.kind === 'file' && e.name.toLowerCase().endsWith(SHEET_SUFFIX)).map((e) => e.name).sort()
+          .map((name) => ({ at: sheetTime(name), name }));
+      },
       // Only two places take loose files: thumbnails, and non-JSON files (review sheets) beside a scan's runs. Records,
       // labels, presets, library.json and saved runs are all JSON, so none can be reached; names compare case-insensitively
       // because the drive may fold case. A file beside the runs is never replaced.
@@ -239,20 +253,53 @@
           await FS.writeBlob(dir, base(path), blob);
         });
       },
-      async exportProject(toolVersion = opts.toolVersion) {
+      // folders: the scans to export (their records and latest runs; labels and presets always); omitted, every scan.
+      async exportProject(toolVersion = opts.toolVersion, folders = null) {
         const out = header(toolVersion);
-        for (const c of COLLECTIONS) out[c] = [...data[c].values()].map(copy);
+        const wanted = folders ? new Set(folders) : null;
+        const keep = (c, r) => !wanted || GLOBAL_FILE[c] || wanted.has(folderOf(c, r));
+        for (const c of COLLECTIONS) out[c] = [...data[c].values()].filter((r) => keep(c, r)).map(copy);
         out.runs = {};
-        for (const f of runFolders) {
+        for (const f of wanted ? [...wanted] : runFolders) {
           const names = await runNames(f);
           if (names.length) out.runs[f] = await readRun(f, names[names.length - 1]);
         }
         return out;
       },
-      importProject: (obj) => importInto(store, obj),
+      importProject: (obj) => importIntoLibrary(store, obj, data, (folder) => runNames(folder), (folder, name) => readRun(folder, name)),
       isEmpty: () => !runFolders.size && COLLECTIONS.every((c) => !data[c].size),
     };
     return store;
+  }
+
+  /** A project into a library, whose folders are already the library's scan ids (VBLibrary.remapProject). Nothing in
+      the library is overwritten: a sample record already there keeps its fields and takes only the ones it lacks, any
+      other record already there is kept as it is, and runs join the scan's history at the time they were made. A run
+      already in the history (the same time, else the same content) is not added again. */
+  async function importIntoLibrary(store, obj, data, runNames, readRun) {
+    checkProject(obj);
+    let added = 0;
+    const keptRecords = [], runsAdded = [], runsAlready = [];
+    for (const c of COLLECTIONS) {
+      for (const r of obj[c] || []) {
+        const have = data[c].get(r.id);
+        if (!have) { await store.put(c, r); added++; continue; }
+        keptRecords.push(`${c}/${r.id}`);
+        if (c === 'samples' && Object.keys(r).some((k) => !(k in have))) await store.put(c, { ...r, ...have });
+      }
+    }
+    for (const [folder, r] of Object.entries(obj.runs || {})) {
+      const at = r.doc && validTime(r.doc.created_at) ? r.doc.created_at : null;
+      const names = await runNames(folder);
+      const same = JSON.stringify(r.doc);
+      const candidates = at ? names.filter((n) => runTime(n) === new Date(at).toISOString()) : names;
+      let there = false;
+      for (const n of candidates) if (JSON.stringify((await readRun(folder, n)).doc) === same) { there = true; break; }
+      if (there) { runsAlready.push(folder); continue; }
+      await store.putRun(folder, r.doc, r.chunks || [], { at });
+      runsAdded.push(folder);
+    }
+    return { added, renamedRuns: [], keptRecords, runsAdded, runsAlready };
   }
 
   /** Offer a file to the viewer: the downloads capability when there is one, else a plain download link. */
@@ -291,5 +338,5 @@
     return { store: makeArtifactStore(db), downloads, note: '' };
   }
 
-  return { PROJECT_SCHEMA, PROJECT_VERSION, COLLECTIONS, LIBRARY_DIR, makeFileStore, makeArtifactStore, makeLibraryStore, connect, saveBlob };
+  return { PROJECT_SCHEMA, PROJECT_VERSION, COLLECTIONS, LIBRARY_DIR, sheetPath, checkProject, makeFileStore, makeArtifactStore, makeLibraryStore, connect, saveBlob };
 }));

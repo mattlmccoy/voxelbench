@@ -69,7 +69,7 @@
   async function exportSheet() {
     const say = (t) => { $('exportStatus').textContent = t; };
     if (!state.pores || !state.patches) { say('Run pore segmentation first.'); return; }
-    const folder = state.folder; // the sheet takes minutes; another scan may be open by the time it is saved
+    const folder = state.folder, store = state.store, title = state.stack && state.stack.title; // the sheet takes minutes; another scan may be open by the time it is saved
     if (!window.jspdf) { say('The PDF library did not load.'); return; }
     say('Review sheet: computing sheet data and threshold sweep (several minutes).');
     // The sweep is the slow part; reuse it while the segmentation, rejections and zone threshold are unchanged.
@@ -110,14 +110,27 @@
     });
     const blob = pdf.output('blob');
     state.lastSheet = blob;
-    const name = `${state.folder}_review_sheet.pdf`;
-    try {
-      const how = await window.VBStore.saveBlob(state.downloads, name, blob);
-      say(how === 'declined' ? 'Save canceled.' : how === 'link' ? `Downloaded ${name} to the browser's download folder.` : `Saved ${name}.`);
-      if (how !== 'declined' && state.folder === folder) { state.sheetSaved = true; App.emit('sheetSaved'); } // the checklist's Review sheet step
-    } catch (e) {
-      say(`Could not save: ${e.message}`);
+    // In a library the sheet is also kept beside the scan's runs (runs/<scan>/<time>-review.pdf); a download follows.
+    let kept = '', inLibrary = false;
+    if (store && store.kind === 'library') {
+      const path = window.VBStore.sheetPath(folder, new Date());
+      try {
+        await store.putFile(path, blob);
+        inLibrary = true;
+        kept = `Kept in the library beside the scan's runs (${window.VBStore.LIBRARY_DIR}/${path}). `;
+      } catch (e) {
+        kept = `Not kept in the library: ${e.message}. `;
+      }
     }
+    const name = `${store && store.kind === 'library' && title ? title.replace(/[\\/:*?"<>|]+/g, '_') : folder}_review_sheet.pdf`;
+    let how = 'declined';
+    try {
+      how = await window.VBStore.saveBlob(state.downloads, name, blob);
+      say(`${kept}${how === 'declined' ? (inLibrary ? 'Download canceled.' : 'Save canceled.') : how === 'link' ? `Downloaded ${name} to the browser's download folder.` : `Saved ${name}.`}`);
+    } catch (e) {
+      say(`${kept}Could not save: ${e.message}`);
+    }
+    if ((inLibrary || how !== 'declined') && state.folder === folder) { state.sheetSaved = true; App.emit('sheetSaved'); } // the checklist's Review sheet step
   }
 
   App.exportSheet = exportSheet;

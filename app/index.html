@@ -560,6 +560,22 @@ html .library .welcome button.big { font-size: 15px; padding: 10px 24px; }
 .libtags input { flex: 1 1 100%; min-width: 0; }
 .libtag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--warn-bg); color: var(--fg); overflow-wrap: anywhere; }
 .library .libtagedit { font-size: 11px; color: var(--accent); padding: 1px 2px; }
+.libactions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
+.libactstatus { flex: 1 1 100%; overflow-wrap: anywhere; }
+.libactstatus:empty { display: none; }
+.libcompare { display: grid; gap: 8px; min-width: 0; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.libcompare p { margin: 0; overflow-wrap: anywhere; }
+.libcompare .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.libpick { margin: 0; flex: none; accent-color: var(--accent); }
+.libcard.picked { outline: 2px solid var(--accent); outline-offset: -2px; }
+.libdialog { max-width: min(560px, calc(100vw - 32px)); background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.libdialog::backdrop { background: rgba(0, 0, 0, .4); }
+.libdialog h2 { margin: 0 0 8px; font-size: 16px; }
+.libdialog p { margin: 6px 0; overflow-wrap: anywhere; }
+.libdialog .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.libquestions { display: grid; gap: 4px; max-height: 50vh; overflow: auto; }
+.libq { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); align-items: center; gap: 8px; }
+.libq b { overflow-wrap: anywhere; }
 .libstart { display: grid; gap: 10px; margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--line); min-width: 0; }
 .libstart p { margin: 0; }
 @media (max-width: 900px) {
@@ -666,6 +682,7 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
     <span class="libroot" id="libRoot">No library open</span>
     <button id="libPick" hidden title="The folder on the lab drive that holds the scans; every scan anywhere under it is listed">Choose another folder…</button>
     <button id="libRescan" hidden title="Look for new, moved and removed scans under the library folder; unchanged scans are not read again">Rescan</button>
+    <button id="libImport" hidden title="A project file saved by VoxelBench: its records and runs are matched to this library's scans by folder name; you are asked when a folder matches no scan or several">Import project…</button><input type="file" id="libImportFile" accept=".json,application/json" hidden>
     <button id="libStudio" hidden>Back to the open scan</button>
     <span class="skinwrap libskin"><button id="libSkinButton" type="button" title="Appearance: Lab, Mac or Glass; light or dark"><svg class="skinicon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.3"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M3.4 12.6l1.3-1.3M11.3 4.7l1.3-1.3"/></svg><span>Appearance</span></button><div class="skinmenu" id="libSkinMenu" role="menu" hidden></div></span>
   </header>
@@ -698,6 +715,19 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
       </div>
       <p class="notice" id="libHint" hidden>Click a scan to see its details.</p>
       <p class="libstatus mono" id="libStatus" role="status"></p>
+      <div class="libactions" id="libActions" role="group" aria-label="Act on several scans" hidden>
+        <span class="mono muted" id="libActTargets"></span>
+        <button id="libCompare" type="button" disabled>Compare runs</button>
+        <button id="libBatch" type="button" disabled>Batch</button>
+        <button id="libBatchCsv" type="button" hidden>Batch table (CSV)</button>
+        <button id="libClearSel" type="button" class="link" hidden>Clear selection</button>
+        <span class="mono libactstatus" id="libActStatus" role="status"></span>
+      </div>
+      <section class="libcompare" id="libCompareBox" aria-label="Compare runs" hidden>
+        <div class="row"><b>Compare runs</b><button id="libCompareClose" type="button" class="link">Close</button></div>
+        <p class="mono" id="libCompareNote"></p>
+        <div class="tablewrap" id="libCompareWrap" hidden style="max-height:none"><table id="libCompareTable"></table></div>
+      </section>
       <div class="progress" id="progressBar" hidden><div></div></div>
       <p class="mono muted" id="openerText"></p>
       <p class="error" id="loadError" hidden></p>
@@ -710,6 +740,16 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
     </main>
   </div>
 </div>
+
+<dialog class="libdialog" id="libImportDialog" aria-labelledby="libImportTitle">
+  <form method="dialog">
+    <h2 id="libImportTitle">Import project</h2>
+    <p id="libImportIntro"></p>
+    <div class="libquestions" id="libImportQuestions"></div>
+    <p class="error" id="libImportError" hidden></p>
+    <div class="row"><button type="submit" value="cancel">Cancel</button><button type="button" class="primary" id="libImportGo">Import</button></div>
+  </form>
+</dialog>
 
 <div class="overview" id="overviewPage" hidden>
   <header class="libbar">
@@ -1157,6 +1197,7 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
 <script src="vb_batch.js"></script>
 <script src="vb_libraryview.js"></script>
 <script src="vb_overview.js"></script>
+<script src="vb_libraryactions.js"></script>
 <script src="vb_archimedes.js"></script>
 <script src="vb_orientrail.js"></script>
 <script src="ct_sheet.js"></script>

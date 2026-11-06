@@ -1,13 +1,19 @@
 /* Before/after: this scan's saved run against another folder's saved run (for example the same part before and after
-   sintering), metric by metric. Only saved runs are compared, so both sides were made the same way. */
+   sintering), metric by metric. Only saved runs are compared, so both sides were made the same way. For a library scan
+   this moves to the library (select cards, or a project; vb_libraryactions.js), so the studio says where it went. */
 (function (App) {
   'use strict';
   const CT = window.CT;
   const { state, $, on } = App;
   const fmt = (v) => (v === null ? 'n/a' : Number.isInteger(v) || Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(3));
 
+  const inLibrary = () => Boolean(state.store && state.store.kind === 'library');
+  const LIBRARY_NOTE = 'Compare runs is in the library: tick the cards of the scans to compare (or pick a project), then press Compare runs.';
+
   function options() {
     const sel = $('compareWith'), keep = sel.value;
+    sel.closest('.row').hidden = inLibrary();
+    if (inLibrary()) { sel.value = ''; return; }
     const folders = [...new Set([...state.stacks.map((s) => s.folder), ...state.samples.keys()])].filter((f) => f && f !== state.folder).sort();
     sel.textContent = '';
     const first = document.createElement('option'); first.value = ''; first.textContent = "another scan's saved run…"; sel.append(first);
@@ -22,6 +28,7 @@
     table.textContent = '';
     $('compareWrap').hidden = true;
     $('compareNote').textContent = '';
+    if (inLibrary()) { $('compareNote').textContent = state.folder ? LIBRARY_NOTE : ''; return; }
     if (!other || !state.store || !state.folder) return;
     const [mine, theirs] = await Promise.all([state.store.getRun(state.folder), state.store.getRun(other)]);
     if (mine0 !== token) return;

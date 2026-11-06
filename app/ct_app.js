@@ -187,8 +187,9 @@ window.CTApp = (function () {
   }
 
   async function openProject(file) {
-    // Ruling 10: a project opened here would land in the library as records of no scan; Task 7's Import does it right.
-    if (state.store && state.store.kind === 'library') { projectNote("Open a folder or a demo first; importing a project into a library comes with the library's Import."); return; }
+    // Ruling 10: a project opened here would land in the library as records of no scan; the library's Import project…
+    // matches its folders to the library's scans first (vb_libraryactions.js).
+    if (state.store && state.store.kind === 'library') { projectNote('To bring a project into this library, use Import project… on the library page: it matches the project\'s folders to the library\'s scans and asks when it cannot.'); return; }
     try {
       let obj;
       try { obj = JSON.parse(await file.text()); } catch (e) { throw new Error('Not a VoxelBench project'); }

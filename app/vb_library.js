@@ -343,5 +343,72 @@
     return { name, scans: present.length, analyzed: known ? present.filter((r) => cardFacts(r).analyzed).length : null, opened_at: now };
   }
 
-  return { driveCard, driveSummary, refusalMessage, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
+  // ---------- acting on several scans: import, Compare runs, Batch ----------
+  /** Which library scan each folder of a project file is. A folder equal to a scan id is that scan; otherwise the folder
+      name (the last path segment) is looked up among each scan's path and its copies' paths. One scan: matched; none:
+      unmatched (the caller asks to skip or keep for later; no scan is ever made up); more than one: ambiguous, with
+      the candidate ids for the caller to ask about. scans: the index's id -> entry (missing scans count too: their
+      records stay attached for when they are back). */
+  function matchImport(projectFolders, scans) {
+    const out = { matched: {}, unmatched: [], ambiguous: {} };
+    for (const folder of projectFolders) {
+      if (Object.prototype.hasOwnProperty.call(scans, folder)) { out.matched[folder] = folder; continue; }
+      const ids = Object.entries(scans).filter(([, e]) => [e.path, ...(e.copies || [])].some((p) => leaf(p) === folder)).map(([id]) => id);
+      if (ids.length === 1) out.matched[folder] = ids[0];
+      else if (ids.length) out.ambiguous[folder] = ids;
+      else out.unmatched.push(folder);
+    }
+    return out;
+  }
+
+  /** Every scan folder a project file names (its samples, regions, annotations and runs), once each, in first-seen order. */
+  function projectFolders(obj) {
+    const seen = new Set();
+    for (const r of obj.samples || []) seen.add(r.id);
+    for (const c of ['regions', 'annotations']) for (const r of obj[c] || []) if (r.sample && r.sample.folder) seen.add(r.sample.folder);
+    for (const f of Object.keys(obj.runs || {})) seen.add(f);
+    return [...seen];
+  }
+
+  /** A copy of a project with each chosen folder's records and run moved to its new folder (mapping: old -> new); the
+      folders not in mapping are left out. Labels and presets belong to no scan and are kept. The input is not changed. */
+  function remapProject(obj, mapping) {
+    const to = (f) => (Object.prototype.hasOwnProperty.call(mapping, f) ? mapping[f] : null);
+    const out = JSON.parse(JSON.stringify(obj));
+    out.samples = (out.samples || []).filter((r) => to(r.id) !== null).map((r) => ({ ...r, id: to(r.id), folder: to(r.id) }));
+    for (const c of ['regions', 'annotations']) {
+      out[c] = (out[c] || []).filter((r) => r.sample && to(r.sample.folder) !== null).map((r) => ({ ...r, sample: { ...r.sample, folder: to(r.sample.folder) } }));
+    }
+    out.runs = Object.fromEntries(Object.entries(out.runs || {}).filter(([f]) => to(f) !== null).map(([f, r]) => [to(f), r]));
+    return out;
+  }
+
+  /** The scans that more than one folder of an import would go to ([[id, [folders]]]): the caller asks before importing,
+      because their records would otherwise merge into one scan. */
+  function sharedTargets(mapping) {
+    const by = new Map();
+    for (const [f, id] of Object.entries(mapping)) by.set(id, [...(by.get(id) || []), f]);
+    return [...by].filter(([, fs]) => fs.length > 1);
+  }
+
+  /** The scans Compare runs and Batch act on: the selected cards when any are selected (and still listed), else the
+      scans of the project chosen in the side list, else none. from: 'selected', 'project' or null. */
+  function actionTargets(rows, selected, project) {
+    const picked = rows.filter((r) => selected.has(r.id)).map((r) => r.id);
+    if (picked.length) return { ids: picked, from: 'selected' };
+    if (project) return { ids: rows.filter((r) => r.record && r.record.project === project).map((r) => r.id), from: 'project' };
+    return { ids: [], from: null };
+  }
+
+  /** What a batch would read, from the index: the scans present (ids), their bytes in all, and the ids it leaves out
+      (missing at the last Rescan, or not in the index). */
+  function batchBytes(ids, scans) {
+    const ok = ids.filter((id) => scans[id] && !scans[id].missing);
+    return { ids: ok, bytes: ok.reduce((a, id) => a + (num(scans[id].bytes) || 0), 0), missing: ids.filter((id) => !ok.includes(id)) };
+  }
+
+  /** Bytes in decimal units, as the drive shows them: "2.5 GB", "420 MB". */
+  const bytesText = (b) => (b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`);
+
+  return { matchImport, projectFolders, remapProject, sharedTargets, actionTargets, batchBytes, bytesText, driveCard, driveSummary, refusalMessage, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
 }));

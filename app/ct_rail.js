@@ -684,11 +684,17 @@
       wall: state.wall && state.wall.result ? state.wall.result.stats : null,
       archimedes: App.archimedesNow ? App.archimedesNow() : null,
       zones: state.zones ? { refused: state.zones.refused ?? null, threshold: state.zones.threshold ?? null, axis: state.zones.axis ?? null, stats: state.zones.stats ?? null, baseline: state.zones.baseline ?? null, method: state.zones.method ?? null, labels: state.zoneLabels, candidates_not_composition: true } : { labels: state.zoneLabels } };
+    const store = state.store, folder = state.folder;
     try {
-      await state.store.putRun(state.folder, run, chunks);
+      await store.putRun(folder, run, chunks);
       App.markDirty();
       App.emit('runSaved');
-      sayExport(state.store.kind === 'file' ? `Run stored in the project: ${state.pores.length} regions. Save the project to keep it.` : `Saved to the shared database: ${state.pores.length} regions in ${chunks.length} parts.`);
+      if (store.kind === 'library') {
+        // A library keeps every run: this one is added, the earlier ones stay (the overview lists them).
+        let count = '';
+        try { count = ` (run ${(await store.listRuns(folder)).length} of this scan; earlier runs kept)`; } catch (e) { count = ` (the scan's runs could not be counted: ${e.message})`; }
+        sayExport(`Saved to the library: ${state.pores.length} regions${count}.`);
+      } else sayExport(store.kind === 'file' ? `Run stored in the project: ${state.pores.length} regions. Save the project to keep it.` : `Saved to the shared database: ${state.pores.length} regions in ${chunks.length} parts.`);
     } catch (e) {
       sayExport(`Could not save the run: ${e.message}`);
     }
