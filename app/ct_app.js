@@ -156,7 +156,7 @@ window.CTApp = (function () {
   /** Saves fields of a scan's sample record (the open scan's unless folder is given), keeping its other fields. */
   function saveSample(changes, folder = state.folder) {
     const pending = state.unsaved.get(folder);
-    saveRecord('samples', CT.sampleRecord(folder, state.samples, changes, pending && pending._collection === 'samples' ? pending : null));
+    return saveRecord('samples', CT.sampleRecord(folder, state.samples, changes, pending && pending._collection === 'samples' ? pending : null));
   }
 
   async function removeRecord(collection, id) {

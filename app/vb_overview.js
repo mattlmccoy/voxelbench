@@ -6,7 +6,7 @@
   'use strict';
   const L = window.VBLibrary, LV = window.VBLibraryView, VX = window.VBVox;
   const { state, $, on } = App;
-  const PREVIEW_ROWS = 128; // z rows read for the XZ and YZ previews; the rest repeat the nearest
+  const PREVIEW_ROWS = 48; // z rows read for the XZ and YZ previews (the thumbnail is 256 px wide); the rest repeat the nearest
   const cur = { id: null, gen: 0, run: null, runs: [], header: null, unwatch: null };
   const lib = () => App.library;
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
@@ -18,13 +18,13 @@
   function pairs(box, list, empty) {
     box.replaceChildren();
     if (!list.length && empty) { box.append(el('span', 'muted', empty)); return; }
-    for (const [k, v] of list) box.append(el('span', '', k), el('span', `v${v === 'not recorded' ? ' muted' : ''}`, v));
+    for (const [k, v] of list) box.append(el('span', '', k), el('span', `v${v === L.NOT_RECORDED ? ' muted' : ''}`, v));
   }
 
   function renderFacts() {
     const r = row();
     if (!r) return;
-    const f = L.overviewFacts({ entry: r.entry, scanInfo: r.entry.info || null, header: cur.header, run: cur.run, runs: cur.runs });
+    const f = L.overviewFacts({ entry: r.entry, scanInfo: r.entry.info || null, header: cur.header, record: record(), run: cur.run, runs: cur.runs });
     pairs($('ovFacts'), f.rows);
     pairs($('ovResults'), f.results, cur.run === null ? 'No saved run yet. Analyze the scan and press Save run in the studio.' : '');
     const list = $('ovRuns');
@@ -48,14 +48,21 @@
     $('ovStar').textContent = facts.starred ? '★' : '☆';
     $('ovStar').setAttribute('aria-pressed', String(facts.starred));
     $('ovStar').setAttribute('aria-label', facts.starred ? 'Unstar this scan' : 'Star this scan');
-    $('ovSaveState').textContent = rec ? 'saved' : 'not described yet';
+    if (!$('ovSaveState').textContent) $('ovSaveState').textContent = rec ? '' : 'not described yet';
     $('ovTitle').textContent = facts.title;
     App.emit('overviewChanged');
   }
 
-  function saveDetails() {
-    const v = (id) => $(id).value.trim();
-    LV.saveScanRecord(cur.id, { name: v('ovName') || cur.id, material: v('ovMaterial'), process: v('ovProcess'), notes: v('ovNotes'), project: v('ovProject') || null, tags: L.parseTags($('ovTags').value) });
+  /** Saves the form's fields, and shows the outcome of this save (not whether a record exists). */
+  async function saveDetails() {
+    const v = (id) => $(id).value.trim(), id = cur.id, gen = cur.gen;
+    $('ovSaveState').textContent = 'saving…';
+    try {
+      await LV.saveScanRecord(id, { name: v('ovName') || id, material: v('ovMaterial'), process: v('ovProcess'), notes: v('ovNotes'), project: v('ovProject') || null, tags: L.parseTags($('ovTags').value) });
+      if (gen === cur.gen) $('ovSaveState').textContent = 'saved';
+    } catch (e) {
+      if (gen === cur.gen) $('ovSaveState').textContent = `not saved: ${e.message}`;
+    }
   }
 
   // ---------- previews ----------
@@ -71,22 +78,31 @@
 
   const bytesOf = async (file, [a, b]) => file.slice(a, b).arrayBuffer();
 
-  /** One preview plane of a VOX scan: PREVIEW_ROWS z rows are read; every pixel row takes the nearest one read. */
-  async function voxPlane(file, h, plane, gen) {
-    const index = plane === 'XZ' ? h.ny >> 1 : h.nx >> 1, width = plane === 'XZ' ? h.nx : h.ny;
-    const k = Math.min(PREVIEW_ROWS, h.nz), rows = new Map();
+  /** The XZ (y = ny / 2) and YZ (x = nx / 2) previews of a VOX scan from one read per sampled z: the byte span of the YZ
+      row holds the XZ row too. PREVIEW_ROWS z rows are read; every pixel row takes the nearest one read. Null when the
+      scan changed under it (gen). */
+  async function voxPlanes(file, h, gen) {
+    const yMid = h.ny >> 1, xMid = h.nx >> 1, k = Math.min(PREVIEW_ROWS, h.nz), xz = new Map(), yz = new Map();
     for (let i = 0; i < k; i++) {
       const z = Math.min(h.nz - 1, Math.floor(((i + 0.5) * h.nz) / k));
-      const values = VX.sliceValues(await bytesOf(file, L.voxRowRange(h, plane, index, z)), h);
+      const [start, end] = L.voxRowRange(h, 'YZ', xMid, z);
+      const values = VX.sliceValues(await bytesOf(file, [start, end]), h); // value j sits at voxel offset j from (x = xMid, y = 0)
       if (gen !== cur.gen) return null;
-      rows.set(z, plane === 'XZ' ? values : Uint16Array.from({ length: width }, (_, y) => values[y * h.nx]));
+      yz.set(z, Uint16Array.from({ length: h.ny }, (_, y) => values[y * h.nx]));
+      const at = yMid * h.nx - xMid; // the XZ row's first voxel, relative to the span's first
+      // The span holds the XZ row unless the volume is only a few voxels deep in y; then that row is read by itself.
+      xz.set(z, at + h.nx <= values.length ? values.subarray(at, at + h.nx) : VX.sliceValues(await bytesOf(file, L.voxRowRange(h, 'XZ', yMid, z)), h));
+      if (gen !== cur.gen) return null;
     }
-    const zs = [...rows.keys()], pixels = new Uint16Array(width * h.nz);
-    for (let z = 0, j = 0; z < h.nz; z++) {
-      while (j + 1 < zs.length && Math.abs(zs[j + 1] - z) <= Math.abs(zs[j] - z)) j++;
-      pixels.set(rows.get(zs[j]), (h.nz - 1 - z) * width); // z up: slice 0 at the bottom
-    }
-    return { width, height: h.nz, pixels };
+    const expand = (rows, width) => {
+      const zs = [...rows.keys()], pixels = new Uint16Array(width * h.nz);
+      for (let z = 0, j = 0; z < h.nz; z++) {
+        while (j + 1 < zs.length && Math.abs(zs[j + 1] - z) <= Math.abs(zs[j] - z)) j++;
+        pixels.set(rows.get(zs[j]), (h.nz - 1 - z) * width); // z up: slice 0 at the bottom
+      }
+      return { width, height: h.nz, pixels };
+    };
+    return { XZ: expand(xz, h.nx), YZ: expand(yz, h.ny) };
   }
 
   async function loadPreviews(gen) {
@@ -99,19 +115,20 @@
       if (gen !== cur.gen) return;
       if (stack.kind === 'vox') {
         const h = VX.parseVoxHeader(new Uint8Array(await bytesOf(stack.vox, [0, VX.HEADER_MAX])));
+        if (gen !== cur.gen) return;
         cur.header = h;
         renderFacts();
-        const [start, end] = L.voxRowRange(h, 'XY', h.nz >> 1, 0);
-        draw('ovXY', { width: h.nx, height: h.ny, pixels: VX.sliceValues(await bytesOf(stack.vox, [start, end]), h) });
+        const middle = VX.sliceValues(await bytesOf(stack.vox, VX.sliceRange(h, h.nz >> 1)), h);
         if (gen !== cur.gen) return;
-        for (const [plane, id] of PLANES.slice(1)) {
-          $(`${id}Note`).textContent = 'Reading…';
-          const image = await voxPlane(stack.vox, h, plane, gen);
-          if (!image || gen !== cur.gen) return;
-          draw(id, image);
-        }
+        draw('ovXY', { width: h.nx, height: h.ny, pixels: middle });
+        $('ovXZNote').textContent = $('ovYZNote').textContent = 'Reading…';
+        const planes = await voxPlanes(stack.vox, h, gen);
+        if (!planes || gen !== cur.gen) return;
+        draw('ovXZ', planes.XZ);
+        draw('ovYZ', planes.YZ);
       } else {
         const reader = await App.openReader(stack);
+        if (gen !== cur.gen) return;
         const middle = await reader.read(reader.count >> 1);
         if (gen !== cur.gen) return;
         draw('ovXY', middle);
@@ -144,6 +161,7 @@
     Object.assign(cur, { id, gen: cur.gen + 1, run: null, runs: [], header: null });
     const gen = cur.gen;
     cur.unwatch = lib().store.watch('samples', () => { if (gen === cur.gen) { renderDetails(); renderFacts(); } });
+    $('ovSaveState').textContent = '';
     App.showPage('overview');
     renderFacts(); renderDetails();
     loadRuns(gen);
@@ -161,8 +179,9 @@
     }
     $('ovBack').addEventListener('click', () => App.showPage('library'));
     $('ovAnalyze').addEventListener('click', () => LV.openScan(cur.id));
-    $('ovStar').addEventListener('click', () => { const rec = record(); LV.saveScanRecord(cur.id, { starred: !(rec && rec.starred) }); });
+    $('ovStar').addEventListener('click', () => { const rec = record(); LV.saveScanRecord(cur.id, { starred: !(rec && rec.starred) }).catch((e) => say(`The star was not saved: ${e.message}`, true)); });
     $('ovSave').addEventListener('click', saveDetails);
+    $('ovForm').addEventListener('input', () => { $('ovSaveState').textContent = ''; });
   }
 
   on('start', wire);

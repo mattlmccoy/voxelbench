@@ -700,18 +700,7 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
           <label>Notes <input type="text" id="ovNotes" autocomplete="off"></label>
           <div class="row"><button id="ovSave">Save sample details</button><span class="mono muted" id="ovSaveState"></span></div>
         </div>
-        <details class="sub">
-          <summary>Archimedes density (optional)</summary>
-          <div>
-            <div class="row">
-              <label>Measured <input type="text" inputmode="decimal" id="archDensity" placeholder="g/cm³" style="width:64px" autocomplete="off"></label>
-              <label>Solid <input type="text" inputmode="decimal" id="archSolid" placeholder="g/cm³" style="width:64px" autocomplete="off"></label>
-              <select id="archMethod"><option value="sealed">sealed (bulk)</option><option value="unsealed">unsealed (apparent)</option></select>
-              <button id="archSave" disabled>Save</button>
-            </div>
-            <p class="hint" id="archHint">Archimedes porosity is 1 − measured/solid density. A sealed sample keeps water out of every pore, so it compares with CT total porosity; an unsealed one lets water into the open pores, so it compares with CT closed porosity. Solid density: the fully dense material (for PA12 about 1.01 g/cm³; use your material's datasheet).</p>
-          </div>
-        </details>
+        <div id="ovArchSlot"></div>
       </section>
     </div>
   </main>
@@ -992,6 +981,20 @@ html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) sa
             <label>Process <input type="text" id="sampleProcess" placeholder="e.g. SLS, as printed" autocomplete="off"></label>
             <label>Notes <input type="text" id="sampleNotes" autocomplete="off"></label>
             <div class="row"><button id="saveSample" disabled>Save sample details</button><span class="mono muted" id="sampleState"></span></div>
+          </div>
+          <div id="studioArchSlot">
+      <details class="sub" id="archBox">
+        <summary>Archimedes density (optional)</summary>
+        <div>
+          <div class="row">
+            <label>Measured <input type="text" inputmode="decimal" id="archDensity" placeholder="g/cm³" style="width:64px" autocomplete="off"></label>
+            <label>Solid <input type="text" inputmode="decimal" id="archSolid" placeholder="g/cm³" style="width:64px" autocomplete="off"></label>
+            <select id="archMethod"><option value="sealed">sealed (bulk)</option><option value="unsealed">unsealed (apparent)</option></select>
+            <button id="archSave" disabled>Save</button>
+          </div>
+          <p class="hint" id="archHint">Archimedes porosity is 1 − measured/solid density. A sealed sample keeps water out of every pore, so it compares with CT total porosity; an unsealed one lets water into the open pores, so it compares with CT closed porosity. Solid density: the fully dense material (for PA12 about 1.01 g/cm³; use your material's datasheet).</p>
+        </div>
+      </details>
           </div>
           <details class="sub" id="orientBox">
             <summary>Orientation <span class="mono muted" id="orientState">scan axes</span></summary>

@@ -115,5 +115,5 @@
     return parts.join(', ') || 'not recorded';
   }
 
-  return { HEADER_MAX, parseVoxHeader, sliceRange, sliceValues, openVox, scanSeconds, parseDataInfo, settingsDiffer, settingsText };
+  return { HEADER_MAX, duration, parseVoxHeader, sliceRange, sliceValues, openVox, scanSeconds, parseDataInfo, settingsDiffer, settingsText };
 }));

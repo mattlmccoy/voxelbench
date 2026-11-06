@@ -1,9 +1,9 @@
 /* The scan library. A scan is known by what it contains, not by where its file sits or which format carried it, so
    the same volume opened from a .VOX or from its TIFF stack is one entry. Pure: the page passes voxels in. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_calibration.js'));
-  else root.VBLibrary = factory(root.VBCalibration);
-}(typeof self !== 'undefined' ? self : this, function (Calibration) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_calibration.js'), require('./vb_vox.js'));
+  else root.VBLibrary = factory(root.VBCalibration, root.VBVox);
+}(typeof self !== 'undefined' ? self : this, function (Calibration, Vox) {
   'use strict';
 
   /** An id for a scan: 's' + 16 hex characters of SHA-256 over "WxHxN" and the bytes of the first and middle slices.
@@ -231,8 +231,13 @@
   }
 
   const NOT_RECORDED = 'not recorded';
-  const stamp = (iso) => String(iso).slice(0, 16).replace('T', ' ');
-  const duration = (s) => { const r = Math.round(s); return r >= 60 ? `${Math.floor(r / 60)} min ${r % 60} s` : `${r} s`; };
+  const stamp = (iso) => String(iso).slice(0, 16).replace('T', ' '); // the scanner's own time, as recorded
+  const pad = (n) => String(n).padStart(2, '0');
+  /** A saved run's time (an ISO instant) in this computer's local time, like the scanner's time beside it. */
+  const localStamp = (iso) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? String(iso) : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
   const percent = (v) => (num(v) === null ? NOT_RECORDED : `${v.toFixed(2)} %`);
 
   /** What the scan overview shows, each value from a stated source or "not recorded": the scanner record (scanInfo, the
@@ -240,16 +245,17 @@
       are the latest saved run's: porosity, open and closed, pore count, and for each saved region its relative density
       on each of the run's relative scales (the run's own air and dense-reference grays). A whole-part relative
       density is not computed anywhere, so it is not listed. runs ([{ at }], any order) become newest-first with a label. */
-  function overviewFacts({ entry, scanInfo, header, run, runs }) {
+  function overviewFacts({ entry, scanInfo, header, record, run, runs }) {
     const info = scanInfo || {};
     const voxelUm = num(info.voxelUm) ?? num(entry.voxel_um) ?? (header && header.voxelMm ? header.voxelMm[0] * 1000 : null);
     const dims = header ? [header.nx, header.ny, header.nz] : [entry.width, entry.height, entry.count];
     const tube = [num(info.kv) !== null && `${info.kv} kV`, num(info.ua) !== null && `${info.ua} µA`].filter(Boolean).join(', ');
-    const leveled = run ? (run.leveled ? 'yes' : 'no') : NOT_RECORDED;
+    // The sample record's orientation says it; a saved run's own value only when the record has no word on it.
+    const leveled = record ? (record.orientation ? 'yes' : 'no') : run ? (run.leveled ? 'yes' : 'no') : NOT_RECORDED;
     const rows = [
       ['Scanned', info.scannedAt ? stamp(info.scannedAt) : NOT_RECORDED],
       ['Tube', tube || NOT_RECORDED],
-      ['Scan time', num(info.scanSeconds) === null ? NOT_RECORDED : duration(info.scanSeconds)],
+      ['Scan time', num(info.scanSeconds) === null ? NOT_RECORDED : Vox.duration(info.scanSeconds)],
       ['Voxel', voxelUm === null ? NOT_RECORDED : `${voxelUm.toFixed(voxelUm < 10 ? 2 : 1)} µm`],
       ['Size', dims.every((d) => num(d) !== null) ? `${dims.join(' × ')} voxels` : NOT_RECORDED],
       ['Format', entry.kind === 'vox' ? 'VOX' : entry.kind === 'tiff' ? 'TIFF stack' : NOT_RECORDED],
@@ -271,18 +277,19 @@
         }
       }
     }
-    const history = [...(runs || [])].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).map(({ at }) => ({ at, label: stamp(at) }));
+    const history = [...(runs || [])].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).map(({ at }) => ({ at, label: localStamp(at) }));
     return { rows, results, runs: history };
   }
 
   /** The bytes [start, end) to read for one row of a preview plane of a VOX volume, so the preview needs a few slices'
       worth of reads and not the volume. XY: slice `index`, row ignored (the whole slice). XZ: the plane y = index, row
       = z: one contiguous run of x. YZ: the plane x = index, row = z: the voxels (index, y) are not adjacent, so this is
-      the span from y = 0 to y = ny - 1 in slice z, and the caller keeps every nx-th value. */
+      the span from y = 0 to y = ny - 1 in slice z, and the caller keeps every nx-th value (the XZ row of y = ny / 2
+      lies inside the same span for ny >= 4). */
   function voxRowRange(h, plane, index, row) {
     const slice = 2 * h.nx * h.ny, outside = () => new Error(`index ${index}, row ${row} is outside the volume`);
     const inside = (v, n) => Number.isInteger(v) && v >= 0 && v < n;
-    if (plane === 'XY') { if (!inside(index, h.nz)) throw outside(); return [h.dataStart + index * slice, h.dataStart + (index + 1) * slice]; }
+    if (plane === 'XY') { if (!inside(index, h.nz)) throw outside(); return Vox.sliceRange(h, index); }
     if (plane !== 'XZ' && plane !== 'YZ') throw new Error(`plane must be XY, XZ or YZ, not ${plane}`);
     if (!inside(row, h.nz) || !inside(index, plane === 'XZ' ? h.ny : h.nx)) throw outside();
     const base = h.dataStart + row * slice;
@@ -290,5 +297,18 @@
     return [base + 2 * index, base + 2 * ((h.ny - 1) * h.nx + index + 1)];
   }
 
-  return { overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
+  /** Saves of one scan's record that do not erase each other. The page's copy of the records (samples()) refreshes only
+      when the store reports a write back, so a second save made before that would start from the old copy and drop the
+      first. Each save is built on the previous one still in flight (pending), cleared once its own put settles.
+      save(id, changes) returns the put's promise, so the caller can show this save's outcome. */
+  function makeRecordSaver({ samples, put, sampleRecord }) {
+    const pending = new Map();
+    return (id, changes) => {
+      const record = sampleRecord(id, samples(), changes, pending.get(id) || null);
+      pending.set(id, record);
+      return Promise.resolve(put(record)).finally(() => { if (pending.get(id) === record) pending.delete(id); });
+    };
+  }
+
+  return { NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
 }));

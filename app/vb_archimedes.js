@@ -10,6 +10,13 @@
   const targetId = () => (overview() ? overview().id() : state.folder);
   const targetRecord = () => (overview() ? overview().record() : state.folder ? App.sampleNow() : null);
   const saveTarget = (changes) => (overview() ? overview().save(changes) : App.saveSample(changes));
+  // One form, moved by context: in the overview for a scan from the library (shown there and while it is open in the
+  // studio), in the studio's Scan information for any other scan (folder, demo, tour).
+  const fromLibrary = () => Boolean(state.stack && state.stack.store && state.stack.store.kind === 'library');
+  function place() {
+    const slot = $(state.page === 'overview' || fromLibrary() ? 'ovArchSlot' : 'studioArchSlot'), box = $('archBox');
+    if (box.parentNode !== slot) slot.append(box);
+  }
   const num = (id) => { const t = $(id).value.trim(); return t === '' ? null : Number(t); };
 
   /** The comparison for the open sample, or null without a measurement or segmentation. */
@@ -47,7 +54,7 @@
   }
 
   on('start', () => { hint = $('archHint').textContent; $('archSave').addEventListener('click', save); });
-  for (const e of ['loaded', 'recordsChanged', 'overviewChanged', 'pageChanged']) on(e, () => { renderForm(); renderLine(); });
+  for (const e of ['loaded', 'recordsChanged', 'overviewChanged', 'pageChanged']) on(e, () => { place(); renderForm(); renderLine(); });
   on('poresChanged', renderLine);
   App.archimedesNow = archimedesNow;
 }(window.CTApp));

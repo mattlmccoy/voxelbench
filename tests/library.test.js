@@ -348,7 +348,7 @@ test('overviewFacts: no run lists the scanner record and no results, and nothing
   assert.equal(rows['Voxel'], '12.5 µm');
   assert.equal(rows['Size'], '3 × 2 × 2 voxels');
   assert.equal(rows['Format'], 'VOX');
-  assert.equal(rows['Leveled'], 'not recorded', 'without a run there is no record of leveling');
+  assert.equal(rows['Leveled'], 'not recorded', 'with neither a record nor a run there is no word on leveling');
   assert.deepEqual(f.results, []);
   assert.deepEqual(f.runs, []);
 });
@@ -382,7 +382,8 @@ test('overviewFacts: results come from the latest run, relative densities from i
   assert.equal(f.results.filter(([k]) => /whole|part/i.test(k)).length, 0, 'no whole-part relative density');
   assert.equal(asMap(f.rows)['Leveled'], 'no');
   assert.deepEqual(f.runs.map((r) => r.at), ['2026-11-05T10:00:00.000Z', '2026-11-04T09:00:00.000Z'], 'newest first');
-  assert.equal(f.runs[0].label, '2026-11-05 10:00');
+  const local = (iso) => { const d = new Date(iso), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  assert.equal(f.runs[0].label, local('2026-11-05T10:00:00.000Z'), 'run times are local, like the scanner time');
 });
 
 test('overviewFacts: a run without dense references lists no relative densities; one without open/closed says so', () => {
@@ -415,4 +416,38 @@ test('voxRowRange: XZ rows are one contiguous x-run; YZ rows span the slice from
   assert.throws(() => L.voxRowRange(h, 'YZ', 3, 0), /outside/);
   assert.throws(() => L.voxRowRange(h, 'XZ', 0, 2), /outside/);
   assert.throws(() => L.voxRowRange(h, 'AB', 0, 0), /plane/);
+});
+
+test('overviewFacts: Leveled comes from the sample record first, then the run, else not recorded', () => {
+  const lv = (record, r) => asMap(L.overviewFacts({ entry, scanInfo: entry.info, header, record, run: r, runs: [] }).rows)['Leveled'];
+  assert.equal(lv({ orientation: { angles_deg: [1, 0, 0] } }, null), 'yes');
+  assert.equal(lv({ name: 'x' }, null), 'no', 'a record without an orientation is scan axes');
+  assert.equal(lv({ orientation: { angles_deg: [1, 0, 0] } }, { ...run, leveled: null }), 'yes', 'the record wins over the run');
+  assert.equal(lv(null, { ...run, leveled: { angles_deg: [1, 2, 3] } }), 'yes');
+  assert.equal(lv(null, run), 'no');
+  assert.equal(lv(null, null), 'not recorded');
+});
+
+test('overviewFacts: without a scanner or index voxel size, the VOX header gives it', () => {
+  const bare = { ...entry, voxel_um: null, info: null };
+  assert.equal(asMap(L.overviewFacts({ entry: bare, scanInfo: null, header, run: null, runs: [] }).rows)['Voxel'], '12.5 µm');
+  assert.equal(asMap(L.overviewFacts({ entry: bare, scanInfo: null, header: null, run: null, runs: [] }).rows)['Voxel'], 'not recorded');
+});
+
+test('record saver: two saves in a row without waiting keep both fields; a failed save is passed on and forgotten', async () => {
+  const stored = new Map(), puts = [];
+  const sampleRecord = (id, samples, changes, pending) => ({ ...samples.get(id), ...pending, ...changes, id });
+  let fail = false;
+  const save = L.makeRecordSaver({ samples: () => stored, sampleRecord, put: async (r) => { puts.push(r); await tick(); if (fail) throw new Error('disk full'); stored.set(r.id, r); } });
+  const first = save('s1', { name: 'A', tags: ['t'] });
+  const second = save('s1', { starred: true }); // the page's copy (stored) has not seen the first yet
+  await Promise.all([first, second]);
+  assert.deepEqual(puts[1], { name: 'A', tags: ['t'], starred: true, id: 's1' });
+  assert.deepEqual(stored.get('s1'), puts[1]);
+  fail = true;
+  await assert.rejects(save('s1', { notes: 'lost' }), /disk full/);
+  fail = false;
+  await save('s1', { material: 'm' });
+  assert.equal(puts[puts.length - 1].notes, undefined, 'a failed save does not leak into the next');
+  assert.equal(puts[puts.length - 1].name, 'A');
 });

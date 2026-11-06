@@ -286,10 +286,14 @@
   }
 
   // ---------- the scan's record: star, tags (and, from the overview, notes and project) ----------
+  const saveLibraryRecord = L.makeRecordSaver({ samples: () => lib.samples, put: (record) => lib.store.put('samples', record), sampleRecord: (...a) => CT.sampleRecord(...a) });
+  /** Saves fields of a scan's record. Returns the promise of this save; the card's star and tags report a failure in the
+      library's status line, the overview shows its own. */
   function saveScanRecord(id, changes) {
-    if (state.store === lib.store) { App.saveSample(changes, id); return; }
-    lib.store.put('samples', CT.sampleRecord(id, lib.samples, changes)).catch((e) => say(`Not saved: ${e.message}`, true));
+    if (state.store === lib.store) return App.saveSample(changes, id);
+    return saveLibraryRecord(id, changes);
   }
+  const saveFromCard = (id, changes) => Promise.resolve(saveScanRecord(id, changes)).catch((e) => say(`Not saved: ${e.message}`, true));
 
   // Ruling 10: opening a library scan switches records to the library; the project file's unsaved edits are kept in
   // memory, but the user decides first.
@@ -317,10 +321,9 @@
 
   // ---------- drawing ----------
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
-  const minutes = (s) => { const r = Math.round(s); return r >= 60 ? `${Math.floor(r / 60)} min ${r % 60} s` : `${r} s`; };
-
+  
   function factsLine(f) {
-    const parts = [f.date && f.date.slice(0, 16).replace('T', ' '), f.scanSeconds !== null && `${minutes(f.scanSeconds)} scan`,
+    const parts = [f.date && f.date.slice(0, 16).replace('T', ' '), f.scanSeconds !== null && `${VX.duration(f.scanSeconds)} scan`,
       f.voxelUm !== null && `${f.voxelUm.toFixed(f.voxelUm < 10 ? 2 : 1)} µm`, f.kv !== null && `${f.kv} kV`].filter(Boolean);
     return parts.length ? parts.join(' · ') : 'Scanner settings not recorded';
   }
@@ -340,7 +343,7 @@
     const finish = (keep) => {
       if (done) return;
       done = true;
-      if (keep) saveScanRecord(r.id, { tags: L.parseTags(input.value) });
+      if (keep) saveFromCard(r.id, { tags: L.parseTags(input.value) });
       input.blur(); // render() leaves a focused field alone
       render();
     };
@@ -355,7 +358,7 @@
     const c = el('article', `libcard${f.missing ? ' missing' : ''}`);
     c.dataset.id = r.id;
     const thumb = el('button', 'link libthumb');
-    thumb.type = 'button'; thumb.disabled = f.missing; thumb.setAttribute('aria-label', `Open ${f.title}`);
+    thumb.type = 'button'; thumb.setAttribute('aria-label', `Open ${f.title}`);
     if (lib.thumbs.has(r.id)) { const img = el('img'); img.src = lib.thumbs.get(r.id); img.alt = ''; thumb.append(img); } else thumb.append(el('span', 'muted', f.missing ? 'Missing' : 'No preview yet'));
     thumb.addEventListener('click', () => App.openOverview(r.id));
     const head = el('div', 'libcardhead');
@@ -363,7 +366,7 @@
     title.title = r.entry.path + (r.entry.copies ? `\nAlso at: ${r.entry.copies.join(', ')}` : '');
     const star = el('button', 'link libstar', f.starred ? '★' : '☆');
     star.type = 'button'; star.setAttribute('aria-pressed', String(f.starred)); star.setAttribute('aria-label', f.starred ? `Unstar ${f.title}` : `Star ${f.title}`);
-    star.addEventListener('click', () => saveScanRecord(r.id, { starred: !f.starred }));
+    star.addEventListener('click', () => saveFromCard(r.id, { starred: !f.starred }));
     head.append(title, star);
     const tags = el('div', 'libtags');
     for (const t of f.tags) tags.append(el('span', 'libtag', t));
