@@ -310,5 +310,31 @@
     };
   }
 
-  return { NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
+  /** The remembered-drive card on the welcome screen. summary is what the last visit saved in this browser
+      ({ name, scans, analyzed, opened_at }) or null; access is the folder handle's permission now: 'granted', 'prompt',
+      'denied' or 'gone'. The remembered counts are always labeled "at last visit", and a drive that cannot be read now
+      shows none. state: 'open' (one click opens it), 'allow' (the browser asks first), 'unavailable'. */
+  function driveCard(summary, access, handleName = null) {
+    const title = (summary && summary.name) || handleName || 'Your scan drive';
+    if (access === 'denied') return { title, state: 'unavailable', facts: 'Access was not allowed. Choose your scan drive… to pick it again.' };
+    if (access === 'gone') return { title, state: 'unavailable', facts: 'This folder is not available now (unplugged, moved or renamed). Choose your scan drive… to pick it again.' };
+    const state = access === 'granted' ? 'open' : 'allow';
+    const n = (k, one) => `${k} ${one}${k === 1 ? '' : 's'}`;
+    const counted = summary && Number.isFinite(summary.scans);
+    const analyzed = counted && Number.isFinite(summary.analyzed) ? `, ${summary.analyzed} analyzed` : '';
+    const when = summary && typeof summary.opened_at === 'string' && summary.opened_at ? ` · last opened ${summary.opened_at.slice(0, 10)}` : '';
+    const facts = counted ? `${n(summary.scans, 'scan')}${analyzed} at last visit${when}` : `Opened before${when}`;
+    return { title, state, facts };
+  }
+
+  /** What the page keeps per browser for the card: the drive's folder name, how many scans it had and how many were
+      analyzed. rows are the library rows; loaded(id) says whether that scan's saved runs have been read yet, and until
+      every one has, analyzed is null (unknown) rather than a low count. */
+  function driveSummary(name, rows, loaded, now) {
+    const present = rows.filter((r) => !r.entry.missing);
+    const known = present.every((r) => loaded(r.id));
+    return { name, scans: present.length, analyzed: known ? present.filter((r) => cardFacts(r).analyzed).length : null, opened_at: now };
+  }
+
+  return { driveCard, driveSummary, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
 }));

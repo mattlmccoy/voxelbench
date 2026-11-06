@@ -14,9 +14,23 @@
 
   const lib = App.library = {
     dir: null, index: null, entries: [], store: null, stacks: new Map(), samples: new Map(), runs: new Map(), runErrors: new Map(),
-    thumbs: new Map(), refused: null, lastRescan: null, gen: 0, saved: null,
+    thumbs: new Map(), refused: null, lastRescan: null, gen: 0, saved: null, access: 'prompt',
   };
   const view = { query: '', filter: 'all', tag: null, project: null };
+  // Per-browser conveniences (the remembered-drive card, the one-time hint). A browser that refuses storage just shows
+  // no counts and shows the hint again; nothing here is an error.
+  const SUMMARY_KEY = 'voxelbench.librarySummary', HINT_KEY = 'voxelbench.libraryHintSeen';
+  const keepLocal = (key, value) => { try { window.localStorage.setItem(key, value); } catch (e) { /* storage refused */ } };
+  const readLocal = (key) => { try { return window.localStorage.getItem(key); } catch (e) { return null; } };
+  const readSummary = () => {
+    try { const o = JSON.parse(readLocal(SUMMARY_KEY)); return o && typeof o === 'object' ? o : null; } catch (e) { return null; }
+  };
+  /** Saves the card's summary for the open library; analyzed is unknown (null) until every saved run has been read. */
+  function saveSummary() {
+    if (!lib.dir || !lib.index || lib.refused) return;
+    const rows = Object.entries(lib.index.scans).map(([id, entry]) => ({ id, entry, record: null, run: lib.runs.get(id) || null }));
+    keepLocal(SUMMARY_KEY, JSON.stringify(L.driveSummary(lib.dir.name || 'browser storage', rows, (id) => lib.runs.has(id) || Boolean(lib.index.scans[id].missing), new Date().toISOString())));
+  }
   const thumbQueue = new Map(); // id -> a thumbnail image made while reading the scan, written once the cards show
   let unwatchSamples = null;
 
@@ -156,12 +170,15 @@
       unwatchSamples = store.watch('samples', (records) => { lib.samples = records; render(); });
     } catch (e) {
       if (gen !== lib.gen) return;
+      if (e && e.name === 'NotFoundError') lib.access = 'gone';
       lib.refused = `The library in ${handle.name || 'browser storage'} was not opened: ${e.message}.`;
       say('');
       render();
       return;
     }
     say(`${Object.keys(lib.index.scans).length} scans in the index.`);
+    lib.access = 'granted';
+    saveSummary();
     render();
     if (!Object.keys(lib.index.scans).length) await rescan();
     else background(gen);
@@ -175,6 +192,7 @@
     }
     await keepHandle(h);
     lib.saved = h;
+    lib.access = 'granted';
     await openLibraryDir(h);
   }
 
@@ -183,6 +201,7 @@
     if (!h) return;
     lib.saved = h;
     const allowed = h.queryPermission ? await h.queryPermission({ mode: 'readwrite' }).catch(() => 'prompt') : 'prompt';
+    lib.access = allowed === 'granted' || allowed === 'denied' ? allowed : 'prompt';
     if (allowed === 'granted') { await openLibraryDir(h); return; }
     render(); // offers "Allow access to <name>": the browser asks only after a click
   }
@@ -192,7 +211,7 @@
     if (!h) return;
     const allowed = await h.requestPermission({ mode: 'readwrite' }).catch((e) => { say(`Access was not allowed: ${e.message}`, true); return 'denied'; });
     if (allowed === 'granted') await openLibraryDir(h);
-    else say(`Access to ${h.name} was not allowed. Choose the library folder again.`, true);
+    else { lib.access = 'denied'; say(`Access to ${h.name} was not allowed. Choose your scan drive again.`, true); render(); }
   }
 
   // ---------- Rescan ----------
@@ -228,6 +247,7 @@
       if (gen === lib.gen) say(`Rescan stopped: ${e.message}`, true);
     }
     if (gen !== lib.gen) return;
+    saveSummary();
     render();
     background(gen);
   }
@@ -275,6 +295,7 @@
         render();
       } catch (e) { unmade++; } // the card keeps its placeholder; opening the scan says what is wrong
     }
+    if (gen === lib.gen) saveSummary(); // every saved run has been read now: the analyzed count is known
     if (unmade && gen === lib.gen) say(`${$('libStatus').textContent} ${unmade} preview${unmade > 1 ? 's' : ''} could not be made.`.trim(), true);
   }
 
@@ -360,7 +381,7 @@
     const thumb = el('button', 'link libthumb');
     thumb.type = 'button'; thumb.setAttribute('aria-label', `Open ${f.title}`);
     if (lib.thumbs.has(r.id)) { const img = el('img'); img.src = lib.thumbs.get(r.id); img.alt = ''; thumb.append(img); } else thumb.append(el('span', 'muted', f.missing ? 'Missing' : 'No preview yet'));
-    thumb.addEventListener('click', () => App.openOverview(r.id));
+    thumb.addEventListener('click', () => { keepLocal(HINT_KEY, '1'); App.openOverview(r.id); });
     const head = el('div', 'libcardhead');
     const title = el('b', 'libtitle', f.title);
     title.title = r.entry.path + (r.entry.copies ? `\nAlso at: ${r.entry.copies.join(', ')}` : '');
@@ -406,14 +427,25 @@
     listOf('libTags', count((r) => L.cardFacts(r).tags), 'tag');
   }
 
+  /** The remembered drive: shown while no library is open and a folder handle is kept. */
+  function renderDriveCard(open) {
+    const card = $('driveCard');
+    card.hidden = open || !lib.saved;
+    if (card.hidden) return;
+    const c = L.driveCard(readSummary(), lib.access, lib.saved.name);
+    $('driveTitle').textContent = c.title;
+    $('driveFacts').textContent = c.facts;
+    $('driveAct').textContent = c.state === 'open' ? 'Open ›' : c.state === 'allow' ? 'Allow access ›' : '';
+    card.disabled = c.state === 'unavailable';
+    card.dataset.state = c.state;
+  }
+
   function render() {
     const open = Boolean(lib.dir && lib.index && !lib.refused);
     $('libRoot').textContent = lib.dir ? `Library: ${rootName()}` : supported ? 'No library open' : 'Library unavailable in this browser';
-    $('libPick').hidden = !supported;
-    $('libPick').textContent = lib.dir ? 'Choose another folder…' : 'Choose the library folder…';
-    $('libPick').classList.toggle('primary', !lib.dir && !lib.saved);
-    $('libReopen').hidden = !(supported && lib.saved && !lib.dir);
-    if (lib.saved) $('libReopen').textContent = `Allow access to ${lib.saved.name}`;
+    $('libPick').hidden = !(supported && open);
+    $('libPickHero').hidden = !supported;
+    renderDriveCard(open);
     $('libRescan').hidden = !open;
     $('libRescan').disabled = rescanner.busy();
     $('libRescan').textContent = rescanner.busy() ? 'Scanning…' : 'Rescan';
@@ -421,13 +453,14 @@
     $('libStudio').textContent = 'Back to the open scan';
     $('libSide').hidden = !open;
     $('libIntro').hidden = open;
-    notice(lib.refused || (supported ? '' : 'The library needs Chrome or Edge: it reads and writes a folder on your drive, which this browser does not allow. Open a folder… still opens one scan folder here, with a project file.'));
+    notice(lib.refused || (supported ? '' : 'The library needs Chrome or Edge: it reads and writes a folder on your drive, which this browser does not allow. Open a .VOX file… and Open a folder of slices… still open one scan here, with a project file.'));
 
     const rows = open ? Object.entries(lib.index.scans).map(([id, entry]) => ({ id, entry, record: lib.samples.get(id) || null, run: lib.runs.get(id) || null })) : [];
     const key = (r) => (r.entry.info && r.entry.info.scannedAt) || r.entry.first_seen || '';
     rows.sort((a, b) => (key(a) < key(b) ? 1 : key(a) > key(b) ? -1 : 0)); // newest first
     lib.entries = rows;
     const grid = $('libGrid');
+    $('libHint').hidden = !(open && rows.length && !readLocal(HINT_KEY));
     if (!open) { grid.replaceChildren(); $('libEmpty').hidden = true; return; }
     // An edit in progress (a tag field) is not redrawn away under the cursor.
     if (grid.contains(document.activeElement) && document.activeElement.matches('input')) return;
@@ -440,7 +473,9 @@
 
   function wire() {
     $('libPick').addEventListener('click', pick);
-    $('libReopen').addEventListener('click', allowSaved);
+    $('libPickHero').addEventListener('click', pick);
+    $('driveCard').addEventListener('click', () => { if (lib.access === 'granted') openLibraryDir(lib.saved); else allowSaved(); });
+    $('libVox').addEventListener('change', (e) => { state.demoPhantoms = null; App.openFiles(e.target.files); e.target.value = ''; });
     $('libRescan').addEventListener('click', rescan);
     $('libStudio').addEventListener('click', () => App.showPage('studio'));
     $('toLibrary').addEventListener('click', () => App.showPage('library'));
@@ -452,7 +487,11 @@
       if (state.stack && state.stack.store && state.stack.store === lib.store && state.folder) { lib.runs.delete(state.folder); lib.runErrors.delete(state.folder); background(lib.gen); }
       render();
     });
-    on('samplesChanged', () => { $('libFolderScans').hidden = !(state.stacks.length > 1 && !state.stacks[0].store); });
+    on('samplesChanged', () => {
+      const several = state.stacks.length > 1 && !state.stacks[0].store;
+      $('libFolderScans').hidden = !several;
+      $('libFolderSection').hidden = !several;
+    });
     App.showPage('library');
     render();
     if (supported) resume();

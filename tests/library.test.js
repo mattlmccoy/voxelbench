@@ -451,3 +451,52 @@ test('record saver: two saves in a row without waiting keep both fields; a faile
   assert.equal(puts[puts.length - 1].notes, undefined, 'a failed save does not leak into the next');
   assert.equal(puts[puts.length - 1].name, 'A');
 });
+
+// ---------- the remembered-drive card on the welcome screen ----------
+const SUMMARY = { name: 'Drive A', scans: 12, analyzed: 5, opened_at: '2026-11-03T14:20:00.000Z' };
+
+test('driveCard: with access, the card opens the drive and labels its counts as from the last visit', () => {
+  const c = L.driveCard(SUMMARY, 'granted');
+  assert.equal(c.title, 'Drive A');
+  assert.equal(c.state, 'open');
+  assert.equal(c.facts, '12 scans, 5 analyzed at last visit · last opened 2026-11-03');
+});
+
+test('driveCard: before the browser asks again, the card offers Allow access and still labels the counts', () => {
+  const c = L.driveCard({ ...SUMMARY, scans: 1, analyzed: 0 }, 'prompt');
+  assert.equal(c.state, 'allow');
+  assert.equal(c.facts, '1 scan, 0 analyzed at last visit · last opened 2026-11-03');
+});
+
+test('driveCard: a refused or missing drive says so and never shows the remembered counts', () => {
+  for (const [access, words] of [['denied', /not allowed/], ['gone', /not available/]]) {
+    const c = L.driveCard(SUMMARY, access);
+    assert.equal(c.state, 'unavailable');
+    assert.equal(c.title, 'Drive A');
+    assert.match(c.facts, words);
+    assert.doesNotMatch(c.facts, /12|analyzed|last visit/);
+  }
+});
+
+test('driveCard: no summary (another browser, cleared storage, a private window) is not an error and shows no counts', () => {
+  const c = L.driveCard(null, 'prompt', 'Folder B');
+  assert.equal(c.title, 'Folder B');
+  assert.equal(c.state, 'allow');
+  assert.doesNotMatch(c.facts, /\d/);
+  assert.equal(L.driveCard(null, 'granted').state, 'open');
+  assert.ok(L.driveCard(null, 'granted').title.length > 0);
+  assert.equal(L.driveCard({ name: 'X' }, 'granted').facts.includes('undefined'), false); // a summary with fields missing
+});
+
+test('driveCard: a summary saved before the saved runs were read has a scan count and no analyzed count', () => {
+  const c = L.driveCard({ name: 'Drive A', scans: 3, analyzed: null, opened_at: '2026-11-03T14:20:00.000Z' }, 'granted');
+  assert.equal(c.facts, '3 scans at last visit · last opened 2026-11-03');
+});
+
+test('driveSummary: counts the scans present, and the analyzed ones only once every saved run has been read', () => {
+  const row = (id, extra) => ({ id, entry: { path: id, ...(extra.entry || {}) }, record: null, run: extra.run || null });
+  const rows = [row('a', { run: { summary: {} } }), row('b', {}), row('c', { entry: { missing: true }, run: { summary: {} } })];
+  const now = '2026-11-05T09:00:00.000Z';
+  assert.deepEqual(L.driveSummary('Drive A', rows, () => true, now), { name: 'Drive A', scans: 2, analyzed: 1, opened_at: now });
+  assert.deepEqual(L.driveSummary('Drive A', rows, (id) => id !== 'b', now), { name: 'Drive A', scans: 2, analyzed: null, opened_at: now });
+});

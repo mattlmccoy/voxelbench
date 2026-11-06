@@ -98,6 +98,13 @@
       TIFF copy inside it is not listed again. Any other folder of TIFF slices is a scan sorted by the number in the
       name. Each scan carries the scanner's DataInfo.xml from its folder or the folder above, when there is one. */
   function groupStacks(files) {
+    // Files picked one by one (no folder, so no relative path): one .vox is a scan, with the DataInfo.xml picked beside it.
+    const looseVox = files.filter((f) => !f.webkitRelativePath && /\.vox$/i.test(f.name));
+    if (looseVox.length) {
+      const record = files.find((f) => !f.webkitRelativePath && f.name === 'DataInfo.xml') || null;
+      return looseVox.map((vox) => ({ folder: vox.name.replace(/\.vox$/i, ''), kind: 'vox', vox, files: [], dataInfo: looseVox.length === 1 ? record : null }))
+        .sort((a, b) => naturalKey(a.folder, b.folder));
+    }
     const pathOf = (f) => f.webkitRelativePath.split('/');
     const dirOf = (f) => pathOf(f).slice(0, -1).join('/');
     const baseOf = (f) => pathOf(f)[pathOf(f).length - 1];

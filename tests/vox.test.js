@@ -111,6 +111,25 @@ test('a Rigaku scan folder opens as one scan from its VOX (the TIFF copy is not 
   assert.equal(out[2].files.length, 2);
 });
 
+// Loose files from a plain file picker have no webkitRelativePath: one .vox, with or without the scanner's DataInfo.xml.
+const loose = (name) => ({ webkitRelativePath: '', name });
+test('a .VOX picked alone is one VOX scan with no scan record', () => {
+  const out = CT.groupStacks([loose('Sample 2.VOX')]);
+  assert.equal(out.length, 1);
+  assert.deepEqual([out[0].folder, out[0].kind], ['Sample 2', 'vox']);
+  assert.equal(out[0].vox.name, 'Sample 2.VOX');
+  assert.equal(out[0].dataInfo, null);
+});
+
+test('a .vox picked with its DataInfo.xml carries the record; another xml does not', () => {
+  const info = loose('DataInfo.xml');
+  assert.equal(CT.groupStacks([loose('a.vox'), info])[0].dataInfo, info);
+  assert.equal(CT.groupStacks([info, loose('a.vox')])[0].dataInfo, info);
+  assert.equal(CT.groupStacks([loose('a.vox'), loose('a.xml')])[0].dataInfo, null);
+  assert.deepEqual(CT.groupStacks([info]), []); // a record alone is no scan
+  assert.deepEqual(CT.groupStacks([loose('slice1.tif')]), []); // loose slices are still not a scan: a folder is how slices are grouped
+});
+
 test('a VOX file opens slice by slice; a copy cut short is refused before any slice is read', async () => {
   const h = HEADER.replace('VolumeSize 1392 784 503', 'VolumeSize 3 2 2').replace(/VolumeScale [^\n]+/, 'VolumeScale 0.04 0.04 0.04');
   const data = new Uint8Array([1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0, 7, 0, 8, 0, 9, 0, 10, 0, 11, 0, 12, 0]);
