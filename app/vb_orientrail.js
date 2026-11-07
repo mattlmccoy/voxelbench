@@ -14,7 +14,7 @@
   const SLIDERS = [['rx', 'orientRx'], ['ry', 'orientRy'], ['rz', 'orientRz']];
   let draft = null; // { base, center, pts, bin, ambiguous } while leveling
   let busy = false, frame = 0;
-  let relevelNote = null; // { token, text }: the one-time note for the scan reopened after an automatic re-level
+  let relevelShown = null; // { token, text }: the one-time note for the scan reopened after an automatic re-level
 
   const angles = () => Object.fromEntries(SLIDERS.map(([k, id]) => [k, Number($(id).value)]));
   /** The orientation the sliders describe, with its grid around the part. */
@@ -48,7 +48,10 @@
   }
 
   function render() {
-    const leveled = Boolean(state.orientation), hidden = state.folder ? App.hiddenMarks(state.folder) : 0, waiting = Boolean(state.relevel);
+    const leveled = Boolean(state.orientation), waiting = Boolean(state.relevel);
+    // Marks of a leveling a re-level replaced (or is about to) can never be shown again; the note says so apart.
+    const replaced = state.folder ? [...(App.sampleNow().replaced_frames || []), ...(state.relevel ? [O.orientId(state.relevel.from)] : [])] : [];
+    const hidden = state.folder ? O.hiddenMarksNote(App.hiddenFrames(state.folder), replaced) : '';
     $('orientState').textContent = leveled ? 'leveled' : 'scan axes';
     $('orientLevel').disabled = !state.folder || !state.model || busy || leveled || waiting;
     $('orientLevel').hidden = leveled || Boolean(draft); // the editor below replaces it while leveling
@@ -59,10 +62,10 @@
     const d = state.dims, mm = (n) => (n * state.voxelMm).toFixed(1);
     const parts = [];
     if (leveled) parts.push(`Leveled in the part's frame: x is the long axis, z the thinnest direction (up). The leveled scan is ${mm(d.nx)} × ${mm(d.ny)} × ${mm(d.nz)} mm with ${MARGIN_MM} mm of air around the part; everything outside the original scan reads gray 0. Saved with the sample, so reopening the scan levels it again.`);
-    if (relevelNote && relevelNote.token === state.loadToken) parts.push(relevelNote.text);
+    if (relevelShown && relevelShown.token === state.loadToken) parts.push(relevelShown.text);
     if (waiting) parts.push('This scan was leveled with the holder still in its sample mask. It opened in scan axes and is leveled again without the holder once the mask is built.');
     else if (!leveled && state.folder && !draft) parts.push('A part scanned at an angle can be leveled: its long axis to x, its thinnest direction to z (up), so depth, sections and wall thickness follow the part. The part\'s axes come from its sample mask.');
-    if (hidden) parts.push(`${hidden} mark${hidden === 1 ? ' was' : 's were'} drawn with the scan in another orientation; ${hidden === 1 ? 'it is hidden here and comes' : 'they are hidden here and come'} back in that orientation.`);
+    if (hidden) parts.push(hidden);
     if (parts.length) $('orientNote').textContent = parts.join(' ');
   }
 
@@ -133,15 +136,17 @@
     try {
       const a = await partAxes();
       if (token !== state.loadToken || folder !== state.folder) return;
-      const R = O.matchTurns(a.R, from.R);
+      const { R, kept } = O.matchTurns(a.R, from.R);
       const orient = { R, center: a.center, ...O.gridForPoints({ R, center: a.center }, a.pts, a.bin, margin()) };
-      const text = O.relevelNote(O.axisChange(from.R, R), from, failed);
-      App.saveSample({ orientation: O.releveled(from, O.toNative(orient, state.binFactor), new Date().toISOString()) }, folder);
+      const text = O.relevelNote(O.axisChange(from.R, R), from, { failed, turnsKept: kept });
+      App.saveSample({ orientation: O.releveled(from, O.toNative(orient, state.binFactor), new Date().toISOString()), replaced_frames: O.withReplaced(App.sampleNow().replaced_frames, O.orientId(from)) }, folder);
       const reopened = App.loadStack(stack);
-      relevelNote = { token: state.loadToken, text }; // loadStack took its token synchronously
+      relevelShown = { token: state.loadToken, text }; // loadStack took its token synchronously
       await reopened;
-      if (relevelNote.token !== state.loadToken) return;
-      App.projectNote(text);
+      if (relevelShown.token !== state.loadToken) return;
+      // Added to, not over, what the reopened load said (a saved run from another orientation, not restored).
+      const said = state.noteLoad === state.loadToken ? $('projectNote').textContent : '';
+      App.projectNote(said ? `${text} ${said}` : text);
       $('orientBox').open = true;
       render();
     } catch (e) {
@@ -170,7 +175,7 @@
     $('orientZero').addEventListener('click', () => { for (const [, id] of SLIDERS) $(id).value = '0'; preview(); });
     for (const [, id] of SLIDERS) $(id).addEventListener('input', preview);
   });
-  on('loaded', () => { draft = null; if (relevelNote && relevelNote.token !== state.loadToken) relevelNote = null; render(); });
+  on('loaded', () => { draft = null; if (relevelShown && relevelShown.token !== state.loadToken) relevelShown = null; render(); });
   on('modelChanged', relevel);
   for (const e of ['modelChanged', 'recordsChanged', 'samplesChanged']) on(e, render);
 }(window.CTApp));

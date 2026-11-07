@@ -189,8 +189,9 @@
   const angleDeg = (a, b) => Math.acos(Math.min(1, Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))) * 180 / Math.PI;
   /** How far the up (z) and long (x) axes moved between two orientations, sign-free (0 to 90 degrees). */
   const axisChange = (Rold, Rnew) => ({ up_deg: angleDeg(Rold.slice(6, 9), Rnew.slice(6, 9)), long_deg: angleDeg(Rold.slice(0, 3), Rnew.slice(0, 3)) });
-  /** R after the Flip over and Turn 90° (of the eight) that bring it closest to Rold, so a re-level keeps them; R
-      itself when even the closest is more than KEEP_TURNS_DEG off (the old axes were wrong, so its turns mean nothing). */
+  /** { R, kept }: R after the Flip over and Turn 90° (of the eight) that bring it closest to Rold, so a re-level keeps
+      them (kept true); R itself with kept false when even the closest is more than KEEP_TURNS_DEG off (the old axes
+      were wrong, so its turns mean nothing). */
   function matchTurns(R, Rold) {
     let best = R, score = -Infinity;
     for (const start of [R, flip(R)]) {
@@ -202,18 +203,36 @@
       }
     }
     // score is the trace of the turn between best and Rold, 1 + 2 cos(angle)
-    return score >= 1 + 2 * Math.cos(KEEP_TURNS_DEG * Math.PI / 180) ? best : R;
+    return score >= 1 + 2 * Math.cos(KEEP_TURNS_DEG * Math.PI / 180) ? { R: best, kept: true } : { R, kept: false };
   }
   const RELEVEL_METHOD = 'principal axes of the holder-free sample mask (re-leveled automatically)';
-  /** The orientation to save after a re-level: fresh (native voxels), unnudged, stamped, naming the one it replaced. */
+  /** The orientation to save after a re-level: fresh (native voxels), unnudged, stamped, naming the one it replaced
+      (its date, nudges and frame id, so marks drawn in it can be told apart from those of a reachable orientation). */
   const releveled = (old, fresh, now) => ({ ...fresh, angles_deg: { rx: 0, ry: 0, rz: 0 }, holder_removed: true, method: RELEVEL_METHOD, made_at: now,
-    replaced: { made_at: old.made_at || null, angles_deg: old.angles_deg || null } });
-  /** The one-time note after a re-level; failed is the holder search's failure message, or null. */
-  function relevelNote({ up_deg, long_deg }, old, failed) {
-    const when = old.made_at ? `from ${String(old.made_at).slice(0, 10)}` : 'from the earlier leveling';
-    return `Re-leveled without the holder: the up axis moved ${up_deg.toFixed(1)}°, the long axis ${long_deg.toFixed(1)}°. Slider nudges ${when} were dropped.${failed ? ` Holder detection failed (${failed}), so the axes come from the sample mask as built.` : ''}`;
+    replaced: { made_at: old.made_at || null, angles_deg: old.angles_deg || null, orient_id: orientId(old) } });
+  /** The one-time note after a re-level. failed: the holder search's failure message, or null; turnsKept: whether
+      matchTurns kept the old Flip over / Turn 90°. Dropped nudges are named only when some old nudge was nonzero. */
+  function relevelNote({ up_deg, long_deg }, old, { failed = null, turnsKept = true } = {}) {
+    const parts = [`Re-leveled without the holder: the up axis moved ${up_deg.toFixed(1)}°, the long axis ${long_deg.toFixed(1)}°.`];
+    const nudged = old.angles_deg && Object.values(old.angles_deg).some((v) => Number(v) !== 0);
+    if (nudged) parts.push(`Slider nudges ${old.made_at ? `from ${String(old.made_at).slice(0, 10)}` : 'from the earlier leveling'} were dropped.`);
+    if (!turnsKept) parts.push(`The old axes were more than ${KEEP_TURNS_DEG}° off, so any Flip over or Turn 90° could not be carried over: check the part is the right way up.`);
+    if (failed) parts.push(`Holder detection failed (${failed}), so the axes come from the sample mask as built.`);
+    return parts.join(' ');
+  }
+  /** The sample's list of frame ids a re-level replaced (sample.replaced_frames), with id added once. It lives on the
+      sample, not the orientation, so Back to scan axes (orientation null) does not lose it. */
+  const withReplaced = (list, id) => (list && list.includes(id) ? list.slice() : [...(list || []), id]);
+  const marks = (n) => `${n} mark${n === 1 ? ' was' : 's were'}`;
+  /** The note for marks hidden because they were drawn in another frame. frames: each hidden mark's frame id (null for
+      scan axes); replacedIds: frames a re-level replaced, which no action brings back. '' when nothing is hidden. */
+  function hiddenMarksNote(frames, replacedIds) {
+    const gone = frames.filter((f) => f !== null && replacedIds.includes(f)).length, other = frames.length - gone, parts = [];
+    if (gone) parts.push(`${marks(gone)} drawn before the scan was re-leveled without the holder; ${gone === 1 ? 'it stays' : 'they stay'} saved but cannot be shown in the new frame.`);
+    if (other) parts.push(`${marks(other)} drawn with the scan in another orientation; ${other === 1 ? 'it is hidden here and comes' : 'they are hidden here and come'} back in that orientation.`);
+    return parts.join(' ');
   }
 
   return { levelFromMask, nudge, flip, turn, gridFor, surfacePoints, gridForPoints, resample, resamplePaced, resampleSlice, samplePlane, onGrid, toNative, orientId, sameFrame, fits, planOrientedBinning,
-    needsRelevel, axisChange, matchTurns, releveled, relevelNote };
+    needsRelevel, axisChange, matchTurns, releveled, relevelNote, hiddenMarksNote, withReplaced };
 }));

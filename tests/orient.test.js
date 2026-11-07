@@ -211,36 +211,57 @@ test('axisChange measures how far the axes moved', () => {
 test('a re-level keeps the flips and quarter turns of the old leveling', () => {
   const old = O.turn(O.flip(O.nudge(T, { rx: 2, ry: -1, rz: 4 }))); // a leveling turned and flipped by hand
   const fresh = O.nudge(T, { rx: 0.5, ry: 0.5, rz: -1 }); // the principal axes again, a little off
-  const m = O.matchTurns(fresh, old);
+  const { R: m, kept } = O.matchTurns(fresh, old);
+  assert.equal(kept, true);
   close(det(m), 1, 1e-12, 'proper rotation');
   for (let r = 0; r < 3; r++) assert.ok(dot(row(m, r), row(old, r)) > Math.cos(10 * deg), `row ${r} follows the old leveling`);
   // the same axes as fresh, only reordered and signed
   for (let r = 0; r < 3; r++) assert.ok([0, 1, 2].some((k) => Math.abs(Math.abs(dot(row(m, r), row(fresh, k))) - 1) < 1e-12), `row ${r} is an axis of fresh`);
-  assert.deepEqual(O.matchTurns(fresh, fresh), fresh);
+  assert.deepEqual(O.matchTurns(fresh, fresh), { R: fresh, kept: true });
 });
 
-test('when the holder had swung the old axes far off, a re-level keeps the default axes, not the old turns', () => {
+test('when the holder had swung the old axes far off, a re-level keeps the default axes and says the turns were not kept', () => {
   const fresh = O.levelFromMask(boxMask(), DIMS, 1).R;
   const old = O.turn(O.nudge(fresh, { rx: 0, ry: 60, rz: 0 })); // turned by hand, but 60 degrees off about y
-  assert.deepEqual(O.matchTurns(fresh, old), fresh);
+  assert.deepEqual(O.matchTurns(fresh, old), { R: fresh, kept: false });
   const near = O.turn(O.nudge(fresh, { rx: 0, ry: 20, rz: 0 })); // 20 degrees off: the turn is kept
-  assert.deepEqual(O.matchTurns(fresh, near), O.turn(fresh));
+  assert.deepEqual(O.matchTurns(fresh, near), { R: O.turn(fresh), kept: true });
 });
 
-test('the re-leveled orientation says it was found without the holder and what it replaced', () => {
+test('the re-leveled orientation says it was found without the holder and what it replaced, frame id included', () => {
   const old = { R: [1, 0, 0, 0, 1, 0, 0, 0, 1], center: [1, 2, 3], origin: [0, 0, 0], dims: { nx: 4, ny: 4, nz: 4 }, angles_deg: { rx: 2, ry: 0, rz: -1 }, method: 'principal axes of the sample mask, then nudged', made_at: '2026-10-30T12:00:00.000Z' };
   const fresh = { R: rotX(3 * deg), center: [1.5, 2, 3], origin: [-1, 0, 0], dims: { nx: 5, ny: 4, nz: 4 } };
   const r = O.releveled(old, fresh, '2026-11-07T09:00:00.000Z');
   assert.deepEqual(r, { ...fresh, angles_deg: { rx: 0, ry: 0, rz: 0 }, holder_removed: true,
     method: 'principal axes of the holder-free sample mask (re-leveled automatically)', made_at: '2026-11-07T09:00:00.000Z',
-    replaced: { made_at: '2026-10-30T12:00:00.000Z', angles_deg: { rx: 2, ry: 0, rz: -1 } } });
+    replaced: { made_at: '2026-10-30T12:00:00.000Z', angles_deg: { rx: 2, ry: 0, rz: -1 }, orient_id: O.orientId(old) } });
   assert.equal(O.needsRelevel(r), false); // exactly once
 });
 
-test('the re-level note names the angles and the old date, and a failed holder search', () => {
-  const old = { made_at: '2026-10-30T12:00:00.000Z' };
-  assert.equal(O.relevelNote({ up_deg: 3.14, long_deg: 1.36 }, old, null),
+test('the re-level note names the angles, and the old date only when it had nudges; a failed search; turns not kept', () => {
+  const nudged = { made_at: '2026-10-30T12:00:00.000Z', angles_deg: { rx: 2, ry: 0, rz: 0 } };
+  assert.equal(O.relevelNote({ up_deg: 3.14, long_deg: 1.36 }, nudged, { failed: null, turnsKept: true }),
     'Re-leveled without the holder: the up axis moved 3.1°, the long axis 1.4°. Slider nudges from 2026-10-30 were dropped.');
-  assert.equal(O.relevelNote({ up_deg: 0.04, long_deg: 0 }, {}, 'no post found'),
-    'Re-leveled without the holder: the up axis moved 0.0°, the long axis 0.0°. Slider nudges from the earlier leveling were dropped. Holder detection failed (no post found), so the axes come from the sample mask as built.');
+  const plain = { made_at: '2026-10-30T12:00:00.000Z', angles_deg: { rx: 0, ry: 0, rz: 0 } };
+  assert.equal(O.relevelNote({ up_deg: 3.14, long_deg: 1.36 }, plain, { failed: null, turnsKept: true }),
+    'Re-leveled without the holder: the up axis moved 3.1°, the long axis 1.4°.');
+  assert.equal(O.relevelNote({ up_deg: 0.04, long_deg: 0 }, {}, { failed: 'no post found', turnsKept: true }),
+    'Re-leveled without the holder: the up axis moved 0.0°, the long axis 0.0°. Holder detection failed (no post found), so the axes come from the sample mask as built.');
+  assert.equal(O.relevelNote({ up_deg: 75.2, long_deg: 46.5 }, plain, { failed: null, turnsKept: false }),
+    'Re-leveled without the holder: the up axis moved 75.2°, the long axis 46.5°. The old axes were more than 45° off, so any Flip over or Turn 90° could not be carried over: check the part is the right way up.');
+});
+
+test('hidden marks from a leveling that was replaced are said to stay saved but unshowable; others come back', () => {
+  assert.equal(O.hiddenMarksNote([], ['oA']), '');
+  assert.equal(O.hiddenMarksNote(['oB'], ['oA']), '1 mark was drawn with the scan in another orientation; it is hidden here and comes back in that orientation.');
+  assert.equal(O.hiddenMarksNote(['oB', null], []), '2 marks were drawn with the scan in another orientation; they are hidden here and come back in that orientation.');
+  assert.equal(O.hiddenMarksNote(['oA'], ['oA']), '1 mark was drawn before the scan was re-leveled without the holder; it stays saved but cannot be shown in the new frame.');
+  assert.equal(O.hiddenMarksNote(['oA', 'oA', 'oA', 'oB'], ['oA', null]),
+    '3 marks were drawn before the scan was re-leveled without the holder; they stay saved but cannot be shown in the new frame. 1 mark was drawn with the scan in another orientation; it is hidden here and comes back in that orientation.');
+});
+
+test('the frames a re-level replaced are listed with the sample, once each, so Back to scan axes cannot lose them', () => {
+  assert.deepEqual(O.withReplaced(undefined, 'oA'), ['oA']);
+  assert.deepEqual(O.withReplaced(['oA'], 'oB'), ['oA', 'oB']);
+  assert.deepEqual(O.withReplaced(['oA', 'oB'], 'oA'), ['oA', 'oB']);
 });
