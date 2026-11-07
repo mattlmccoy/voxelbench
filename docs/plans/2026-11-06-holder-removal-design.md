@@ -167,3 +167,10 @@ primary method; shape detection (above) is the fallback when none is chosen; tap
 - **Fit quality is reported:** the trimmed RMS distance (mm) and the share of STL surface points within one voxel of
   the scan surface. Below a set share, the status reads "holder STL did not fit" and detection runs instead.
 - **Acceptance adds:** Samples 6 and 4 with their STLs reach the same Nov 5 targets (envelope within 2 %, Dice ≥ 0.97).
+
+## Amendment 2026-11-07 (b): several STLs per holder (Matt, poll)
+Holders are often assemblies of printed parts (a base and an angled top; the older stand: stick, platform and block).
+A scan may choose several holder STLs; each is fitted separately (the other parts are outliers to its trimmed ICP) and
+becomes its own `'stl'` piece, toggled like any other. The sample saves `holder.stls = [{ name, hash }, …]` (an older
+single `holder.stl` reads as a list of one). The status gives one line per STL (fitted with RMS, did not fit, not
+loaded, changed). Samples 1, 2 and 4 sat on the scanner's own stick, which has no STL; they rely on detection.
