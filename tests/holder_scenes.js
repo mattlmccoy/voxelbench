@@ -59,12 +59,12 @@ function tiltedPostScene({ size = 128, radius = 0.15, tiltDeg = 10, seed = 1 } =
 
 /** A stepped post on the z axis (stem 0.06 size to 0.15 size, cap 0.11 size to 0.25 size) under a dense flat disk part
     of radius 0.23 size, 0.08 size thick, coaxial and wider than the cap: a printed disk sitting on the post. */
-function diskOnPostScene({ size = 128, seed = 1 } = {}) {
+function diskOnPostScene({ size = 128, seed = 1, holderGray = 'same' } = {}) {
   const n = size, c = (n - 1) / 2, zs = Math.round(0.15 * n), zb = Math.round(0.25 * n), zt = zb + Math.round(0.08 * n);
   const r = (x, y) => Math.hypot(x - c, y - c);
   const holder = (x, y, z) => (z < zs && r(x, y) <= 0.06 * n) || (z >= zs && z < zb && r(x, y) <= 0.11 * n);
   const part = (x, y, z) => z >= zb && z < zt && r(x, y) <= 0.23 * n;
-  return buildScene({ size, holder, part, seed });
+  return buildScene({ size, holder, part, seed, holderGray });
 }
 
 module.exports = { tiltedPostScene, diskOnPostScene };

@@ -189,3 +189,38 @@ test('plates at twice the resolution are still three plates', () => {
   assert.deepEqual(r.pieces.map((p) => p.kind), ['plate', 'plate', 'plate']);
   assertCoverage(r);
 });
+
+// A doped part reads brighter than natural nylon: raise the part's matrix voxels on one side (x past its center) by
+// 12 % of (matrix - air), noise kept.
+function brighterHalf(opts) {
+  const s = opts.gray ? opts : S.makeHolderScene(opts), { nx } = s.dims, { part, matrix_gray: m, air_gray: a } = s.truth;
+  let cx = 0, k = 0;
+  part.forEach((v, i) => { if (v) { cx += i % nx; k++; } });
+  cx /= k;
+  for (let i = 0; i < part.length; i++) if (part[i] && i % nx > cx && s.gray[i] > (m + a) / 2) s.gray[i] += 0.12 * (m - a);
+  return s;
+}
+
+test('a part with a brighter half is not a bright holder', () => {
+  const r = detect(brighterHalf({ holder: 'none' }));
+  assert.equal(r.pieces.length, 0, `${r.method}: ${r.pieces.map((p) => p.kind).join()}`);
+});
+
+test('a brighter half does not hide a same-gray post', () => {
+  const r = detect(brighterHalf({ holder: 'post', holderGray: 'same' }));
+  assert.equal(r.method, 'shape');
+  assertCoverage(r);
+});
+
+test('a bright post still goes the bright path with a brighter half in the part', () => {
+  const r = detect(brighterHalf({ holder: 'post', holderGray: 'bright' }));
+  assert.equal(r.method, 'bright');
+  assertCoverage(r);
+});
+
+test('a doped half of a flat part on a bright post is not a bright holder', () => {
+  const r = detect(brighterHalf(Scenes.diskOnPostScene({ holderGray: 'bright' })));
+  assert.equal(r.method, 'bright');
+  assert.ok(r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => p.kind).join());
+  assertCoverage(r);
+});

@@ -47,10 +47,27 @@
     for (let i = 0; i < solid.length; i++) { all += solid[i]; inner += deep[i] & solid[i]; }
     if (!all) return null;
     const use = inner >= BRIGHT_MIN_SHARE * all ? (i) => deep[i] & solid[i] : (i) => solid[i];
+    const first = histStats(smoothed, use);
+    // A material is locally flat in gray; a partial-volume layer between two materials (a holder's face against the
+    // part, deep inside the solid) changes by a large share of their contrast per voxel and can pose as a population.
+    // Keep voxels whose largest 6-neighbor gray step is within BRIGHT_SIGMAS spreads (smoothed noise steps ~1.5).
+    const steps = [1, dims.nx, dims.nx * dims.ny], steepLimit = BRIGHT_SIGMAS * first.spread, n = solid.length;
+    const flat = (i) => {
+      if (!use(i)) return 0;
+      for (const d of steps) for (const j of [i - d, i + d]) if (j >= 0 && j < n && Math.abs(smoothed[j] - smoothed[i]) > steepLimit) return 0;
+      return 1;
+    };
+    let kept = 0;
+    for (let i = 0; i < n; i++) kept += flat(i);
+    return kept >= BRIGHT_MIN_SHARE * all ? histStats(smoothed, flat) : first;
+  }
+
+  /** Peak, spread and the part/bright population split of the gray histogram over the voxels use(i) selects. */
+  function histStats(smoothed, use) {
     let lo = Infinity, hi = -Infinity, count = 0;
-    for (let i = 0; i < solid.length; i++) if (use(i)) { const g = smoothed[i]; if (g < lo) lo = g; if (g > hi) hi = g; count++; }
+    for (let i = 0; i < smoothed.length; i++) if (use(i)) { const g = smoothed[i]; if (g < lo) lo = g; if (g > hi) hi = g; count++; }
     const width = Math.max((hi - lo) / HIST_BINS, 1e-6), hist = new Float64Array(HIST_BINS + 1);
-    for (let i = 0; i < solid.length; i++) if (use(i)) hist[Math.floor((smoothed[i] - lo) / width)]++;
+    for (let i = 0; i < smoothed.length; i++) if (use(i)) hist[Math.floor((smoothed[i] - lo) / width)]++;
     // A peak's spread is its lower half width (a brighter holder cannot reach that side) as a Gaussian sigma, on the
     // histogram smoothed by half that sigma (refined a few times, the kernel's own width taken off), so a sparse,
     // spiky histogram gives a stable peak and spread.
@@ -74,22 +91,34 @@
       if (soft[valley] < soft[low] / 2 && share >= BRIGHT_MIN_SHARE * count) mode = low;
     }
     const sigma = () => Math.max(1, sigmaAt(soft, mode, sk)) * width;
-    return { peak: lo + (mode + 0.5) * width, spread: sigma(), lo, width, hist, count };
+    return { peak: lo + (mode + 0.5) * width, spread: sigma(), lo, width, hist, soft, count };
   }
 
   /** Voxels within EDGE_REACH of the outside mask (the volume border is checked by coordinates). */
   const nearEdgeMask = (outside, dims) => P.boxDilate(outside, dims, EDGE_REACH);
   const nearBorder = (k, n) => k < EDGE_REACH || k >= n - EDGE_REACH;
 
-  /** The bright holder body { mask, peak (the bright population's gray) }, or null. Bright voxels are the solid above the midpoint of the part's peak and the
-      bright population's own peak; the largest connected body must hold most of them, be a real share of the solid
-      and reach the scan edge (bright inclusions are many, small and inside the part). */
-  function brightBody(smoothed, solid, nearEdge, dims, stats) {
-    const { peak, spread, lo, width, hist, count } = stats, from = Math.floor((peak + BRIGHT_SIGMAS * spread - lo) / width) + 1;
-    let top = -1;
-    for (let b = Math.max(0, from); b < hist.length; b++) if (top < 0 || hist[b] > hist[top]) top = b;
-    if (top < 0 || !hist[top]) return null;
-    const cut = Math.max((peak + lo + (top + 0.5) * width) / 2, peak + BRIGHT_SIGMAS * spread);
+  /** Gray populations above the part's peak (beyond BRIGHT_SIGMAS spreads), brightest first, as { peak, cut }: each a
+      peak of the smoothed histogram standing at least half its height above the deeper of the valleys to the nearest
+      higher peak on each side, with the cut midway to the next population down (or the part's peak). A doped part
+      can be one of them, as bright resin can: findHolder tries each as the holder until one yields holder pieces. */
+  function brightPopulations({ peak, spread, lo, width, soft }) {
+    const from = Math.max(1, Math.floor((peak + BRIGHT_SIGMAS * spread - lo) / width) + 1), tops = [];
+    for (let b = from; b < soft.length; b++) {
+      if (!(soft[b] > 0) || soft[b] < soft[b - 1] || soft[b] < (soft[b + 1] || 0)) continue;
+      let left = soft[b], right = soft[b];
+      for (let j = b - 1; j >= 0 && soft[j] <= soft[b]; j--) left = Math.min(left, soft[j]);
+      for (let j = b + 1; j < soft.length && soft[j] <= soft[b]; j++) right = Math.min(right, soft[j]);
+      if (soft[b] - Math.max(left, right) >= soft[b] / 2 && !tops.some((t) => Math.abs(t - b) * width < BRIGHT_SIGMAS * spread)) tops.push(b);
+    }
+    const grays = tops.map((b) => lo + (b + 0.5) * width).sort((a, b) => b - a);
+    return grays.map((g, k) => ({ peak: g, cut: (g + (k + 1 < grays.length ? grays[k + 1] : peak)) / 2 }));
+  }
+
+  /** The bright holder body for one population { mask, peak }, or null: the solid above the population's cut, whose
+      largest connected body must hold most of it, be a real share of the solid and reach the scan edge (bright
+      inclusions are many, small and inside the part). */
+  function brightBody(smoothed, solid, nearEdge, dims, { count }, { peak, cut }) {
     const bright = new Uint8Array(solid.length);
     let total = 0;
     for (let i = 0; i < solid.length; i++) if (solid[i] && smoothed[i] > cut) { bright[i] = 1; total++; }
@@ -103,7 +132,7 @@
       bright[i] = labels[i] === big ? 1 : 0;
       if (bright[i] && (nearEdge[i] || nearBorder(x, dims.nx) || nearBorder(y, dims.ny) || nearBorder(z, dims.nz))) edge = true;
     }
-    return edge ? { mask: bright, peak: lo + (top + 0.5) * width } : null;
+    return edge ? { mask: bright, peak } : null;
   }
 
   /** Air's gray: the mode of the smoothed gray over the reconstruction outside the solid. */
@@ -255,5 +284,5 @@
     return out;
   }
 
-  return { grayStats, nearEdgeMask, brightBody, airPeak, sliceChains };
+  return { grayStats, nearEdgeMask, brightPopulations, brightBody, airPeak, sliceChains };
 }));

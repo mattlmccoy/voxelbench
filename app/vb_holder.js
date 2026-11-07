@@ -351,7 +351,9 @@
   /** Candidates from chains to accepted, extended pieces with ids in order of size. */
   function accept(chains, ctx, foundBy) {
     const cands = candidates(chains, ctx);
-    const ok = cands.filter((c) => c.edge || foundBy === 'bright');
+    // Every piece, bright or not, reaches the scan edge or is a post step holding something up on one that does: a
+    // bright body can include a part's brighter (doped) region, whose pieces do neither.
+    const ok = cands.filter((c) => c.edge);
     for (let grew = true; grew;) {
       grew = false;
       for (const c of cands) if (!ok.includes(c) && ok.some((s) => onStep(c, s, ctx))) { ok.push(c); grew = true; }
@@ -381,8 +383,9 @@
     if (!stats) { if (onProgress) onProgress(stage, total, total); return { method: 'none', pieces: [] }; }
     const nearEdge = Seeds.nearEdgeMask(outside, dims), ctx = { solid, material: solid, core: solid, outside, nearEdge, smoothed, dims, stats, voxelMm };
     const run = (mask) => { k = 0; return Seeds.sliceChains(mask, nearEdge, dims, tick); };
-    const bright = Seeds.brightBody(smoothed, solid, nearEdge, dims, stats);
-    if (bright) {
+    for (const pop of Seeds.brightPopulations(stats)) { // brightest first: resin before a doped part's brighter melt
+      const bright = Seeds.brightBody(smoothed, solid, nearEdge, dims, stats, pop);
+      if (!bright) continue;
       const edge = (bright.peak + Seeds.airPeak(smoothed, solid, outside)) / 2, material = new Uint8Array(solid.length);
       for (let i = 0; i < solid.length; i++) material[i] = solid[i] && smoothed[i] > edge ? 1 : 0;
       const pieces = accept(run(bright.mask), { ...ctx, material, core: bright.mask }, 'bright');
