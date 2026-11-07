@@ -124,19 +124,20 @@
   }
 
   /** The holder mask: solid voxels inside a piece not given back (tape pieces only where the solid is at most 2 voxels
-      thick), widened by one voxel into the solid. labels holds piece index + 1 for every piece, given back or not. */
+      thick; an 'stl' piece is its runtime mask), widened by one voxel into the solid. labels holds piece index + 1 for
+      every piece, given back or not. */
   function holderMask({ solid, dims, pieces, givenBack = [] }) {
     const { nx, ny, nz } = dims, labels = new Uint8Array(solid.length), taken = new Uint8Array(solid.length);
     const thin = pieces.some((p) => p.kind === 'tape') ? shortestRun(dims, solid) : null;
     const back = new Set(givenBack);
     pieces.forEach((p, k) => {
+      const mark = (i) => { if (!labels[i]) labels[i] = k + 1; if (!back.has(p.id) && (p.kind !== 'tape' || thin[i] <= TAPE_THICKNESS)) taken[i] = 1; };
+      if (p.kind === 'stl') { for (let i = 0; i < solid.length; i++) if (solid[i] && p.mask[i]) mark(i); return; } // inside the voxelized STL
       const r = [0, 1, 2].map((c) => Math.abs(p.axes[c]) * p.half[0] + Math.abs(p.axes[3 + c]) * p.half[1] + Math.abs(p.axes[6 + c]) * p.half[2] + 1);
       const lo = [0, 1, 2].map((c) => Math.max(0, Math.floor(p.center[c] - r[c]))), hi = [nx, ny, nz].map((m, c) => Math.min(m - 1, Math.ceil(p.center[c] + r[c])));
       for (let z = lo[2]; z <= hi[2]; z++) for (let y = lo[1]; y <= hi[1]; y++) for (let x = lo[0]; x <= hi[0]; x++) {
         const i = x + nx * (y + ny * z);
-        if (!solid[i] || !insidePiece(p, x, y, z)) continue;
-        if (!labels[i]) labels[i] = k + 1;
-        if (!back.has(p.id) && (p.kind !== 'tape' || thin[i] <= TAPE_THICKNESS)) taken[i] = 1;
+        if (solid[i] && insidePiece(p, x, y, z)) mark(i);
       }
     });
     return { holder: dilateIntoSolid(taken, solid, dims), labels };

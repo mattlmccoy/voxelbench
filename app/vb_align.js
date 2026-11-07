@@ -208,10 +208,11 @@
   });
 
   /** Starting poses: the principal axes matched under the four proper sign flips, plus the spread rotations about
-      the centroids. Each is scored by a short ICP on a thinned copy; the best is refined fully. */
-  function preAlign(src, dst, { scale = false } = {}) {
+      the centroids. Each is scored by a short ICP on a thinned copy; the best is refined fully. index: a nearest-
+      neighbor index over dst to pair through (as icp takes), else one is built. */
+  function preAlign(src, dst, { scale = false, index: given = null } = {}) {
     const fs = frame(src), fd = frame(dst), s = 1; // trial poses are scored rigid; the scale is freed only at the end
-    const index = nearestIndex(dst, Math.max(extentOf(dst) / 48, 1e-6)), few = thin(src, TRIAL_POINTS);
+    const index = given || nearestIndex(dst, Math.max(extentOf(dst) / 48, 1e-6)), few = thin(src, TRIAL_POINTS);
     const poses = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].map((flip) => {
       const R = new Array(9).fill(0); // source axis k to flip_k times target axis k
       for (let k = 0; k < 3; k++) for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) R[3 * r + c] += flip[k] * fd.axes[k][r] * fs.axes[k][c];

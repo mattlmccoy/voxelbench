@@ -116,3 +116,14 @@ test('ICP reports the RMS of the pose it returns, also when it stops on the iter
   const rms = Math.sqrt(kept.reduce((s, x) => s + x * x, 0) / kept.length);
   assert.ok(Math.abs(fit.rms - rms) < 1e-9, `${fit.rms} vs ${rms}`);
 });
+
+test('pre-alignment pairs through a given nearest-neighbor index', () => {
+  const pts = [];
+  for (let i = 0; i < 600; i++) pts.push((i % 10) * 0.7, Math.floor(i / 10) % 6, Math.floor(i / 60) * 0.4); // a 10 x 6 x 10 box lattice
+  const dst = Float64Array.from(pts), grid = A.nearestIndex(dst, 0.5);
+  let calls = 0;
+  const index = { nearest: (x, y, z) => { calls++; return grid.nearest(x, y, z); } };
+  const fit = A.preAlign(dst, dst, { index });
+  assert.ok(calls > 0, 'the given index is used');
+  assert.ok(fit.rms < 1e-6, `rms ${fit.rms}`);
+});

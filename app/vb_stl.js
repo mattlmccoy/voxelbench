@@ -143,5 +143,5 @@
     return { points, normals, tri, edge: new Uint8Array(n), weight, faces: new Uint32Array(0), triangles, spacing: null, display: 'triangles', sampled: pick.length < live.length ? { of: live.length } : null };
   }
 
-  return { parseStl, writeStl, measurePoints, faceNormals };
+  return { parseStl, writeStl, measurePoints, faceNormals, meshOf };
 }));

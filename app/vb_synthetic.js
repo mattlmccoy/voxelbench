@@ -204,7 +204,8 @@
   }
 
   /** Stepped post on the z axis through (cx, cy): a cap just under the part, a stem down to slice 0. Plates: a base
-      slab and two plates tilted 25 and 60 degrees whose top faces touch the part, running out to the FOV edge. */
+      slab and two plates tilted 25 and 60 degrees whose top faces touch the part, running out to the FOV edge; each
+      plate is the voxels with offset - thickness < normal . (x, y, z) < offset (the base: z < thickness). */
   function holderSceneHolder({ n, cx, cy, fov, partMask, zb, holder, planes }) {
     const mask = new Uint8Array(n * n * n), pieces = [], t = Math.max(2, PLATE_T * n);
     if (holder === 'none') return { mask, pieces };
@@ -217,7 +218,7 @@
         : (z < t || planes.some((p) => onPlate(p, x, z, t)) ? 1 : 0);
     }
     if (holder === 'post') pieces.push({ kind: 'post', radiusVox: capR, zFrom: zb - capH, zTo: zb - 1 }, { kind: 'post', radiusVox: stemR, zFrom: 0, zTo: zb - capH - 1 });
-    else pieces.push({ kind: 'plate', thicknessVox: t, tiltDeg: 0 }, ...planes.map((p) => ({ kind: 'plate', thicknessVox: t, tiltDeg: p.deg })));
+    else pieces.push({ kind: 'plate', thicknessVox: t, tiltDeg: 0, normal: [0, 0, 1], offset: t }, ...planes.map((p) => ({ kind: 'plate', thicknessVox: t, tiltDeg: p.deg, normal: [p.nx, 0, p.nz], offset: p.d })));
     return { mask, pieces };
   }
   const onPlate = (p, x, z, t) => { const s = p.nx * x + p.nz * z; return s > p.d - t && s < p.d; };
