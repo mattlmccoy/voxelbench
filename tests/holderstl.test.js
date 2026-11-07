@@ -75,11 +75,30 @@ test('a post STL fits the post scene', () => {
   assertCoverage(r);
 });
 
+// ICP calls during a fit (vb_holderstl.js calls vb_align's icp through the module object).
+const Al = require('../app/vb_align.js');
+function countingIcp(fn) {
+  const icp = Al.icp;
+  let calls = 0;
+  Al.icp = (...a) => { calls++; return icp(...a); };
+  try { return { out: fn(), calls: () => calls }; } finally { Al.icp = icp; }
+}
+const ONE_START = 3; // ROUNDS in vb_holderstl.js: the ICP rounds of one start run to the end
+
+test('a start whose fit clears the floors with margin ends the start search', () => {
+  const scene = S.makeHolderScene({ holder: 'post' }), stl = postStl(scene), seeds = seedsOf(scene);
+  const { out: r, calls } = countingIcp(() => fitScene(scene, stl, { seeds }));
+  assert.ok(r.fit.fits && r.fit.nearShare >= HS.FIT_MIN_NEAR + 0.1, `fit ${JSON.stringify({ ...r.fit, pose: undefined })}`);
+  assert.equal(calls(), ONE_START, 'the first start held with margin: no other start was refined');
+  assertCoverage(r);
+});
+
 test('a symmetric seed (the stem alone) still fits the post the right way up', () => {
   const scene = S.makeHolderScene({ holder: 'post' }), stl = postStl(scene, 40); // a mount reaching far below the scan
   const stem = seedsOf(scene).filter((p) => p.half[1] < scene.truth.pieces[1].radiusVox + 1);
   assert.equal(stem.length, 1, 'the stem alone');
-  const r = fitScene(scene, stl, { seeds: stem });
+  const { out: r, calls } = countingIcp(() => fitScene(scene, stl, { seeds: stem }));
+  assert.ok(calls() > ONE_START, 'the fit needed a later start (a half turn)');
   const cad = stl.cadPoint(stl.axisTop), err = Math.hypot(...place(r.fit.pose, cad).map((v, k) => v - place(stl.truth, cad)[k]));
   assert.ok(err <= 1, `the cap top is ${err.toFixed(2)} voxels off`);
   assertCoverage(r);

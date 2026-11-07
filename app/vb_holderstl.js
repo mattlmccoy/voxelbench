@@ -15,6 +15,8 @@
   const MIN_IN_FIELD = 0.1;  // and at least this share of the whole STL surface lies in the scan's field (else a patch)
   const MAX_SURFACE_POINTS = 250000; // ICP targets: face points thinned evenly beyond this (as vb_align thins sources)
   const ROUNDS = 3;          // refits, each pairing only the STL samples inside the scan's field at the last pose
+  const MARGIN = 0.1;        // a start whose near share clears FIT_MIN_NEAR by this ends the start search
+  const KEEP = 2;            // otherwise the best this many starts (ranked after one round) run all ROUNDS (a cost bound)
   const FIT_POINTS = 5000;   // STL samples per fit, spread evenly by area (the share's sampling error is about 1 %)
   const TOL = 0.01;          // voxels: ICP stops when the trimmed RMS changes by less than this
   const START_CELLS = 16;    // the start search's grid spans the target in this many cells (vb_align uses 48): its
@@ -179,18 +181,24 @@
       const T0 = { R: Rt, t: place({ R: Rt, t: [0, 0, 0] }, ...B.t).map((v) => -v), s: 1 };
       starts = [T0, ...halfTurns(target).map((F) => A.compose(F, T0))];
     } else starts = [A.preAlign(sample(null), scan, { index: clampedIndex(scan) })];
-    let best = none;
-    for (let T of starts) {
-      let src = null;
-      for (let r = 0; r < ROUNDS && T; r++) {
-        src = sample(T);
-        T = src.length >= 3 * MIN_POINTS ? A.icp(src, scan, { init: T, tol: TOL }) : null;
-      }
+    // Each start gets one ICP round to rank it. A start whose fit clears the floors with MARGIN is refined to the end
+    // and ends the search; otherwise only the KEEP best ranked starts are refined. The floors themselves are unchanged.
+    const refine = (T, rounds) => {
+      for (let r = 0; r < rounds && T; r++) { const src = sample(T); T = src.length >= 3 * MIN_POINTS ? A.icp(src, scan, { init: T, tol: TOL }) : null; }
+      return T;
+    };
+    const result = (T) => ({ pose: { R: T.R.map((v) => v / voxelMm), t: T.t.slice() }, rmsMm: T.rms * voxelMm, ...score(T) });
+    const finish = (T, fit) => { const end = refine(T, ROUNDS - 1), done = end ? result(end) : fit; return better(done, fit) ? done : fit; };
+    const ranked = [];
+    for (const start of starts) {
+      const T = refine(start, 1);
       if (!T) continue;
-      const fit = score(T);
-      if (better(fit, best)) best = { pose: { R: T.R.map((v) => v / voxelMm), t: T.t.slice() }, rmsMm: T.rms * voxelMm, ...fit };
+      const fit = result(T);
+      if (fit.nearShare >= FIT_MIN_NEAR + MARGIN && fit.inFieldShare >= MIN_IN_FIELD) return finish(T, fit);
+      ranked.push({ T, fit });
     }
-    return best;
+    ranked.sort((a, b) => (better(a.fit, b.fit) ? -1 : better(b.fit, a.fit) ? 1 : 0));
+    return ranked.slice(0, KEEP).map(({ T, fit }) => finish(T, fit)).reduce((b, f) => (better(f, b) ? f : b), none);
   }
 
   /** The scan surface and the STL's samples for a fit: sample(T) gives area-even samples (voxel units) of the STL
