@@ -708,3 +708,11 @@ test('Analyze on the scan already open goes back to it; any other scan, or one s
   assert.equal(L.isOpenScan('s1', store, { ...open, loading: 's1', folder: null }), false); // still being read
   assert.equal(L.isOpenScan('s1', store, { folder: null, loading: null, stack: null }), false); // nothing open
 });
+
+test('opening a scan starts from the default settings and the automatic zone baseline, not the last scan\'s', () => {
+  const defaults = { sigma: 1, bodyThreshold: 1400, poreThreshold: 1300 };
+  const s = L.scanOpenState(defaults);
+  assert.deepEqual(s.settings, defaults);
+  assert.notEqual(s.settings, defaults, 'a copy: changing one scan\'s settings must not change the defaults');
+  assert.equal(s.zoneBaseline, 'auto');
+});
