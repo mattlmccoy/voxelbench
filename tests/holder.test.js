@@ -168,6 +168,15 @@ test('a bright post of two printed parts meeting at a seam that reads below the 
   assertCoverage(r);
 });
 
+test('a dense coupon standing upright on a base slab keeps its voxels; the slab is still removed', () => {
+  for (const opts of [{}, { wideBase: true, thickness: 6 }, { wideBase: true, thickness: 10 }]) {
+    const r = detect(Scenes.couponOnSlabScene(opts)), what = `${JSON.stringify(opts)} (${r.pieces.map((p) => p.kind).join()})`;
+    const [kept, total] = count(r.holder.map((v) => 1 - v), r.truth.part), [hit, holderTotal] = count(r.holder, r.truth.holder);
+    assert.ok(kept >= 0.99 * total, `keeps ${kept}/${total} of the coupon ${what}`);
+    assert.ok(hit >= 0.95 * holderTotal, `covers ${hit}/${holderTotal} of the slab ${what}`);
+  }
+});
+
 test('a flat-faced cube on a post keeps every face', () => {
   const r = detect({ part: 'cube', holder: 'post' }), { nx, ny } = r.dims;
   assert.ok(r.pieces.length > 0 && r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => p.kind).join());

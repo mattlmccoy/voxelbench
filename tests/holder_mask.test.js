@@ -72,9 +72,11 @@ test('removal that takes most of the solid warns', () => {
   assert.ok(body.holder.removedVoxels > 0);
 });
 
-test('a round part cut into tiers by shape detection warns', () => {
-  const s = Scenes.twoTierRoundScene(), body = build(s, {});
-  assert.ok(body.holder.warning, `${body.holder.method}: ${body.holder.pieces.map((p) => p.kind).join()}, kept ${overlap(body.filled, s.truth.part)}/${sum(s.truth.part)}`);
+test('a round part cut into tiers by shape detection is kept or warns', () => {
+  const s = Scenes.twoTierRoundScene(), body = build(s, {}), kept = overlap(body.filled, s.truth.part), total = sum(s.truth.part);
+  const what = `${body.holder.method}: ${body.holder.pieces.map((p) => p.kind).join()}, kept ${kept}/${total}`;
+  assert.ok(kept >= 0.95 * total || body.holder.warning, what);
+  console.log(`two-tier part: ${kept >= 0.95 * total ? 'kept' : 'cut, with the warning'} (${what})`);
 });
 
 test('a failure in holder detection leaves the mask unremoved and says so', () => {

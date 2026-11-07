@@ -4,9 +4,9 @@
    axes are row-major rows (long, mid, short); a plate's normal is row 3 and a post's axis row 1; half is the half
    extent along each row (a post: [half length, radius, radius]). */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_align.js'), require('./vb_holderseeds.js'));
-  else root.VBHolder = factory(root.VBAlign, root.VBHolderSeeds);
-}(typeof self !== 'undefined' ? self : this, function (A, Seeds) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_align.js'), require('./vb_holderseeds.js'), require('./vb_holderguard.js'));
+  else root.VBHolder = factory(root.VBAlign, root.VBHolderSeeds, root.VBHolderGuard);
+}(typeof self !== 'undefined' ? self : this, function (A, Seeds, Guard) {
   'use strict';
 
   const TRIM = 0.005;       // robust extents: the 0.5 and 99.5 percentiles of the projections
@@ -356,7 +356,7 @@
     // their slice runs stopping where they meet) or is a post step holding something up on one that does: a doped region of a part, in a bright body, does neither.
     const ext = new Map(), grow = (c) => ext.get(c) || ext.set(c, extend({ kind: c.kind, center: c.center, axes: c.axes, half: c.half }, ctx)).get(c);
     const reaches = (p, hit = false) => { visit(p, ctx.dims, [0, 0, 0], (i, q) => { hit = hit || (ctx.material[i] === 1 && inShape(p.kind, q, p.half) && Seeds.atEdge(i, ctx.nearEdge, ctx.dims)); }); return hit; };
-    const ok = cands.filter((c) => c.edge || reaches(grow(c)));
+    const ok = cands.filter((c) => c.edge || (reaches(grow(c)) && (grow(c).through = true))); // through: reached the edge only once extended
     const steps = []; // [step, the step it sits on]: the solid between them (a chamfer, a seam) is the post's too
     for (let grew = true; grew;) { grew = false; for (const c of cands) { const s = !ok.includes(c) && ok.find((x) => onStep(c, x, ctx)); if (s) { ok.push(c); steps.push([c, s]); grew = true; } } }
     // Extend the largest first; a later candidate mostly inside an extended piece is a fragment of it.
@@ -367,7 +367,7 @@
     const pieces = grown.map((p) => {
       let voxels = 0;
       visit(p, ctx.dims, [0, 0, 0], (i, q) => { if (ctx.solid[i] && inShape(p.kind, q, p.half)) voxels++; });
-      return { id: '', kind: p.kind, foundBy, center: p.center, axes: p.axes, half: p.half, voxels, mm3: voxels * ctx.voxelMm ** 3 };
+      return { id: '', kind: p.kind, foundBy, center: p.center, axes: p.axes, half: p.half, voxels, mm3: voxels * ctx.voxelMm ** 3, ...(p.through ? { through: true } : {}) };
     }).filter((p) => p.voxels > 0).sort((a, b) => b.voxels - a.voxels);
     pieces.forEach((p, k) => { p.id = 'h' + (k + 1); });
     return pieces;
@@ -388,10 +388,10 @@
       if (!bright) continue;
       const edge = (bright.peak + Seeds.airPeak(smoothed, solid, outside)) / 2, material = new Uint8Array(solid.length);
       for (let i = 0; i < solid.length; i++) material[i] = solid[i] && smoothed[i] > edge ? 1 : 0;
-      const pieces = accept(run(bright.mask), { ...ctx, material, core: bright.mask }, 'bright');
+      const pieces = accept(run(bright.mask), { ...ctx, material, core: bright.mask }, 'bright').map(({ through, ...p }) => p);
       if (pieces.length) return { method: 'bright', pieces };
     }
-    const pieces = accept(run(solid), ctx, 'shape');
+    const pieces = Guard.keepPart(accept(run(solid), ctx, 'shape'), ctx, holderMask); // taking the pieces must leave the part
     return { method: pieces.length ? 'shape' : 'none', pieces };
   }
 

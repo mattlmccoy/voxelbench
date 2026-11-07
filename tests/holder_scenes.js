@@ -79,6 +79,16 @@ function twoTierRoundScene({ size = 128, seed = 1 } = {}) {
   return buildScene({ size, holder, part, seed });
 }
 
+/** A dense flat coupon (part, 0.5 size wide, `thickness` voxels thick) standing upright on a base slab (holder) at the
+    bottom of the volume, all inside the field: the coupon reaches the scan edge only through the base once extended, as a
+    stand's plate does, but it is the part. The base is a strip smaller than the coupon, or (wideBase) fills the field. */
+function couponOnSlabScene({ size = 128, seed = 1, thickness = 8, wideBase = false } = {}) {
+  const n = size, c = (n - 1) / 2, zb = Math.round(0.06 * n), zt = Math.round(0.6 * n);
+  const holder = (x, y, z) => z < zb && (wideBase || (Math.abs(x - c) <= 0.3 * n && Math.abs(y - c) <= 0.08 * n));
+  const part = (x, y, z) => z >= zb && z < zt && Math.abs(x - c) <= 0.25 * n && Math.abs(y - c) <= thickness / 2;
+  return buildScene({ size, holder, part, seed });
+}
+
 /** A stepped post whose cap has a 45 degree chamfer on its bottom edge (radius 0.15 size down to 0.12 size over the bottom
     0.03 size), under a porous flat-bottomed part wider than the cap, as a scanner's stick holds a printed part. */
 function chamferPostScene({ size = 128, seed = 1, holderGray = 'same' } = {}) {
@@ -179,4 +189,4 @@ function displaced(voxTri, voxelMm, pivotVox) {
   return { tri, truth: { R, t }, cadPoint: (vox) => D(vox.map((v) => v * voxelMm)), cadDir: (d) => mat(Rd, d) };
 }
 
-module.exports = { tiltedPostScene, diskOnPostScene, twoTierRoundScene, chamferPostScene, standScene, lathe, box, cross, mat, matT, norm, rotation, displaced };
+module.exports = { tiltedPostScene, diskOnPostScene, twoTierRoundScene, couponOnSlabScene, chamferPostScene, standScene, lathe, box, cross, mat, matT, norm, rotation, displaced };
