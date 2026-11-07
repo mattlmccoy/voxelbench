@@ -291,6 +291,8 @@ model; the page draws them, toggles pieces on click, and saves them to the sampl
     the page levels from the holder-free mask (`levelFromMask`, `gridForPoints` as in `vb_orientrail.js` `level`),
     saves `{ …orientation, holder_removed: true, method: 'principal axes of the holder-free sample mask (re-leveled automatically)', replaced: { made_at, angles_deg } }`, reopens the scan leveled, and shows the one-time note
     `"Re-leveled without the holder: the up axis moved 3.1°, the long axis 1.4°. Slider nudges from <date> were dropped."`
+  - Marks drawn in the old leveled frame stay saved and hidden; the existing hidden-marks note (`App.hiddenMarks`)
+    counts them (Matt, poll 11-06). No mark is moved or deleted.
 
 - [ ] **Step 1: Write the failing tests** `an orientation from before holder removal needs re-leveling` and
   `axisChange measures how far the axes moved` (identity vs a 3° tilt about x → `up_deg` 3 ± 1e-6, `long_deg` 0).
