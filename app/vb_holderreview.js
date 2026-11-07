@@ -15,8 +15,10 @@
 
   /** What was checked: "not run" (nothing built yet), "no holder found", "removal failed: <reason>", "3 holder pieces,
       not reviewed" or "3 holder pieces, reviewed (1 given back)". failed (the reason) wins over everything, so a failed
-      build never reads as "not run" or as no holder. */
-  function holderStatus(h, failed) {
+      build never reads as "not run" or as no holder. While a build is running (building), "finding the holder…": the last
+      build's result is never shown as the current one. */
+  function holderStatus(h, failed, building = false) {
+    if (building) return 'finding the holder…';
     if (failed) return `removal failed: ${failed}`;
     if (!h) return 'not run';
     const n = h.pieces.length, back = (h.givenBack || []).length;
@@ -30,12 +32,26 @@
   function holderMethod(h) {
     if (!h) return '';
     const r = h.stl;
+    // The chosen file differs from the one the review was fitted with: it was fitted again and the review (pieces and
+    // give-backs) no longer applies.
+    const changed = r && r.changedFrom ? `holder STL ${r.name} changed since the review; refitted, review cleared` : null;
+    if (changed && r.outcome === 'fitted') return `${changed} (RMS ${r.rmsMm.toFixed(2)} mm)`;
+    if (changed && r.outcome === 'poor fit') return `${changed}; it did not fit; ${detected(r.fallback)}`;
     if (r && r.outcome === 'fitted') return `holder STL ${r.name} fitted (RMS ${r.rmsMm.toFixed(2)} mm)`;
     if (r && r.outcome === 'reused') return `holder STL ${r.name}, fitted earlier`;
     if (r && r.outcome === 'poor fit') return `holder STL ${r.name} did not fit; ${detected(r.fallback)}`;
     if (r && r.outcome === 'missing') return `holder STL ${r.name} not loaded; ${detected(h.method)}`;
     if (r && r.outcome === 'unused') return `${detected(h.method)}; holder STL ${r.name} not used`;
     return h.pieces.length ? detected(h.method) : '';
+  }
+
+  /** The rail's holder tag: a running build first, then a failed build (holder removal's own failure reads "removal
+      failed: …", any other mask-build failure "Could not build the sample mask: …"), then holderStatus. error is the
+      failed build's { stage ('holder' or null), message }. */
+  function holderTag({ h, reviewed, error, building }) {
+    if (building) return holderStatus(h, null, true);
+    if (error && error.stage !== 'holder') return `Could not build the sample mask: ${error.message}`;
+    return holderStatus(h && { ...h, reviewed }, (error && error.message) || (h && h.failed) || null);
   }
 
   /** The sample-mask status after a model (reviewed: isReviewed): "Holder: <status>; <method>." then the poor fit's scores, the kept review and
@@ -112,5 +128,5 @@
     return ` | holder ${p.id}${givenBack ? ', given back to the part' : ''} (${p.kind === 'stl' ? `STL ${p.name}` : `${s.kind}, ${s.size}`})`;
   }
 
-  return { holderStatus, holderMethod, statusLine, reviewBlock, holderRecord, isReviewed, labelAt, toggleGiven, pieceSummary, readoutText };
+  return { holderStatus, holderTag, holderMethod, statusLine, reviewBlock, holderRecord, isReviewed, labelAt, toggleGiven, pieceSummary, readoutText };
 }));

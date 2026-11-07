@@ -340,8 +340,8 @@
     const head = $('voidHeadline');
     head.textContent = `${s.all_void_percent_of_body.toFixed(2)} %`;
     const note = document.createElement('small');
-    const cropped = App.cropsOf(state.folder).length > 0;
-    note.textContent = `porosity: ${s.all_void_volume_mm3.toFixed(0)} mm³ pore volume in ${s.body_volume_mm3.toFixed(0)} mm³ sample mask.${cropped ? '' : ' No crop: the mask may include the holder.'}`;
+    const h = state.holder, holder = h ? window.VBHolderReview.holderTag({ h, reviewed: window.VBHolderReview.isReviewed(h, App.sampleNow().holder), error: state.holderError, building: state.holderWait }) : 'not run';
+    note.textContent = `porosity: ${s.all_void_volume_mm3.toFixed(0)} mm³ pore volume in ${s.body_volume_mm3.toFixed(0)} mm³ sample mask. The holder is removed automatically (${holder}; step 1); crop anything it misses.`;
     const origin = document.createElement('small');
     origin.className = 'provenance';
     origin.textContent = App.provenance();

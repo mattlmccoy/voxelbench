@@ -32,7 +32,10 @@ function ensureBody({ settings, crops, holder: request = null, frame: f }) {
   const crop = P.cropMask(crops, vol.dims, vol.bin);
   const fitting = !!(request && request.stl && request.stl.triangles), share = HW.progressTracker(fitting ? HOLDER_SPANS : FIND_ONLY);
   const onProgress = (stage, k, total) => { const s = share(stage, k, total); if (s !== null) postMessage({ type: 'progress', text: HW.progressText(stage, k, total), share: s }); };
-  const prep = HW.prepareHolder({ holder: request, scale: scale(), orient: frame.orient, dims: vol.dims, voxelMm: vol.bin * vol.voxelMm, onProgress });
+  let prep;
+  try {
+    prep = HW.prepareHolder({ holder: request, scale: scale(), orient: frame.orient, dims: vol.dims, voxelMm: vol.bin * vol.voxelMm, onProgress });
+  } catch (e) { e.stage = 'holder'; throw e; } // the page says "removal failed" only for the holder's own failures
   body = P.buildBody(vol.gray, vol.outside, vol.dims, settings, crop, prep.input);
   holder = { ...body.holder, given: prep.given, stl: prep.report, keep: prep.keep };
   holder.native = self.VBHolderFrame.piecesToNative(holder.pieces, scale(), frame.orient);
@@ -261,6 +264,6 @@ onmessage = ({ data }) => {
       postMessage({ type: 'cad', id: data.id, ...out }, out.deviations ? [out.deviations.buffer] : []);
     }
   } catch (e) {
-    postMessage({ type: 'error', for: data && data.type, message: e.name === 'RangeError' ? 'The browser ran out of memory for this step.' : e.message });
+    postMessage({ type: 'error', for: data && data.type, stage: e.stage || null, message: e.name === 'RangeError' ? 'The browser ran out of memory for this step.' : e.message });
   }
 };

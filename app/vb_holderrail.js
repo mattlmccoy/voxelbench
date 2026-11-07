@@ -15,7 +15,12 @@
   const chosen = () => { const s = saved(); return s && s.stl ? s.stl.name : ''; };
   const waiting = () => state.holderWait || Boolean(busy);
   // A failed mask build leaves the last holder on screen; it is not the build, so it cannot be reviewed.
-  const blockOf = (h) => (state.holderError ? `The sample mask could not be built: ${state.holderError}` : HR.reviewBlock(h));
+  const blockOf = (h) => (state.holderError ? `The sample mask could not be built: ${state.holderError.message}` : HR.reviewBlock(h));
+  // A mask build is running: a rebuild after a change, or the first build of a scan (no model yet).
+  const building = () => state.holderWait || Boolean(state.folder && !state.model && !state.holderError);
+  /** True while the scan open when it was called is still the open one: a read that finishes after another scan opened
+      must not change the new scan's holder. */
+  const sameScan = () => { const token = state.loadToken, folder = state.folder; return () => state.loadToken === token && state.folder === folder; };
 
   async function refreshNames() {
     const dir = libDir();
@@ -57,10 +62,11 @@
   }
 
   function render() {
-    const h = state.holder, failed = state.holderError || (h && h.failed) || null, reviewed = HR.isReviewed(h, saved());
-    $('holderState').textContent = HR.holderStatus(h && { ...h, reviewed }, failed);
+    const h = state.holder, reviewed = HR.isReviewed(h, saved()), run = building();
+    const failed = Boolean(state.holderError || (h && h.failed));
+    $('holderState').textContent = HR.holderTag({ h, reviewed, error: state.holderError, building: run });
     renderSelect();
-    $('holderMethod').textContent = h && !failed ? HR.holderMethod(h) : '';
+    $('holderMethod').textContent = h && !failed && !run ? HR.holderMethod(h) : '';
     $('holderWarning').hidden = !(h && h.warning);
     $('holderWarning').textContent = (h && h.warning) || '';
     renderTable(h);
@@ -83,7 +89,7 @@
 
   /** Saves the build as it is; the worker keeps the mask (no new model), so the status is said here. */
   function accept() {
-    const h = state.holder, record = !blockOf(h) && HR.holderRecord(h, (h && h.givenBack) || []);
+    const h = state.holder, record = !waiting() && !blockOf(h) && HR.holderRecord(h, (h && h.givenBack) || []);
     if (!record) return;
     note = '';
     App.saveSample({ holder: record });
@@ -99,8 +105,10 @@
     note = '';
     if (!name) { state.holderStl = null; App.saveSample({ holder: null }); render(); return; }
     busy = `Reading holder STL ${name}…`; render();
+    const still = sameScan();
     try {
       const loaded = await HL.readHolder(libDir(), name);
+      if (!still()) return; // another scan opened during the read: its holder is not this choice
       if (!loaded) throw new Error('it is not in the library\'s holders folder');
       state.holderStl = loaded; // set before the request: it carries the triangles
       if (same) App.holderChanged();
@@ -112,22 +120,27 @@
 
   async function addFile(file) {
     busy = `Adding ${file.name} to the library's holders…`; render();
+    const still = sameScan();
     let name = null;
     try { name = await HL.addHolder(libDir(), file); await refreshNames(); } catch (e) { note = `Could not add ${file.name}: ${e.message}`; }
     busy = ''; render();
-    if (name) await choose(name);
+    if (name && still()) await choose(name); // added to the library either way; chosen only for the scan it was added on
   }
 
   /** On opening a scan: the library's holders, and the STL its record names, read before the first mask build. A file
       missing or changed is left to the worker, which falls back to detection and says so. */
   App.beforeFirstMask(async () => {
     note = '';
+    const still = sameScan();
     await refreshNames();
     const s = saved(), dir = libDir();
     if (s && s.stl && dir) {
-      try { state.holderStl = await HL.readHolder(dir, s.stl.name); } catch (e) { note = `Could not read holder STL ${s.stl.name}: ${e.message}`; }
+      try {
+        const loaded = await HL.readHolder(dir, s.stl.name);
+        if (still()) state.holderStl = loaded;
+      } catch (e) { if (still()) note = `Could not read holder STL ${s.stl.name}: ${e.message}`; }
     }
-    render();
+    if (still()) render();
   });
   App.toggleHolderPiece = toggle;
 

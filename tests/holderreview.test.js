@@ -106,3 +106,27 @@ test('the holder reads as reviewed when the mask was built from the saved review
   assert.equal(Rv.isReviewed({ ...h, keep: { pieces: saved.pieces, givenBack: ['h2'], method: 'shape' } }, saved), false, 'a kept review waiting for its STL is not this build');
   assert.equal(Rv.statusLine({ ...h, warning: null }, true), 'Holder: 2 holder pieces, reviewed (1 given back); found by shape.');
 });
+
+test('a holder STL changed since the review says it was refitted and the review cleared', () => {
+  const s = { name: 'post holder', hash: 'bb', changedFrom: 'aa' };
+  assert.equal(Rv.holderMethod({ method: 'stl', pieces: [stl], stl: { ...s, outcome: 'fitted', rmsMm: 0.1234 } }),
+    'holder STL post holder changed since the review; refitted, review cleared (RMS 0.12 mm)');
+  assert.equal(Rv.holderMethod({ method: 'shape', pieces: [post('h1')], stl: { ...s, outcome: 'poor fit', fallback: 'shape' } }),
+    'holder STL post holder changed since the review; refitted, review cleared; it did not fit; found by shape');
+  assert.equal(Rv.statusLine({ method: 'stl', pieces: [stl], givenBack: [], given: false, warning: null, stl: { ...s, outcome: 'fitted', rmsMm: 0.1 } }),
+    'Holder: 1 holder piece, not reviewed; holder STL post holder changed since the review; refitted, review cleared (RMS 0.10 mm).');
+  assert.equal(Rv.holderMethod({ method: 'stl', pieces: [stl], stl: { ...s, changedFrom: null, outcome: 'fitted', rmsMm: 0.1 } }), 'holder STL post holder fitted (RMS 0.10 mm)', 'a first fit is not a change');
+});
+
+test('the holder tag says a build is running, never the last result, and which stage failed', () => {
+  const h = { method: 'shape', given: true, pieces: [post('h1')], givenBack: [], stl: null };
+  assert.equal(Rv.holderStatus(h, null, true), 'finding the holder…', 'a rebuild in flight hides the last build');
+  assert.equal(Rv.holderStatus({ ...h, reviewed: true }, null, false), '1 holder piece, reviewed');
+  assert.equal(Rv.holderStatus(null, null, true), 'finding the holder…', 'the first build');
+  assert.equal(Rv.holderTag({ h, reviewed: true, error: null, building: true }), 'finding the holder…');
+  assert.equal(Rv.holderTag({ h, reviewed: true, error: null, building: false }), '1 holder piece, reviewed');
+  assert.equal(Rv.holderTag({ h, reviewed: true, error: { stage: 'holder', message: 'bad pose' }, building: false }), 'removal failed: bad pose');
+  assert.equal(Rv.holderTag({ h, reviewed: true, error: { stage: null, message: 'out of memory' }, building: false }), 'Could not build the sample mask: out of memory', 'a failure outside holder removal is not a removal failure');
+  assert.equal(Rv.holderTag({ h: { ...h, failed: 'too many' }, reviewed: false, error: null, building: false }), 'removal failed: too many');
+  assert.equal(Rv.holderTag({ h: null, reviewed: false, error: null, building: false }), 'not run');
+});

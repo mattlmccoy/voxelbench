@@ -137,7 +137,7 @@
       result: () => (state.view === 'rainbow' ? 'Rainbow (turbo) map, smoothed for display only: the denser band across the middle of the length reads warmer than the ends.' : ''),
       needs: 'dense' },
     { title: 'Step 1 · Crop', target: () => $('step1'), open: 'step1', needs: 'dense',
-      body: ['Crop removes voxels that are not sample, such as a holder or packaging. The outline is extruded through the full depth of the view it is drawn on, so a holder below the part is cropped on XZ or YZ.',
+      body: ['The holder is removed from the sample mask automatically (Holder, in this step). Crop removes anything else that is not sample, such as packaging or a part of the holder it missed. The outline is extruded through the full depth of the view it is drawn on, so anything below the part is cropped on XZ or YZ.',
         'This scan has no holder; to show the tool, the tour crops the first 1 mm of its length (slices 0 to 9) on XZ.'],
       actions: [
         { label: 'Draw the crop outline', run: () => { $('drawCrop').click(); const { nx, nz } = state.dims; draft('XZ', [{ col: 0, row: 10 }, { col: nx - 1, row: 10 }, { col: nx - 1, row: nz - 1 }, { col: 0, row: nz - 1 }]); },

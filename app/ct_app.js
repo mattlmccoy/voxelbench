@@ -32,7 +32,7 @@ window.CTApp = (function () {
     bodyMm3: null, airGray: null, regionStats: new Map(), referenceId: '', referenceDensity: NaN,
     main: 'XY', fill: 0.5, minVoidMm: 0, patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, zoneBaseline: 'auto',
     show: Object.fromEntries(LAYERS.map((l) => [l.id, true])),
-    holder: null, holderStl: null, holderWait: false, holderError: null, // the last model's holder; the chosen STL as loaded { name, hash, triangles }; a failed mask build's reason
+    holder: null, holderStl: null, holderWait: false, holderError: null, // the last model's holder; the chosen STL as loaded { name, hash, triangles }; a failed mask build's { stage ('holder' or null), message }
   };
   let worker = null;
   const listeners = {};
@@ -376,7 +376,10 @@ window.CTApp = (function () {
     showPage('studio');
     emit('loaded');
     await restoreRun();
-    for (const fn of beforeMask) await fn(); // the chosen holder STL is read before the first mask build
+    // The chosen holder STL is read before the first mask build. A step that fails is said, and the mask is still built.
+    for (const fn of beforeMask) {
+      try { await fn(); } catch (e) { if (token === state.loadToken) emit('statusText', `A step before the sample mask failed (${e.message}); building the mask without it.`); }
+    }
     if (token !== state.loadToken) return;
     startWorker();
   }
@@ -584,7 +587,7 @@ window.CTApp = (function () {
       // A failed mask build outside segmentation (opening the scan, a crop or holder change) says so; it would otherwise
       // leave the last progress text standing.
       const maskText = HW.maskErrorText(data.for, state.porePhase, data.message);
-      if (maskText) { state.holderWait = false; state.holderError = data.message; emit('statusText', maskText); emit('holderModel'); }
+      if (maskText) { state.holderWait = false; state.holderError = { stage: data.stage || null, message: data.message }; emit('statusText', maskText); emit('holderModel'); }
       // An error belongs to the step whose request failed (every waiting step when the request is unknown); the pore
       // step only when segmentation was running.
       const step = CT.errorStep(data.for), mine = (s) => step === null || step === s;
