@@ -105,9 +105,11 @@ green in the views and are listed under step 1 > **Holder**.
 - **Holder STLs:** put the holder's STL files in the library's `VoxelBench/holders/` folder, or press **Add holder
   STL…** (it copies the file there). A holder printed as several parts has one STL per part; tick each one used and
   each is fitted on its own, with detection covering what none of them fits. The files stay in your library folder.
-- **Leveled scans:** a scan leveled before holder removal opens in scan axes once, is leveled again from the
-  holder-free mask, and says so in a one-time note. Marks drawn in the old leveling stay saved but cannot be shown in
-  the new one.
+- **Leveled scans:** leveling a scan (**Apply**) saves the holder found in scan axes with it, and the leveled scan uses
+  those pieces: its grid keeps only 2 mm of air around the part, too little of a stand to find it again. They read
+  "not reviewed" until you Accept them; a holder you already reviewed is kept as it is. A scan leveled before holder
+  removal opens in scan axes once, is leveled again from the holder-free mask, and says so in a one-time note. Marks
+  drawn in the old leveling stay saved but cannot be shown in the new one.
 - A note gives the holder's share of the solid when the holder is larger than the part. A warning says the part may
   have been taken only when removal took most of the solid or split it, and a piece found on weaker evidence (it
   reached the scan edge only through another piece, or is a post step holding something up) was removed.
@@ -122,9 +124,6 @@ Known limits:
   cone-beam end slices are handled.
 - Tape is found as solid at most 2 analysis voxels thick, so a part's own fins that thin can be taken as tape. Give
   those pieces back.
-- In a leveled scan the holder is found again on the leveled grid, which keeps only 2 mm of air around the part, so
-  only stubs of a stand are left to fit: pieces there can cut into the part where it rests, or leave some of the
-  stand. Check the green pieces in a leveled scan closely.
 
 ## Scan library
 
