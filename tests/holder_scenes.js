@@ -78,6 +78,38 @@ function twoTierRoundScene({ size = 128, seed = 1 } = {}) {
   return buildScene({ size, holder, part, seed });
 }
 
+/** An A-frame stand inside the field, as a printed stand sits in a scan: an upright plate and a plate leaning 30 degrees
+    from it, meeting at the top, both standing on a base slab at the bottom of the volume (the base fills the FOV
+    circle). Both plates end inside the FOV and below the top, so per slice each plate's run stops where it meets the
+    other plate or the base, short of the scan edge; a plate reaches the edge only through the base. A porous lumpy part
+    leans on the leaning plate's outer face. Plates 0.05 size thick (truth.thicknessVox). */
+function standScene({ size = 128, seed = 1 } = {}) {
+  const n = size, c = (n - 1) / 2, zb = Math.round(0.06 * n), zt = Math.round(0.75 * n), t = Math.round(0.05 * n), half = 0.3 * n;
+  const yA = c - 0.2 * n, lean = (30 * Math.PI) / 180, nB = [0, Math.cos(lean), Math.sin(lean)], dB = [0, Math.sin(lean), -Math.cos(lean)];
+  const apex = [c, yA + t / 2, zt], onB = (y, z) => (y - apex[1]) * nB[1] + (z - apex[2]) * nB[2]; // signed distance off B's back face
+  const plateA = (x, y, z) => Math.abs(y - yA) <= t / 2 && Math.abs(x - c) <= half && z < zt;
+  const plateB = (x, y, z) => onB(y, z) >= -t && onB(y, z) <= 0 && Math.abs(x - c) <= half && z < zt;
+  const holder = (x, y, z) => z < zb || plateA(x, y, z) || plateB(x, y, z);
+  // The part: an ellipsoid on B's outer face (semi-axes 0.2 size across, 0.12 size off the face, 0.15 size along it),
+  // cut flat by that face.
+  const mid = [c, apex[1] + 0.5 * (zt - zb) * Math.tan(lean), (zt + zb) / 2], e = [0.2 * n, 0.12 * n, 0.15 * n];
+  const center = [0, 1, 2].map((k) => mid[k] + (e[1] - 0.02 * n) * nB[k]);
+  const part = (x, y, z) => {
+    if (onB(y, z) <= 0) return false;
+    const d = [x - center[0], y - center[1], z - center[2]], u = d[1] * nB[1] + d[2] * nB[2], v = d[1] * dB[1] + d[2] * dB[2];
+    return (d[0] / e[0]) ** 2 + (u / e[1]) ** 2 + (v / e[2]) ** 2 <= 1;
+  };
+  const rnd = random(seed + 7), pores = [];
+  for (let k = 0; k < 400 && pores.length < 20; k++) {
+    const p = { x: center[0] + (rnd() - 0.5) * 1.4 * e[0], y: center[1] + (rnd() - 0.5) * 1.4 * e[2], z: center[2] + (rnd() - 0.5) * 1.4 * e[2], r: 2 + 2 * rnd() };
+    const ok = [[0, 0, 0], [p.r + 2, 0, 0], [-p.r - 2, 0, 0], [0, p.r + 2, 0], [0, -p.r - 2, 0], [0, 0, p.r + 2], [0, 0, -p.r - 2]].every(([dx, dy, dz]) => part(p.x + dx, p.y + dy, p.z + dz));
+    if (ok && !pores.some((q) => Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) < p.r + q.r + 2)) pores.push(p);
+  }
+  const scene = buildScene({ size, holder, part, pores, seed });
+  scene.truth.thicknessVox = t;
+  return scene;
+}
+
 // Synthetic holder STLs, built in grid voxel coordinates and returned in mm (voxel x voxelMm), wound counter-clockwise
 // seen from outside.
 const SEGMENTS = 48;
@@ -130,4 +162,4 @@ function displaced(voxTri, voxelMm, pivotVox) {
   return { tri, truth: { R, t }, cadPoint: (vox) => D(vox.map((v) => v * voxelMm)), cadDir: (d) => mat(Rd, d) };
 }
 
-module.exports = { tiltedPostScene, diskOnPostScene, twoTierRoundScene, lathe, box, cross, mat, matT, norm, rotation, displaced };
+module.exports = { tiltedPostScene, diskOnPostScene, twoTierRoundScene, standScene, lathe, box, cross, mat, matT, norm, rotation, displaced };

@@ -352,18 +352,18 @@
   /** Candidates from chains to accepted, extended pieces with ids in order of size. */
   function accept(chains, ctx, foundBy) {
     const cands = candidates(chains, ctx);
-    // Every piece, bright or not, reaches the scan edge or is a post step holding something up on one that does: a
-    // bright body can include a part's brighter (doped) region, whose pieces do neither.
-    const ok = cands.filter((c) => c.edge);
+    // Every piece, bright or not, reaches the scan edge (its seed, or itself once extended: plates on a base inside the field reach it only through the base,
+    // their slice runs stopping where they meet) or is a post step holding something up on one that does: a doped region of a part, in a bright body, does neither.
+    const ext = new Map(), grow = (c) => ext.get(c) || ext.set(c, extend({ kind: c.kind, center: c.center, axes: c.axes, half: c.half }, ctx)).get(c);
+    const reaches = (p, hit = false) => { visit(p, ctx.dims, [0, 0, 0], (i, q) => { hit = hit || (ctx.material[i] === 1 && inShape(p.kind, q, p.half) && Seeds.atEdge(i, ctx.nearEdge, ctx.dims)); }); return hit; };
+    const ok = cands.filter((c) => c.edge || reaches(grow(c)));
     for (let grew = true; grew;) {
       grew = false;
       for (const c of cands) if (!ok.includes(c) && ok.some((s) => onStep(c, s, ctx))) { ok.push(c); grew = true; }
     }
     // Extend the largest first; a later candidate mostly inside an extended piece is a fragment of it.
     const grown = [];
-    ok.sort((a, b) => b.voxels - a.voxels).forEach((c) => {
-      if (!grown.some((g) => shareInside(c.points, g) >= DUPLICATE)) grown.push(extend({ kind: c.kind, center: c.center, axes: c.axes, half: c.half }, ctx));
-    });
+    ok.sort((a, b) => b.voxels - a.voxels).forEach((c) => { if (!grown.some((g) => shareInside(c.points, g) >= DUPLICATE)) grown.push(grow(c)); });
     if (grown.length > MAX_PIECES) throw new Error(`Found ${grown.length} holder pieces; at most ${MAX_PIECES} can be labeled.`);
     const pieces = grown.map((p) => {
       let voxels = 0;

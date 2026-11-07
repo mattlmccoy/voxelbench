@@ -117,6 +117,14 @@ test('tilted plates and a base slab are found as three plates', () => {
   assertCoverage(r);
 });
 
+test('plates that reach the scan edge only through the base they stand on are found', () => {
+  const r = detect(Scenes.standScene());
+  assert.equal(r.method, 'shape');
+  const t = r.truth.thicknessVox, plates = r.pieces.filter((p) => p.kind === 'plate');
+  assert.ok(plates.filter((p) => Math.abs(2 * p.half[2] - t) <= 1).length >= 2, `both plates: ${plates.map((p) => (2 * p.half[2]).toFixed(1)).join(', ')} vs ${t}`);
+  assertCoverage(r);
+});
+
 test('a flat-faced cube on a post keeps every face', () => {
   const r = detect({ part: 'cube', holder: 'post' }), { nx, ny } = r.dims;
   assert.ok(r.pieces.length > 0 && r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => p.kind).join());

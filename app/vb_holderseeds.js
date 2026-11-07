@@ -97,6 +97,8 @@
   /** Voxels within EDGE_REACH of the outside mask (the volume border is checked by coordinates). */
   const nearEdgeMask = (outside, dims) => P.boxDilate(outside, dims, EDGE_REACH);
   const nearBorder = (k, n) => k < EDGE_REACH || k >= n - EDGE_REACH;
+  /** Whether voxel i is within EDGE_REACH of the outside mask (nearEdge, nearEdgeMask's) or the volume border. */
+  const atEdge = (i, nearEdge, { nx, ny, nz }) => Boolean(nearEdge[i]) || nearBorder(i % nx, nx) || nearBorder(Math.floor(i / nx) % ny, ny) || nearBorder(Math.floor(i / (nx * ny)), nz);
 
   /** Gray populations above the part's peak (beyond BRIGHT_SIGMAS spreads), brightest first, as { peak, cut }: each a
       peak of the smoothed histogram standing at least half its height above the deeper of the valleys to the nearest
@@ -284,5 +286,5 @@
     return out;
   }
 
-  return { grayStats, nearEdgeMask, brightPopulations, brightBody, airPeak, sliceChains };
+  return { grayStats, nearEdgeMask, atEdge, brightPopulations, brightBody, airPeak, sliceChains };
 }));
