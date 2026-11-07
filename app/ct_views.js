@@ -13,6 +13,10 @@
   // Rainbow view: outline colors that turbo does not use (white, magenta, lavender, black).
   const RAINBOW_RGB = { pore: [255, 255, 255], crack: [255, 64, 255], clipped: [200, 170, 255], rejected: [140, 140, 140], selected: [255, 255, 255], patch: [0, 0, 0] };
   const MAX_OUTLINE = 4;
+  // Holder pieces: green (dark green outlines in rainbow view, a green turbo does not use); a piece given back to the part
+  // takes the part's color (the 3D view's sample surface).
+  const HOLDER_RGB = { fill: [82, 217, 79], outline: [20, 90, 40], back: [170, 180, 191] };
+  const HR = window.VBHolderReview;
   const views = {};
   const cropRasters = new Map();
   let activePlane = 'XY';
@@ -142,6 +146,8 @@
     const keep = state.show.crop ? P.planeCropKeep(App.cropsOf(state.folder), plane, slice, state.dims, cropRasters) : null;
     const zones = state.show.zones && state.zones && state.zones.map ? state.zones : null;
     const patches = state.show.patches && state.patchLabels ? state.patchLabels : null;
+    const holder = state.show.holder && state.holder && state.holder.labels && state.holder.pieces.length ? state.holder : null;
+    const backOf = holder ? holder.pieces.map((p) => holder.givenBack.includes(p.id)) : null;
     const ids = state.runs ? P.planePoreIds(state.runs, state.dims, plane, slice, new Uint32Array(n)) : null;
     const kinds = statusBytes();
     const palette = outline ? RAINBOW_RGB : PORE_RGB;
@@ -150,12 +156,14 @@
     const paint = (j, c, a) => { px[j] = c[0]; px[j + 1] = c[1]; px[j + 2] = c[2]; px[j + 3] = a; };
     const lookup = zones || patches;
     const zoneOf = new Uint8Array(zones ? n : 0), patchOf = new Uint32Array(patches ? n : 0), poreOf = new Uint32Array(ids ? n : 0);
+    const holderOf = new Uint8Array(holder ? n : 0); // 1: holder, 2: given back to the part
     for (let row = 0, at = 0; row < shape.height; row++) {
       for (let col = 0; col < shape.width; col++, at++) {
-        if (lookup) {
+        if (lookup || holder) {
           const o = CT.voxelOf(plane, slice, col, row);
           if (zones) { const z = coarseAt(zones.map, zones, o); if (App.zoneColor(z)) zoneOf[at] = z; }
           if (patches) patchOf[at] = coarseAt(patches, state.patchGrid, o);
+          if (holder) { const k = HR.labelAt(holder, o.x, o.y, o.z); if (k >= 0) holderOf[at] = backOf[k] ? 2 : 1; }
         }
         if (ids && ids[at] && kinds[ids[at]]) poreOf[at] = ids[at];
       }
@@ -163,11 +171,12 @@
     const edge = (labels) => (outline && labels.length ? D.outlineMask(labels, shape.width, shape.height, outline) : labels);
     // Zones are large and low-contrast on turbo, so their outlines are twice as wide.
     const zoneEdge = outline && zoneOf.length ? D.outlineMask(zoneOf, shape.width, shape.height, 2 * outline) : zoneOf;
-    const patchEdge = edge(patchOf), poreEdge = edge(poreOf);
+    const patchEdge = edge(patchOf), poreEdge = edge(poreOf), holderEdge = edge(holderOf);
     for (let at = 0, j = 0; at < n; at++, j += 4) {
       if (keep && !keep[at]) { paint(j, [8, 10, 14], 200); continue; }
       if (zones && zoneEdge[at]) paint(j, App.zoneColor(zoneOf[at]), outline ? 255 : Math.round(fill * ZONE_TINT));
       if (patches && patchEdge[at]) paint(j, palette.patch, outline ? 255 : fill);
+      if (holder && holderEdge[at]) paint(j, holderOf[at] === 2 ? HOLDER_RGB.back : outline ? HOLDER_RGB.outline : HOLDER_RGB.fill, outline ? 255 : holderOf[at] === 2 ? Math.round(0.6 * fill) : fill);
       const kind = ids && poreOf[at] ? kinds[poreOf[at]] : 0;
       if (kind && (poreEdge[at] || kind === 5)) paint(j, rgbOf[kind], kind === 5 ? 235 : outline ? 255 : fill);
     }
@@ -425,7 +434,9 @@
     const pore = id ? state.byId.get(id) : null;
     const patch = state.patchLabels ? coarseAt(state.patchLabels, state.patchGrid, p) : 0;
     const poreText = pore ? ` | ${pore.clipped ? 'cut by scan edge' : pore.crack_like ? 'crack' : 'pore'} ${id}, ${pore.diameter_mm.toFixed(3)} mm` : patch ? ` | low-density patch ${patch}` : '';
-    $('readout').textContent = `x ${p.x} y ${p.y} z ${p.z} | ${mm(p.x)}, ${mm(p.y)}, ${mm(p.z)} mm | gray ${gray}${outside ? ' outside reconstruction' : window.VBCalibration.grayReadout(App.calibration(), gray, App.relative())}${poreText}`;
+    const k = HR.labelAt(state.holder, p.x, p.y, p.z), piece = k >= 0 ? state.holder.pieces[k] : null;
+    const holderText = piece ? HR.readoutText(piece, state.holder.givenBack.includes(piece.id), state.nativeVoxelMm) : '';
+    $('readout').textContent = `x ${p.x} y ${p.y} z ${p.z} | ${mm(p.x)}, ${mm(p.y)}, ${mm(p.z)} mm | gray ${gray}${outside ? ' outside reconstruction' : window.VBCalibration.grayReadout(App.calibration(), gray, App.relative())}${holderText}${poreText}`;
   }
 
   function clickAt(v, place) {
@@ -438,8 +449,10 @@
       return;
     }
     if (state.tool === 'review') {
-      if (!state.runs) return;
       const p = CT.voxelOf(v.plane, slice, place.hit.col, place.hit.row);
+      const k = state.show.holder ? HR.labelAt(state.holder, p.x, p.y, p.z) : -1;
+      if (k >= 0 && App.toggleHolderPiece) { App.toggleHolderPiece(state.holder.pieces[k].id); return; } // vb_holderrail.js
+      if (!state.runs) return;
       const id = P.poreIdAt(state.runs, state.dims, p.x, p.y, p.z);
       if (id) { App.toggleReject(id); state.selected = id; markOverlays(); emit('poresChanged'); }
       return;
@@ -591,6 +604,7 @@
   on('viewChanged', () => { for (const p of PLANES) { views[p].dirty = true; views[p].overlayDirty = true; } requestDraw(); });
   on('recordsChanged', () => { markOverlays(); requestDraw(); });
   on('poresChanged', () => { markOverlays(); requestDraw(); });
+  on('holderModel', () => { markOverlays(); requestDraw(); });
   on('layersChanged', () => { markOverlays(); requestDraw(); });
   on('redraw', requestDraw);
   on('jump', jumpTo);

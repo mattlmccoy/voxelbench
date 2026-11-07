@@ -105,29 +105,10 @@
     return { input, given: false, report, keep: null };
   }
 
-  const FOUND_BY = { bright: 'found by bright resin', shape: 'found by shape' };
-  const pct = (v) => `${Math.round(100 * v)} %`;
-
-  /** One status line for the model's holder ({ method, pieces, givenBack, given, warning, stl report }): what was
-      removed and how it was found, the STL's outcome, then removal's warning word for word. */
-  function holderLine(h) {
-    if (!h) return '';
-    const r = h.stl, missing = r && r.outcome === 'missing';
-    if (!h.pieces.length) return h.warning || (missing ? `No holder found; holder STL ${r.name} not loaded.` : 'No holder found.');
-    const back = (h.givenBack || []).length, n = h.pieces.length - back;
-    const what = `${n} ${h.given ? 'saved ' : ''}piece${n === 1 ? '' : 's'}${back ? ` (${back} given back)` : ''}`;
-    const how = r && r.outcome === 'fitted' ? `holder STL ${r.name} fitted (RMS ${r.rmsMm.toFixed(2)} mm)`
-      : r && r.outcome === 'reused' ? `holder STL ${r.name}`
-        : missing ? `holder STL ${r.name} not loaded; ${FOUND_BY[h.method] || 'found by detection'}` : FOUND_BY[h.method];
-    const note = (r && r.outcome === 'poor fit' ? ` Holder STL ${r.name} did not fit: ${pct(r.nearShare)} of its surface in the field lies on the scan (${pct(r.inFieldShare)} of it is in the field).` : '')
-      + (h.keep ? ' The saved holder review is kept and applies when the STL loads.' : '');
-    return `Holder removed: ${what}${how ? `, ${how}` : ''}.${note}${h.warning ? ` ${h.warning}` : ''}`;
-  }
-
   /** The status for a failed request that only builds the sample mask ('volume', 'model') while segmentation is not
       running (a running segmentation reports its own failure); null otherwise. */
   const maskErrorText = (requestType, porePhase, message) =>
     ((requestType === 'volume' || requestType === 'model') && porePhase !== 'running' ? `Could not build the sample mask: ${message}` : null);
 
-  return { FIND_STAGE, FIT_STAGE, holderKey, progressText, progressTracker, holderMessage, prepareHolder, holderLine, maskErrorText };
+  return { FIND_STAGE, FIT_STAGE, holderKey, progressText, progressTracker, holderMessage, prepareHolder, maskErrorText };
 }));

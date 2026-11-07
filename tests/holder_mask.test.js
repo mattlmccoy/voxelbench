@@ -85,9 +85,30 @@ test('a failure in holder detection leaves the mask unremoved and says so', () =
   assert.equal(body.holder.method, 'none');
   assert.deepEqual(body.holder.pieces, []);
   assert.match(body.holder.warning, /^Holder detection failed: too many pieces$/);
+  assert.equal(body.holder.failed, 'too many pieces', 'the reason, so the status reads "removal failed", never "no holder found"');
 });
 
 test('without holder input the result has no holder field', () => {
   const s = S.makeHolderScene({ holder: 'post' });
   assert.equal(P.buildBody(s.gray, s.outside, s.dims, settingsFor(s), null).holder, undefined);
+});
+
+test('every voxel removal cuts carries the label of a piece it was cut for, contact band included', () => {
+  const Rm = require('../app/vb_holderremoval.js');
+  const n = 20, dims = { nx: n, ny: n, nz: n }, solid = new Uint8Array(n ** 3);
+  for (let z = 2; z < 18; z++) for (let y = 4; y < 16; y++) for (let x = 4; x < 16; x++) solid[x + n * (y + n * z)] = 1;
+  // A slab piece under the solid's lower half; the part above it is cut one voxel deeper (the contact rule).
+  const plate = { id: 'h1', kind: 'plate', foundBy: 'shape', center: [9.5, 9.5, 5], axes: [1, 0, 0, 0, 1, 0, 0, 0, 1], half: [8, 8, 3], voxels: 0, mm3: 0 };
+  const post = { id: 'h2', kind: 'post', foundBy: 'shape', center: [9.5, 9.5, 14], axes: [0, 0, 1, 1, 0, 0, 0, 1, 0], half: [2, 2, 2], voxels: 0, mm3: 0 };
+  const { holder, info } = Rm.removeHolder({ smoothed: null, solid, outside: new Uint8Array(n ** 3), dims, crop: null }, { pieces: [plate, post], givenBack: ['h2'], voxelMm: 0.1 });
+  let removed = 0, unlabeled = 0, wrong = 0;
+  for (let i = 0; i < holder.length; i++) {
+    if (!holder[i]) continue;
+    removed++;
+    if (!info.labels[i]) unlabeled++;
+    else if (info.labels[i] !== 1) wrong++;
+  }
+  assert.ok(removed > 0);
+  assert.equal(unlabeled, 0, 'the contact band shows as the piece it was cut for');
+  assert.equal(wrong, 0, 'never labeled as a piece given back');
 });

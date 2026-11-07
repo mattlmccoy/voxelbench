@@ -83,6 +83,18 @@
     }
   }
 
+  /** The file's bytes (ArrayBuffer), or null when it does not exist. */
+  async function readBytes(dir, path) {
+    const parts = segments(path);
+    try {
+      const d = await dirAt(dir, parts.slice(0, -1), false);
+      return await (await (await d.getFileHandle(parts[parts.length - 1])).getFile()).arrayBuffer();
+    } catch (e) {
+      if (isNotFound(e)) return null;
+      throw e;
+    }
+  }
+
   // The writable is a swap file the browser commits only on close(), so an abort leaves the old file whole.
   async function writeData(dir, path, data) {
     const parts = segments(path);
@@ -105,5 +117,5 @@
   const writeText = (dir, path, text) => writeData(dir, path, text);
   const writeBlob = (dir, path, blob) => writeData(dir, path, blob);
 
-  return { LIBRARY_FOLDER, isHidden, segments, walk, list, readText, writeText, writeBlob };
+  return { LIBRARY_FOLDER, isHidden, segments, walk, list, readText, readBytes, writeText, writeBlob };
 }));

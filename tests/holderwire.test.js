@@ -142,25 +142,3 @@ test('buildBody uses the find given in holderInput (the STL path), then adds tap
   assert.ok(asked && asked.solid && asked.smoothed && asked.outside && asked.dims, 'find gets the detection inputs');
   assert.equal(body.holder.method, 'stl');
 });
-
-test('the status line says what removal did, and passes warnings through unchanged', () => {
-  const two = [post('h1', [1, 2, 3]), post('h2', [1, 2, 9])];
-  assert.equal(W.holderLine(null), '');
-  assert.equal(W.holderLine({ method: 'none', pieces: [], given: false, warning: null, stl: null }), 'No holder found.');
-  assert.equal(W.holderLine({ method: 'bright', pieces: two, given: false, warning: null, stl: null }), 'Holder removed: 2 pieces, found by bright resin.');
-  assert.equal(W.holderLine({ method: 'shape', pieces: two.slice(0, 1), given: true, warning: null, stl: null }), 'Holder removed: 1 saved piece, found by shape.');
-  const failed = 'Holder detection failed: Found 300 holder pieces; at most 254 can be labeled.';
-  assert.equal(W.holderLine({ method: 'none', pieces: [], given: false, warning: failed, stl: null }), failed);
-  const cut = 'Holder removal took 61 % of the solid. Check the pieces: part of the sample may have been taken as holder.';
-  assert.equal(W.holderLine({ method: 'shape', pieces: two, given: false, warning: cut, stl: null }), `Holder removed: 2 pieces, found by shape. ${cut}`);
-  const stl = { name: 'post holder', hash: 'aa' };
-  assert.equal(W.holderLine({ method: 'stl', pieces: two, given: false, warning: null, stl: { ...stl, outcome: 'fitted', rmsMm: 0.1234 } }), 'Holder removed: 2 pieces, holder STL post holder fitted (RMS 0.12 mm).');
-  assert.equal(W.holderLine({ method: 'shape', pieces: two, given: false, warning: null, stl: { ...stl, outcome: 'poor fit', nearShare: 0.314, inFieldShare: 0.5, fallback: 'shape' } }),
-    'Holder removed: 2 pieces, found by shape. Holder STL post holder did not fit: 31 % of its surface in the field lies on the scan (50 % of it is in the field).');
-  assert.equal(W.holderLine({ method: 'bright', pieces: two, given: false, warning: null, stl: { ...stl, outcome: 'missing' } }), 'Holder removed: 2 pieces, holder STL post holder not loaded; found by bright resin.');
-  assert.equal(W.holderLine({ method: 'shape', pieces: two, given: false, warning: null, keep: { pieces: two, givenBack: ['h2'], method: 'stl' }, stl: { ...stl, outcome: 'missing' } }),
-    'Holder removed: 2 pieces, holder STL post holder not loaded; found by shape. The saved holder review is kept and applies when the STL loads.');
-  assert.equal(W.holderLine({ method: 'none', pieces: [], given: false, warning: null, stl: { ...stl, outcome: 'missing' } }), 'No holder found; holder STL post holder not loaded.');
-  assert.equal(W.holderLine({ method: 'stl', pieces: two, given: true, warning: null, stl: { ...stl, outcome: 'reused' } }), 'Holder removed: 2 saved pieces, holder STL post holder.');
-  assert.equal(W.holderLine({ method: 'shape', pieces: two, givenBack: ['h2'], given: true, warning: null, stl: null }), 'Holder removed: 1 saved piece (1 given back), found by shape.');
-});

@@ -189,9 +189,22 @@
       <details class="step" name="steps" id="step1">
         <summary><span class="num">1</span>Crop <span class="tag" id="cropTag">optional</span></summary>
         <div class="body">
-          <p class="hint">Exclude voxels that are not sample. The polygon is extruded through the full depth of the view it is drawn on. To remove the holder below the sample, draw on XZ or YZ.</p>
+          <p class="hint">Exclude voxels that are not sample. The polygon is extruded through the full depth of the view it is drawn on. The holder is removed automatically (Holder, below); to cut what it misses, draw on XZ or YZ.</p>
           <div class="row"><button class="primary" id="drawCrop" disabled>Draw crop polygon</button></div>
           <div class="tablewrap" id="cropWrap" hidden><table id="cropTable"></table></div>
+          <details class="sub" id="holderBox" open>
+            <summary>Holder <span class="mono muted" id="holderState">not run</span></summary>
+            <div>
+              <p class="hint">The holder (plates, a post, tape) is found and cut from the sample mask on every build, shown in green in the views. With the holder's STL in the library, choose it: it is fitted first, and detection runs if it does not fit.</p>
+              <label class="pickrow">Holder <select id="holderStl"><option value="">Detect automatically</option></select></label>
+              <div class="row"><button id="holderAdd" disabled>Add holder STL…</button><input type="file" id="holderFile" accept=".stl" hidden></div>
+              <p class="mono" id="holderMethod"></p>
+              <p class="hint bad" id="holderWarning" hidden></p>
+              <div class="tablewrap" id="holderWrap" hidden><table id="holderTable"></table></div>
+              <div class="row"><button class="primary" id="holderAccept" disabled>Accept</button></div>
+              <p class="hint" id="holderNote"></p>
+            </div>
+          </details>
         </div>
       </details>
 
@@ -511,6 +524,12 @@
 <script src="vb_vox.js"></script>
 <script src="vb_library.js"></script>
 <script src="vb_recordsave.js"></script>
+<script src="vb_cad.js"></script>
+<script src="vb_holderseeds.js"></script>
+<script src="vb_holder.js"></script>
+<script src="vb_holderstl.js"></script>
+<script src="vb_holderlib.js"></script>
+<script src="vb_holderreview.js"></script>
 <script src="vb_holderwire.js"></script>
 <script src="ct_app.js"></script>
 <script src="ct_views.js"></script>
@@ -533,6 +552,7 @@
 <script src="vb_libraryactions.js"></script>
 <script src="vb_archimedes.js"></script>
 <script src="vb_orientrail.js"></script>
+<script src="vb_holderrail.js"></script>
 <script src="ct_sheet.js"></script>
 <script src="ct_sheetpages.js"></script>
 <script src="ct_sheetfindings.js"></script>

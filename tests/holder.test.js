@@ -252,3 +252,46 @@ test('progressText reads stage, slice and total', () => {
   assert.equal(W.progressText('Finding the holder', 120, 348), 'Finding the holder: slices 120 / 348');
   assert.equal(W.progressText('Fitting the holder STL', 0, 0), 'Fitting the holder STL');
 });
+
+const Rv = require('../app/vb_holderreview.js');
+
+test('holder status names what was checked', () => {
+  const p = (id) => ({ id, kind: 'post', foundBy: 'shape', center: [1, 2, 3], axes: [0, 0, 1, 1, 0, 0, 0, 1, 0], half: [6, 3, 3], voxels: 10, mm3: 0.1 });
+  const three = [p('h1'), p('h2'), p('h3')];
+  assert.equal(Rv.holderStatus(null), 'not run', 'nothing built yet');
+  assert.notEqual(Rv.holderStatus(null), 'no holder found', 'not run never reads as a clean result');
+  assert.equal(Rv.holderStatus({ method: 'none', pieces: [], givenBack: [], reviewed: false }), 'no holder found');
+  assert.equal(Rv.holderStatus({ method: 'none', pieces: [], givenBack: [], reviewed: false }, 'Found 300 holder pieces'), 'removal failed: Found 300 holder pieces');
+  assert.equal(Rv.holderStatus(null, 'out of memory'), 'removal failed: out of memory', 'a failed build is never "not run"');
+  assert.equal(Rv.holderStatus({ method: 'shape', pieces: three, givenBack: [], reviewed: false }), '3 holder pieces, not reviewed');
+  assert.equal(Rv.holderStatus({ method: 'bright', pieces: three, givenBack: ['h2'], reviewed: true }), '3 holder pieces, reviewed (1 given back)');
+  assert.equal(Rv.holderStatus({ method: 'bright', pieces: three, givenBack: [], reviewed: true }), '3 holder pieces, reviewed');
+  assert.equal(Rv.holderStatus({ method: 'shape', pieces: three.slice(0, 1), givenBack: [], reviewed: false }), '1 holder piece, not reviewed');
+  assert.equal(Rv.holderMethod({ method: 'bright', pieces: three, stl: null }), 'found by bright resin');
+  assert.equal(Rv.holderMethod({ method: 'shape', pieces: three, stl: null }), 'found by shape');
+  const stl = { name: 'post holder', hash: 'aa' };
+  assert.equal(Rv.holderMethod({ method: 'stl', pieces: three, stl: { ...stl, outcome: 'fitted', rmsMm: 0.1234 } }), 'holder STL post holder fitted (RMS 0.12 mm)');
+  assert.equal(Rv.holderMethod({ method: 'shape', pieces: three, stl: { ...stl, outcome: 'poor fit', fallback: 'shape' } }), 'holder STL post holder did not fit; found by shape');
+  assert.equal(Rv.holderMethod({ method: 'bright', pieces: three, stl: { ...stl, outcome: 'missing' } }), 'holder STL post holder not loaded; found by bright resin');
+});
+
+test('the saved record holds native pieces and the toggles', () => {
+  const native = { id: 'h1', kind: 'post', foundBy: 'bright', center: [63.5, 63.5, 24.5], axes: [0, 0, 1, 1, 0, 0, 0, 1, 0], half: [24, 10, 10], voxels: 900, mm3: 3.7 };
+  const tape = { id: 'h2', kind: 'tape', foundBy: 'shape', center: [40, 50, 30], axes: [1, 0, 0, 0, 1, 0, 0, 0, 1], half: [9, 4, 1], voxels: 80, mm3: 0.3 };
+  const h = { method: 'bright', given: false, pieces: [native, tape], givenBack: [], stl: null, keep: null };
+  const at = '2026-11-07T12:00:00.000Z';
+  const r = Rv.holderRecord(h, ['h2'], at);
+  assert.deepEqual(r, { pieces: [native, tape], given_back: ['h2'], method: 'bright', reviewed_at: at });
+  assert.notEqual(r.pieces[0], native, 'the record is a copy');
+  const fitted = { id: 'h1', kind: 'stl', foundBy: 'stl', name: 'post holder', hash: 'aa', pose: { R: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] }, voxels: 50, mm3: 0.2, mask: new Uint8Array(4) };
+  const s = Rv.holderRecord({ method: 'stl', given: false, pieces: [fitted], givenBack: [], stl: { name: 'post holder', hash: 'aa', outcome: 'fitted', rmsMm: 0.1 }, keep: null }, [], at);
+  assert.equal('mask' in s.pieces[0], false, 'a runtime mask is never saved');
+  assert.deepEqual(s.stl, { name: 'post holder', hash: 'aa' }, 'the chosen STL stays with the review');
+  assert.equal(s.pieces[0].hash, 'aa');
+  const keep = { ...h, keep: { pieces: [fitted], givenBack: ['h1'], method: 'stl' }, stl: { name: 'post holder', hash: 'aa', outcome: 'missing' } };
+  assert.equal(Rv.holderRecord(keep, [], at), null, 'never saved while the saved review waits for its STL');
+  assert.equal(Rv.holderRecord({ ...h, failed: 'boom' }, [], at), null, 'a failed removal is not a review');
+  assert.equal(Rv.holderRecord(null, [], at), null);
+  assert.match(Rv.reviewBlock(keep), /post holder is not loaded; the saved review is kept/);
+  assert.equal(Rv.reviewBlock(h), null);
+});

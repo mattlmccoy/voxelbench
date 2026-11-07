@@ -11,7 +11,7 @@
     { id: 'caliper', mark: 'C', label: 'Measure', strip: true, hint: 'Click two points to measure length, press Enter to save.' },
     { id: 'polygon', mark: 'G', label: 'Outline', strip: true, hint: 'Marks a feature on this slice: click vertices; click the first vertex or press Enter to close (Backspace removes the last one). Its card shows the area and the gray and porosity on this slice; to measure through several slices, use Draw region in step 3.' },
     { id: 'freehand', mark: 'D', label: 'Freehand', hint: 'Drag on the main view to draw a polygon, then save.' },
-    { id: 'review', mark: 'R', label: 'Reject pores', hint: 'Click a pore to reject it; click again to restore. Rejected pores stay in the export, flagged.' },
+    { id: 'review', mark: 'R', label: 'Reject pores', hint: 'Click a pore to reject it; click again to restore. Rejected pores stay in the export, flagged. Click a holder piece to give it back to the part, or take it again.' },
   ];
   // Gray zones first (high-gray, low-gray, baseline), then drawn zones in label order.
   const zoneRank = (z) => (z < 4 ? [2, 3, 1].indexOf(z) : z);
@@ -323,7 +323,8 @@
     const running = state.porePhase === 'running';
     $('runPores').disabled = !state.model || running;
     $('runPores').textContent = state.pores ? 'Segment pores again' : 'Segment pores';
-    for (const id of ['savePoreRun', 'exportPores', 'exportMask', 'reviewVoids']) $(id).disabled = !state.pores;
+    for (const id of ['savePoreRun', 'exportPores', 'exportMask']) $(id).disabled = !state.pores;
+    $('reviewVoids').disabled = !state.pores && !(state.holder && state.holder.pieces.length); // holder pieces toggle by click too
     $('exportPatches').disabled = !state.patches;
     $('exportSheet').disabled = !state.patches;
     $('exportZones').disabled = !(state.zones && state.zones.map);

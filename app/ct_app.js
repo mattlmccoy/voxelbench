@@ -1,7 +1,7 @@
 /* Shared state, loading, the worker, and the database. Drawing lives in ct_views.js, ct_model.js and ct_rail.js. */
 window.CTApp = (function () {
   'use strict';
-  const CT = window.CT, P = window.CTPores, R = window.CTRegions, V = window.VBStore, VB = window.VBVolume, O = window.VBOrient, HW = window.VBHolderWire;
+  const CT = window.CT, P = window.CTPores, R = window.CTRegions, V = window.VBStore, VB = window.VBVolume, O = window.VBOrient, HW = window.VBHolderWire, HR = window.VBHolderReview;
   const $ = (id) => document.getElementById(id);
   const READ_CONCURRENCY = 8;
   const ORIENT_HEADROOM = 1.5; // times the load budget, for a scan and its leveled copy together
@@ -15,6 +15,7 @@ window.CTApp = (function () {
     { id: 'clipped', label: 'Pores at FOV edge', color: '#b48cff', outline: '#c8aaff', hint: 'Pores truncated by the field-of-view (FOV) edge; volumes are lower bounds.' },
     { id: 'patches', label: 'Low-density regions', color: '#35d0c0', outline: '#000000', hint: 'Gray below 0.8 of matrix (air = 0) but above the pore threshold. Excluded from porosity.' },
     { id: 'zones', label: 'Gray-value zones', color: '#ff8ad8', hint: 'Step 3 zones. Pink: high-gray; blue: low-gray. Gray value reflects bulk attenuation, not composition.' },
+    { id: 'holder', label: 'Holder', color: '#52d94f', outline: '#145a28', hint: 'Holder pieces cut from the sample mask. A piece given back to the part shows in the part color. Toggle one by clicking it with Reject pores by click.' },
     { id: 'crop', label: 'Crop', color: '#8b97a5', hint: 'Region excluded by the crop polygon, dimmed.' },
     { id: 'regions', label: 'Drawn regions', color: '#c9d64f', hint: 'Region polygons from steps 1 and 3.' },
     { id: 'notes', label: 'Annotations', color: '#f5f7fa', hint: 'Points, length measurements and outlines from the toolbar.' },
@@ -31,7 +32,7 @@ window.CTApp = (function () {
     bodyMm3: null, airGray: null, regionStats: new Map(), referenceId: '', referenceDensity: NaN,
     main: 'XY', fill: 0.5, minVoidMm: 0, patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, zoneBaseline: 'auto',
     show: Object.fromEntries(LAYERS.map((l) => [l.id, true])),
-    holder: null, holderStl: null, holderWait: false, // the last model's holder; the chosen STL as loaded { name, hash, triangles }
+    holder: null, holderStl: null, holderWait: false, holderError: null, // the last model's holder; the chosen STL as loaded { name, hash, triangles }; a failed mask build's reason
   };
   let worker = null;
   const listeners = {};
@@ -291,7 +292,7 @@ window.CTApp = (function () {
     const label = stack.title || stack.folder; // a library scan's folder is its id; it is shown by its title
     if (worker) { worker.terminate(); worker = null; }
     for (const c of calls.values()) c.reject(new Error('Another scan was opened.')); calls.clear();
-    Object.assign(state, { slices: null, folder: null, stack, reader: null, scanInfo: null, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, sheetSaved: false, holder: null, holderStl: null, holderWait: false });
+    Object.assign(state, { slices: null, folder: null, stack, reader: null, scanInfo: null, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, sheetSaved: false, holder: null, holderStl: null, holderWait: false, holderError: null });
     showPage('library'); // the loading progress shows there
     showError('');
     emit('samplesChanged');
@@ -375,6 +376,8 @@ window.CTApp = (function () {
     showPage('studio');
     emit('loaded');
     await restoreRun();
+    for (const fn of beforeMask) await fn(); // the chosen holder STL is read before the first mask build
+    if (token !== state.loadToken) return;
     startWorker();
   }
 
@@ -400,6 +403,8 @@ window.CTApp = (function () {
   }
 
   // ---------- worker ----------
+  const beforeMask = []; // steps run after a scan loads and before its first mask build (vb_holderrail.js reads the holder STL)
+  const beforeFirstMask = (fn) => beforeMask.push(fn);
   const cropOutlines = () => cropsOf(state.folder).map((c) => ({ plane: c.plane, points: c.points }));
   // What every request that builds the sample mask carries: the saved holder (vb_holderwire.js) and the frame its native
   // pieces map from (the loaded grid's binning, and the saved orientation when the scan is leveled).
@@ -511,12 +516,13 @@ window.CTApp = (function () {
       holderBar(null);
       state.model = data;
       state.holder = data.holder;
+      state.holderError = null;
       state.bodyMm3 = data.bodyMm3;
       state.airGray = data.airGray;
       state.regionStats = new Map();
       emit('modelChanged');
       emit('holderModel');
-      if (state.porePhase !== 'running') emit('statusText', `${HW.holderLine(data.holder)} Ready. Press Segment pores.`);
+      if (state.porePhase !== 'running') emit('statusText', `${HR.statusLine(data.holder, HR.isReviewed(data.holder, sampleNow().holder))} Ready. Press Segment pores.`);
       if (state.holderWait) { state.holderWait = false; maskChanged('holder'); }
     } else if (data.type === 'modelDone') { state.holderWait = false; emit('changed'); }
     else if (data.type === 'needSlices') sendSlices();
@@ -578,7 +584,7 @@ window.CTApp = (function () {
       // A failed mask build outside segmentation (opening the scan, a crop or holder change) says so; it would otherwise
       // leave the last progress text standing.
       const maskText = HW.maskErrorText(data.for, state.porePhase, data.message);
-      if (maskText) { state.holderWait = false; emit('statusText', maskText); }
+      if (maskText) { state.holderWait = false; state.holderError = data.message; emit('statusText', maskText); emit('holderModel'); }
       // An error belongs to the step whose request failed (every waiting step when the request is unknown); the pore
       // step only when segmentation was running.
       const step = CT.errorStep(data.for), mine = (s) => step === null || step === s;
@@ -684,5 +690,5 @@ window.CTApp = (function () {
     emit('wallChanged');
   }
 
-  return { showPage, useStore, openReader, openFiles, sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, relative, hiddenMarks, orientLimit, cropOutlines, savedOrientation, bodyArgs, holderChanged };
+  return { showPage, useStore, openReader, openFiles, sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, relative, hiddenMarks, orientLimit, cropOutlines, savedOrientation, bodyArgs, holderChanged, beforeFirstMask };
 }());
