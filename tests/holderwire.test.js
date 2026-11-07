@@ -61,6 +61,21 @@ test('saved pieces are mapped onto the grid and given, keeping the method that f
   assert.equal(W.prepareHolder({ holder: { pieces: native, givenBack: [], method: null, stls: [] }, ...frame }).input.method, 'given', 'given when the method is not known');
 });
 
+test('a carried holder (leveling, not reviewed) is sent marked and used as given pieces, but is not a review', () => {
+  const grid = [post('h1', [5, 6, 7]), post('h2', [9, 6, 7])], native = F.piecesToNative(grid, frame.scale, null);
+  const msg = W.holderMessage({ pieces: native, given_back: ['h2'], method: 'shape', carried: true }, []);
+  assert.equal(msg.carried, true);
+  assert.equal(W.holderMessage({ pieces: native, given_back: [], method: 'shape', reviewed_at: 'x' }, []).carried, undefined);
+  const r = W.prepareHolder({ holder: msg, ...frame });
+  assert.equal(r.given, false, 'not built from a review');
+  assert.equal(r.carried, true);
+  assert.equal(r.input.find, undefined, 'no detection');
+  assert.deepEqual(r.input.givenBack, ['h2']);
+  assert.equal(r.input.method, 'shape');
+  r.input.pieces.forEach((p, k) => p.center.forEach((c, j) => assert.ok(Math.abs(c - grid[k].center[j]) < 1e-9)));
+  assert.equal(W.prepareHolder({ holder: { ...msg, carried: undefined }, ...frame }).carried, false);
+});
+
 test('a saved STL piece with the same STL is rebuilt with its mask', () => {
   const calls = [];
   const modules = { stl: { voxelizeMesh: (a) => { calls.push(a); return new Uint8Array(16 * 16 * 16).fill(1); } } };

@@ -1,8 +1,8 @@
 /* The holder review on the page: the status that says what was checked, how the holder was found, which piece a voxel
    shows, the size of each piece in mm, and the record saved with the sample once the user accepts or toggles.
    The holder h is the model's (ct_worker.js sendModel): { method, given, pieces (native scan voxels), givenBack, labels
-   (worker grid, piece index + 1), labelsDims, labelsBin, warning, note, failed, keep, stls: one report per chosen STL
-   (vb_holderwire.js prepareHolder) }. */
+   (worker grid, piece index + 1), labelsDims, labelsBin, warning, note, failed, keep, carried (built from pieces carried
+   over from scan axes by leveling, not reviewed), stls: one report per chosen STL (vb_holderwire.js prepareHolder) }. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.VBHolderReview = factory();
@@ -78,6 +78,7 @@
       const many = kept.length > 1;
       notes.push(`Holder piece${many ? 's' : ''} ${kept.map((p) => p.id).join(', ')} ${many ? 'were' : 'was'} found but not removed: removing ${many ? 'them' : 'it'} ${kept[0].reason}. Click ${many ? 'one' : 'it'} to remove it.`);
     }
+    if (h.carried && !reviewed) notes.push('Carried over from scan axes, not found again in this frame.');
     if (h.warning) notes.push(h.warning);
     if (h.note) notes.push(h.note);
     return [`Holder: ${holderStatus({ ...h, reviewed })}${how ? `; ${how}` : ''}.`, ...notes].join(' ');
@@ -111,6 +112,16 @@
     const out = { pieces, given_back: [...givenBack], method: h.method, reviewed_at: at };
     if (h.stls && h.stls.length) out.stls = h.stls.map(({ name, hash }) => ({ name, hash }));
     return out;
+  }
+
+  /** What leveling saves with the sample so the leveled build uses the scan-axes holder (its own grid keeps only stubs of
+      a stand): the build's pieces (native), give-backs, method and chosen STLs, marked carried and not reviewed. null when
+      a review is saved (it maps into the new frame as it is), a saved review waits for its STL (keep), removal failed or
+      found nothing. saved: the sample's holder record. */
+  function carriedRecord(h, saved) {
+    if ((saved && saved.reviewed_at) || reviewBlock(h)) return null;
+    const { reviewed_at: _, ...r } = holderRecord(h, h.givenBack || [], '');
+    return { ...r, carried: true };
   }
 
   const canon = (v) => (Array.isArray(v) ? v.map(canon)
@@ -155,5 +166,5 @@
     return ` | holder ${p.id}${givenBack ? ', given back to the part' : ''} (${p.kind === 'stl' ? `STL ${p.name}` : `${s.kind}, ${s.size}`})`;
   }
 
-  return { holderStatus, holderTag, holderMethod, methodLines, statusLine, holderAlert, reviewBlock, holderRecord, isReviewed, labelAt, toggleGiven, pieceSummary, readoutText };
+  return { holderStatus, holderTag, holderMethod, methodLines, statusLine, holderAlert, carriedRecord, reviewBlock, holderRecord, isReviewed, labelAt, toggleGiven, pieceSummary, readoutText };
 }));

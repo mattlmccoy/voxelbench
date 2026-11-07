@@ -147,3 +147,29 @@ test('the rail shows removal\'s warning as an alarm and its note as plain inform
   assert.deepEqual(Rv.holderAlert({ ...base, warning: 'Holder removal took 61 % of the solid.', note: null }), { text: 'Holder removal took 61 % of the solid.', bad: true });
   assert.deepEqual(Rv.holderAlert({ ...base, warning: null, note: 'The holder is 86 % of the solid.' }), { text: 'The holder is 86 % of the solid.', bad: false });
 });
+
+test('leveling carries the unreviewed scan-axes holder as a record marked carried, never over a review', () => {
+  const h = { method: 'shape', given: false, pieces: [{ ...post('h1'), via: 'support' }, { ...plate('h2'), mask: new Uint8Array(4) }], givenBack: ['h2'], stls: [] };
+  const r = Rv.carriedRecord(h, null);
+  assert.deepEqual(r, { pieces: [{ ...post('h1'), via: 'support' }, plate('h2')], given_back: ['h2'], method: 'shape', carried: true }, 'native pieces without runtime masks, give-backs kept, no reviewed_at');
+  assert.deepEqual(Rv.carriedRecord({ ...h, stls: [{ name: 'post holder', hash: 'aa', outcome: 'fitted' }] }, null).stls, [{ name: 'post holder', hash: 'aa' }], 'the chosen STLs go with it');
+  assert.deepEqual(Rv.carriedRecord(h, { stls: [{ name: 'post holder', hash: 'aa' }] }).carried, true, 'an STL choice without a review is replaced by the carried build');
+  assert.deepEqual(Rv.carriedRecord(h, r).carried, true, 'a carried record is carried again');
+  const reviewed = Rv.holderRecord(h, ['h2'], '2026-11-07T12:00:00.000Z');
+  assert.equal(Rv.carriedRecord(h, reviewed), null, 'a reviewed holder is already saved: it maps into the new frame');
+  assert.equal(Rv.carriedRecord({ ...h, keep: { pieces: [], givenBack: [], method: 'stl' } }, null), null, 'never while a saved review waits for its STL');
+  assert.equal(Rv.carriedRecord({ ...h, failed: 'boom' }, null), null, 'a failed removal is nothing to carry');
+  assert.equal(Rv.carriedRecord({ ...h, pieces: [] }, null), null, 'no holder found: the leveled build finds it');
+  assert.equal(Rv.carriedRecord(null, null), null);
+});
+
+test('a carried holder reads as not reviewed until Accept, and says it was carried over', () => {
+  const h = { method: 'shape', given: false, carried: true, pieces: [post('h1'), plate('h2')], givenBack: [], warning: null, stls: [] }, record = Rv.carriedRecord(h, null);
+  assert.equal(Rv.isReviewed(h, record), false);
+  assert.equal(Rv.holderStatus({ ...h, reviewed: false }), '2 holder pieces, not reviewed');
+  assert.equal(Rv.statusLine(h, false), 'Holder: 2 holder pieces, not reviewed; found by shape. Carried over from scan axes, not found again in this frame.');
+  const accepted = Rv.holderRecord(h, h.givenBack, '2026-11-07T12:00:00.000Z');
+  assert.equal(accepted.carried, undefined, 'Accept saves a plain review');
+  assert.equal(Rv.isReviewed(h, accepted), true, 'Accept marks it reviewed (the worker keeps the mask)');
+  assert.equal(Rv.statusLine(h, true), 'Holder: 2 holder pieces, reviewed; found by shape.');
+});

@@ -67,7 +67,7 @@
       if (!l) return { name: c.name, hash: c.hash, triangles: null };
       return c.hash && c.hash !== l.hash ? { ...l, was: c.hash } : l;
     });
-    return { pieces: Array.isArray(r.pieces) ? r.pieces : null, givenBack: r.given_back || [], method: r.method || null, stls };
+    return { pieces: Array.isArray(r.pieces) ? r.pieces : null, givenBack: r.given_back || [], method: r.method || null, stls, ...(r.carried ? { carried: true } : {}) };
   }
 
   const lib = (name, file) => (typeof module === 'object' && module.exports ? require(file) : globalThis[name]);
@@ -80,10 +80,11 @@
 
   /** buildBody's holderInput from the request's holder (see the header). frame: scale { bin, binFactor }, orient (the
       saved native orientation or null), dims and voxelMm of the worker's grid. modules ({ holder, stl, frame }) override
-      single functions of the real modules (tests). Returns { input, given, reports, keep }:
+      single functions of the real modules (tests). Returns { input, given, carried, reports, keep }:
       - saved pieces stand (mapped onto the grid, 'stl' pieces voxelized again) when every saved 'stl' piece's STL is
         sent loaded with the same hash and no chosen STL changed since the review (was); given is then true and the
-        method is the saved one ('given' when unknown);
+        method is the saved one ('given' when unknown). Pieces carried over by leveling (holder.carried) stand the same
+        way but are not a review: given false, carried true;
       - otherwise the holder is found again (givenBack cleared: the saved ids name pieces that are gone). Each loaded STL
         is handled on its own: a saved piece of the same hash is voxelized at its saved pose; else detection seeds
         fitHolderStl (fitFrom), and only a fit with fits === true is accepted. Accepted STLs are 'stl' pieces stl<k> (k:
@@ -109,14 +110,14 @@
     if (saved && savedStl.every(loadedAs) && !stls.some((s) => s.triangles && s.was)) {
       const pieces = F.piecesFromNative(saved, scale, orient).map((p) => (p.kind === 'stl' ? { ...p, mask: HS.voxelizeMesh({ triangles: sent(p.name).triangles, pose: p.pose, dims }) } : p));
       const reports = stls.map((s) => ({ name: s.name, hash: s.hash, outcome: pieceOf(s) ? 'reused' : s.triangles ? 'unused' : 'missing' }));
-      return { input: { ...base, pieces, givenBack: h.givenBack || [], method: h.method || 'given' }, given: true, reports, keep: null };
+      return { input: { ...base, pieces, givenBack: h.givenBack || [], method: h.method || 'given' }, given: !h.carried, carried: Boolean(h.carried), reports, keep: null };
     }
     const notLoaded = savedStl.some((p) => !(sent(p.name) && sent(p.name).triangles));
     const keep = notLoaded ? { pieces: saved, givenBack: h.givenBack || [], method: h.method || null } : null;
     const input = { ...base, pieces: null, givenBack: [] };
     const same = (s) => Boolean(pieceOf(s) && pieceOf(s).hash === s.hash); // its saved piece stands at its saved pose
     const reports = [...stls.map((s) => reportOf(s, pieceOf(s), same(s), Boolean(saved))), ...unsent];
-    if (!stls.some((s) => s.triangles)) return { input, given: false, reports, keep };
+    if (!stls.some((s) => s.triangles)) return { input, given: false, carried: false, reports, keep };
     input.find = (ctx) => {
       const found = H.findHolder(ctx), own = ownVoxels(H, ctx, found.pieces), taken = new Uint8Array(ctx.solid.length), accepted = [];
       const open = () => found.pieces.filter((p, k) => !covered(own[k], taken));
@@ -144,7 +145,7 @@
       // The detected pieces left are numbered again (h1, h2, ...), so tape (numbered after them) never repeats an id.
       return { method: 'stl', pieces: [...accepted, ...rest.map((p, j) => ({ ...p, id: `h${j + 1}` }))] };
     };
-    return { input, given: false, reports, keep };
+    return { input, given: false, carried: false, reports, keep };
   }
 
   /** An STL's report before the find: reused at its saved pose, missing, or to be fitted (changedFrom: the hash the

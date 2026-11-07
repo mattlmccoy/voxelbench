@@ -37,7 +37,7 @@ function ensureBody({ settings, crops, holder: request = null, frame: f }) {
     prep = HW.prepareHolder({ holder: request, scale: scale(), orient: frame.orient, dims: vol.dims, voxelMm: vol.bin * vol.voxelMm, onProgress });
   } catch (e) { e.stage = 'holder'; throw e; } // the page says "removal failed" only for the holder's own failures
   body = P.buildBody(vol.gray, vol.outside, vol.dims, settings, crop, prep.input);
-  holder = { ...body.holder, given: prep.given, stls: prep.reports, keep: prep.keep };
+  holder = { ...body.holder, given: prep.given, carried: prep.carried, stls: prep.reports, keep: prep.keep };
   holder.native = self.VBHolderFrame.piecesToNative(holder.pieces, scale(), frame.orient);
   bodyKey = key;
   bodyAlias = base + HW.holderKey({ pieces: holder.native, givenBack: holder.givenBack, stls: request ? request.stls : [] });
@@ -55,7 +55,7 @@ function sendModel() {
   // The holder for the page: pieces in native scan voxels (as saved), labels on the worker's grid (piece index + 1).
   const h = holder, labels = h.labels.slice();
   const out = { method: h.method, given: h.given, pieces: h.native, givenBack: h.givenBack,
-    labels, labelsDims: vol.dims, labelsBin: vol.bin, removedVoxels: h.removedVoxels, warning: h.warning, note: h.note || null, failed: h.failed || null, stls: h.stls,
+    labels, labelsDims: vol.dims, labelsBin: vol.bin, removedVoxels: h.removedVoxels, warning: h.warning, note: h.note || null, failed: h.failed || null, carried: h.carried, stls: h.stls,
     keep: h.keep }; // keep (native, or null): the saved holder that stays saved while its STL is not loaded; never save pieces over it
   postMessage({ type: 'model', positions, indices, bodyMm3: filled * (vol.bin * vol.voxelMm) ** 3, airGray, holder: out }, [positions.buffer, indices.buffer, labels.buffer]);
 }
