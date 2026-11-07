@@ -1,8 +1,12 @@
 /* Holder removal for CT scans: the holder (a plate, a round post or tape) is fitted as a simple solid and cut out of
    the sample mask. All coordinates are voxels of the binned grid, volume index i = x + nx * (y + ny * z).
-   A piece is { id, kind: 'plate' | 'post' | 'tape', foundBy: 'bright' | 'shape', center, axes, half, voxels, mm3 }:
-   axes are row-major rows (long, mid, short); a plate's normal is row 3 and a post's axis row 1; half is the half
-   extent along each row (a post: [half length, radius, radius]). */
+   A piece is { id, kind: 'plate' | 'post' | 'tape', foundBy: 'bright' | 'shape', center, axes, half, voxels, mm3,
+   via?, removed?, reason? }: axes are row-major rows (long, mid, short); a plate's normal is row 3 and a post's axis
+   row 1; half is the half extent along each row (a post: [half length, radius, radius]). via marks a piece accepted on
+   weaker evidence than its own seed reaching the scan edge: 'extension' (it reached the edge only once extended) or
+   'support' (a post step holding something up); it is saved with the piece and decides removal's warning
+   (vb_holderguard.js). removed: false and reason mark a proposal (vb_holderguard.js keepPart). A holder STL piece is
+   { id, kind: 'stl', foundBy: 'stl', name, hash, pose, voxels, mm3 } with a runtime mask (vb_holderstl.js). */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_holderfit.js'), require('./vb_holderseeds.js'), require('./vb_holderguard.js'));
   else root.VBHolder = factory(root.VBHolderFit, root.VBHolderSeeds, root.VBHolderGuard);
@@ -281,18 +285,22 @@
     // their slice runs stopping where they meet) or is a post step holding something up on one that does: a doped region of a part, in a bright body, does neither.
     const ext = new Map(), grow = (c) => ext.get(c) || ext.set(c, extend({ kind: c.kind, center: c.center, axes: c.axes, half: c.half }, ctx)).get(c);
     const reaches = (p, hit = false) => { visit(p, ctx.dims, [0, 0, 0], (i, q) => { hit = hit || (ctx.material[i] === 1 && inShape(p.kind, q, p.half) && Seeds.atEdge(i, ctx.nearEdge, ctx.dims)); }); return hit; };
-    const ok = cands.filter((c) => c.edge || (reaches(grow(c)) && (grow(c).through = true))); // through: reached the edge only once extended
+    const ok = cands.filter((c) => c.edge || (reaches(grow(c)) && (grow(c).via = 'extension'))); // reached the edge only once extended
     const steps = []; // [step, the step it sits on]: the solid between them (a chamfer, a seam) is the post's too
     for (let grew = true; grew;) { grew = false; for (const c of cands) { const s = !ok.includes(c) && ok.find((x) => onStep(c, x, ctx)); if (s) { ok.push(c); steps.push([c, s]); grew = true; } } }
     // Extend the largest first; a later candidate mostly inside an extended piece is a fragment of it.
     const grown = [];
-    ok.sort((a, b) => b.voxels - a.voxels).forEach((c) => { if (!grown.some((g) => shareInside(c.points, g) >= DUPLICATE)) grown.push(grow(c)); });
+    ok.sort((a, b) => b.voxels - a.voxels).forEach((c) => {
+      if (grown.some((g) => shareInside(c.points, g) >= DUPLICATE)) return;
+      if (steps.some(([x]) => x === c)) grow(c).via = 'support'; // admitted as a step holding something up
+      grown.push(grow(c));
+    });
     steps.forEach(([c, s]) => { const g = grow(c), h = grow(s), u = row(h, 0), t = dot(sub(g.center, h.center), u), gap = Math.abs(t) - g.half[0] - h.half[0]; if (gap > 0 && grown.includes(g) && grown.includes(h)) { g.half = [g.half[0] + gap / 2, g.half[1], g.half[2]]; g.center = g.center.map((v, k) => v - Math.sign(t) * (gap / 2) * u[k]); } });
     if (grown.length > MAX_PIECES) throw new Error(`Found ${grown.length} holder pieces; at most ${MAX_PIECES} can be labeled.`);
     const pieces = grown.map((p) => {
       let voxels = 0;
       visit(p, ctx.dims, [0, 0, 0], (i, q) => { if (ctx.solid[i] && inShape(p.kind, q, p.half)) voxels++; });
-      return { id: '', kind: p.kind, foundBy, center: p.center, axes: p.axes, half: p.half, voxels, mm3: voxels * ctx.voxelMm ** 3, ...(p.through ? { through: true } : {}) };
+      return { id: '', kind: p.kind, foundBy, center: p.center, axes: p.axes, half: p.half, voxels, mm3: voxels * ctx.voxelMm ** 3, ...(p.via ? { via: p.via } : {}) };
     }).filter((p) => p.voxels > 0).sort((a, b) => b.voxels - a.voxels);
     pieces.forEach((p, k) => { p.id = 'h' + (k + 1); });
     return pieces;
@@ -313,7 +321,7 @@
       if (!bright) continue;
       const edge = (bright.peak + Seeds.airPeak(smoothed, solid, outside)) / 2, material = new Uint8Array(solid.length);
       for (let i = 0; i < solid.length; i++) material[i] = solid[i] && smoothed[i] > edge ? 1 : 0;
-      const pieces = accept(run(bright.mask), { ...ctx, material, core: bright.mask }, 'bright').map(({ through, ...p }) => p);
+      const pieces = accept(run(bright.mask), { ...ctx, material, core: bright.mask }, 'bright');
       if (pieces.length) return { method: 'bright', pieces };
     }
     const pieces = Guard.keepPart(accept(run(solid), ctx, 'shape'), ctx, holderMask); // taking the pieces must leave the part

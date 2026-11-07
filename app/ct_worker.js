@@ -55,7 +55,7 @@ function sendModel() {
   // The holder for the page: pieces in native scan voxels (as saved), labels on the worker's grid (piece index + 1).
   const h = holder, labels = h.labels.slice();
   const out = { method: h.method, given: h.given, pieces: h.native, givenBack: h.givenBack,
-    labels, labelsDims: vol.dims, labelsBin: vol.bin, removedVoxels: h.removedVoxels, warning: h.warning, failed: h.failed || null, stls: h.stls,
+    labels, labelsDims: vol.dims, labelsBin: vol.bin, removedVoxels: h.removedVoxels, warning: h.warning, note: h.note || null, failed: h.failed || null, stls: h.stls,
     keep: h.keep }; // keep (native, or null): the saved holder that stays saved while its STL is not loaded; never save pieces over it
   postMessage({ type: 'model', positions, indices, bodyMm3: filled * (vol.bin * vol.voxelMm) ** 3, airGray, holder: out }, [positions.buffer, indices.buffer, labels.buffer]);
 }

@@ -1,13 +1,12 @@
 /* Holder removal step of the sample-mask build (ct_pores.js buildBody): find the holder pieces (or use the ones given),
-   add tape, and return the voxels to cut from the solid, with a warning when the cut looks too deep. Volume index
+   add tape, and return the voxels to cut from the solid, with a warning or a note when the cut is deep (R5,
+   vb_holderguard.js). Volume index
    i = x + nx * (y + ny * z), binned grid. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_holder.js'), require('./vb_holdertape.js'), require('./vb_holderguard.js'));
   else root.VBHolderRemoval = factory(root.VBHolder, root.VBHolderTape, root.VBHolderGuard);
 }(typeof self !== 'undefined' ? self : this, function (Holder, Tape, Guard) {
   'use strict';
-
-  const { cutWarning } = Guard; // the R5 rule (vb_holderguard.js)
 
   /** The one-voxel contact band holderMask cuts past a piece's surface has no label; it takes the label of a cut,
       labeled neighbor (a piece not given back), so the review shows every voxel removal takes. Changes labels in place. */
@@ -26,7 +25,7 @@
   /** input = { pieces: Piece[] | null (null: find), givenBack: string[], voxelMm, onProgress?, method?, find?, modules? };
       find (the holder STL fit, vb_holderwire.js) replaces findHolder and takes the same arguments; modules ({ holder,
       tape }) overrides single functions of the real modules (tests). Returns { holder: Uint8Array of voxels to cut, info }; solid is the
-      threshold mask before the crop, crop (or null) is applied to the warning test only. */
+      threshold mask before the crop, crop (or null) is applied to the R5 test only. */
   function removeHolder({ smoothed, solid, outside, dims, crop }, input) {
     const mods = input.modules || {}, holderModule = { ...Holder, ...mods.holder }, tapeModule = { ...Tape, ...mods.tape };
     let givenBack = input.givenBack || [];
@@ -46,12 +45,12 @@
       const cropped = crop ? solid.map((v, i) => v & crop[i]) : solid;
       let removedVoxels = 0;
       for (let i = 0; i < holder.length; i++) removedVoxels += holder[i];
-      return { holder, info: { method, pieces, givenBack, labels, removedVoxels, warning: cutWarning(cropped, holder, dims) } };
+      return { holder, info: { method, pieces, givenBack, labels, removedVoxels, ...Guard.cutStatus(cropped, holder, dims, pieces, givenBack) } };
     } catch (err) {
       const n = solid.length;
-      return { holder: new Uint8Array(n), info: { method: 'none', pieces: [], givenBack, labels: new Uint8Array(n), removedVoxels: 0, failed: err.message, warning: `Holder detection failed: ${err.message}` } };
+      return { holder: new Uint8Array(n), info: { method: 'none', pieces: [], givenBack, labels: new Uint8Array(n), removedVoxels: 0, failed: err.message, warning: `Holder detection failed: ${err.message}`, note: null } };
     }
   }
 
-  return { removeHolder, cutWarning };
+  return { removeHolder };
 }));

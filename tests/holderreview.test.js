@@ -58,6 +58,7 @@ test('the status line says what was checked, how, and passes warnings through', 
   assert.equal(Rv.statusLine({ method: 'none', pieces: [], givenBack: [], given: false, failed, warning: `Holder detection failed: ${failed}`, stls: [] }), `Holder: removal failed: ${failed}.`);
   const cut = 'Holder removal took 61 % of the solid. Check the pieces: part of the sample may have been taken as holder.';
   assert.equal(Rv.statusLine({ method: 'shape', pieces: two, givenBack: [], given: false, warning: cut, stls: [] }), `Holder: 2 holder pieces, not reviewed; found by shape. ${cut}`);
+  assert.equal(Rv.statusLine({ method: 'shape', pieces: two, givenBack: [], given: false, warning: null, note: 'The holder is 86 % of the solid.', stls: [] }), 'Holder: 2 holder pieces, not reviewed; found by shape. The holder is 86 % of the solid.');
   assert.equal(Rv.statusLine({ method: 'shape', pieces: two, givenBack: [], given: false, warning: null, stls: [{ ...s, outcome: 'poor fit', nearShare: 0.314, inFieldShare: 0.5, fallback: 'shape' }] }),
     'Holder: 2 holder pieces, not reviewed; holder STL post holder did not fit; found by shape. Only 31 % of its surface in the field lies on the scan (50 % of it is in the field).');
   assert.equal(Rv.statusLine({ method: 'shape', pieces: two, givenBack: [], given: false, warning: null, keep: { pieces: two, givenBack: ['h2'], method: 'stl' }, stls: [{ ...s, outcome: 'missing' }] }),
@@ -137,4 +138,12 @@ test('the holder tag says a build is running, never the last result, and which s
   assert.equal(Rv.holderTag({ h, reviewed: true, error: { stage: null, message: 'out of memory' }, building: false }), 'Could not build the sample mask: out of memory', 'a failure outside holder removal is not a removal failure');
   assert.equal(Rv.holderTag({ h: { ...h, failed: 'too many' }, reviewed: false, error: null, building: false }), 'removal failed: too many');
   assert.equal(Rv.holderTag({ h: null, reviewed: false, error: null, building: false }), 'not run');
+});
+
+test('the rail shows removal\'s warning as an alarm and its note as plain information', () => {
+  const two = [post('h1'), post('h2')], base = { method: 'shape', pieces: two, givenBack: [], given: false, stls: [] };
+  assert.equal(Rv.holderAlert(null), null);
+  assert.equal(Rv.holderAlert({ ...base, warning: null, note: null }), null);
+  assert.deepEqual(Rv.holderAlert({ ...base, warning: 'Holder removal took 61 % of the solid.', note: null }), { text: 'Holder removal took 61 % of the solid.', bad: true });
+  assert.deepEqual(Rv.holderAlert({ ...base, warning: null, note: 'The holder is 86 % of the solid.' }), { text: 'The holder is 86 % of the solid.', bad: false });
 });

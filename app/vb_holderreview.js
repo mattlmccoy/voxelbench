@@ -1,7 +1,7 @@
 /* The holder review on the page: the status that says what was checked, how the holder was found, which piece a voxel
    shows, the size of each piece in mm, and the record saved with the sample once the user accepts or toggles.
    The holder h is the model's (ct_worker.js sendModel): { method, given, pieces (native scan voxels), givenBack, labels
-   (worker grid, piece index + 1), labelsDims, labelsBin, warning, failed, keep, stls: one report per chosen STL
+   (worker grid, piece index + 1), labelsDims, labelsBin, warning, note, failed, keep, stls: one report per chosen STL
    (vb_holderwire.js prepareHolder) }. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -62,7 +62,7 @@
   }
 
   /** The sample-mask status after a model (reviewed: isReviewed): "Holder: <status>; <method>." then the poor fit's scores, the kept review,
-      any piece found but not removed, and removal's warning word for word. A failed removal shows its reason only. */
+      any piece found but not removed, and removal's warning or note word for word. A failed removal shows its reason only. */
   function statusLine(h, reviewed = Boolean(h.given)) {
     if (h.failed) return `Holder: ${holderStatus(h, h.failed)}.`;
     const how = holderMethod(h), stls = h.stls || [];
@@ -79,7 +79,14 @@
       notes.push(`Holder piece${many ? 's' : ''} ${kept.map((p) => p.id).join(', ')} ${many ? 'were' : 'was'} found but not removed: removing ${many ? 'them' : 'it'} ${kept[0].reason}. Click ${many ? 'one' : 'it'} to remove it.`);
     }
     if (h.warning) notes.push(h.warning);
+    if (h.note) notes.push(h.note);
     return [`Holder: ${holderStatus({ ...h, reviewed })}${how ? `; ${how}` : ''}.`, ...notes].join(' ');
+  }
+
+  /** The rail's line under the holder: removal's warning (an alarm, bad) or its note (information), or null. */
+  function holderAlert(h) {
+    if (h && h.warning) return { text: h.warning, bad: true };
+    return h && h.note ? { text: h.note, bad: false } : null;
   }
 
   /** Why the review cannot be saved now, or null: a saved review waiting for its STL is never overwritten, a failed
@@ -148,5 +155,5 @@
     return ` | holder ${p.id}${givenBack ? ', given back to the part' : ''} (${p.kind === 'stl' ? `STL ${p.name}` : `${s.kind}, ${s.size}`})`;
   }
 
-  return { holderStatus, holderTag, holderMethod, methodLines, statusLine, reviewBlock, holderRecord, isReviewed, labelAt, toggleGiven, pieceSummary, readoutText };
+  return { holderStatus, holderTag, holderMethod, methodLines, statusLine, holderAlert, reviewBlock, holderRecord, isReviewed, labelAt, toggleGiven, pieceSummary, readoutText };
 }));

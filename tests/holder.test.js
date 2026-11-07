@@ -126,6 +126,15 @@ test('plates that reach the scan edge only through the base they stand on are fo
   assertCoverage(r);
 });
 
+test('a piece is marked by how it was accepted: via extension (reached the edge only once extended) or via support (a post step)', () => {
+  const stand = detect(Scenes.standScene()), standPlates = stand.pieces.filter((p) => p.kind === 'plate');
+  assert.ok(standPlates.some((p) => p.via === 'extension'), `stand plates: ${standPlates.map((p) => p.via).join()}`);
+  const plates = detect({ holder: 'plates' });
+  assert.ok(plates.pieces.every((p) => p.via === undefined), `plates reaching the edge themselves: ${plates.pieces.map((p) => p.via).join()}`);
+  const tiers = detect(Scenes.twoTierRoundScene());
+  assert.ok(tiers.pieces.some((p) => p.via === 'support'), `two-tier steps: ${tiers.pieces.map((p) => p.via).join()}`);
+});
+
 test('a stepped post whose cap has a chamfered edge is still found as a post', () => {
   const r = detect(Scenes.chamferPostScene());
   assert.equal(r.method, 'shape');

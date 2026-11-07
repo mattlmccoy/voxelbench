@@ -398,7 +398,7 @@
   /** The part: largest solid component above the body threshold (within the crop), closed and filled. With holderInput
       ({ pieces | null, givenBack, voxelMm, onProgress? }) the holder is found (or the given pieces used) on the solid
       without the crop, cut out before the opening (then the crop) and cut again from the result; the return also holds
-      holder: { method, pieces, givenBack, labels, removedVoxels, warning }. Lazy require: a load-time one would cycle. */
+      holder: { method, pieces, givenBack, labels, removedVoxels, warning, note }. Lazy require: a load-time one would cycle. */
   function buildBody(gray, outside, dims, settings, crop, holderInput) {
     const smoothed = gaussian(gray, dims, settings.sigma);
     const n = gray.length;

@@ -75,8 +75,10 @@
     $('holderState').textContent = HR.holderTag({ h, reviewed, error: state.holderError, building: run });
     renderChoice();
     $('holderMethod').textContent = h && !failed && !run ? HR.methodLines(h).join('\n') : ''; // one line per holder STL
-    $('holderWarning').hidden = !(h && h.warning);
-    $('holderWarning').textContent = (h && h.warning) || '';
+    const alert = HR.holderAlert(h); // removal's warning as an alarm, its note as information
+    $('holderWarning').hidden = !alert;
+    $('holderWarning').textContent = alert ? alert.text : '';
+    $('holderWarning').classList.toggle('bad', Boolean(alert && alert.bad));
     renderTable(h);
     const block = blockOf(h);
     $('holderAccept').disabled = Boolean(block) || reviewed || waiting();

@@ -64,12 +64,36 @@ test('given pieces are used, not found again', () => {
   assert.ok(same(again.filled, first.filled));
 });
 
-test('removal that takes most of the solid warns', () => {
+test('removal that takes most of the solid warns when a piece accepted via extension or support was removed', () => {
+  const s = S.makeHolderScene({ holder: 'post', holderGray: 'bright' }), { nx } = s.dims, c = (nx - 1) / 2;
+  const all = { id: 'h1', kind: 'plate', foundBy: 'shape', center: [c, c, c], axes: [1, 0, 0, 0, 1, 0, 0, 0, 1], half: [nx, nx, nx], voxels: 0, mm3: 0 };
+  for (const via of ['extension', 'support']) {
+    const body = build(s, { pieces: [{ ...all, via }] });
+    assert.match(body.holder.warning, /part of the sample may have been taken as holder/, via);
+    assert.equal(body.holder.note, null);
+    assert.ok(body.holder.removedVoxels > 0);
+  }
+});
+
+test('removal that takes most of the solid by pieces that reached the edge themselves is a note, not a warning', () => {
   const s = S.makeHolderScene({ holder: 'post', holderGray: 'bright' }), { nx } = s.dims, c = (nx - 1) / 2;
   const all = { id: 'h1', kind: 'plate', foundBy: 'shape', center: [c, c, c], axes: [1, 0, 0, 0, 1, 0, 0, 0, 1], half: [nx, nx, nx], voxels: 0, mm3: 0 };
   const body = build(s, { pieces: [all] });
-  assert.ok(body.holder.warning, 'warning set');
-  assert.ok(body.holder.removedVoxels > 0);
+  assert.equal(body.holder.warning, null);
+  assert.match(body.holder.note, /^The holder is 100 % of the solid\.$/);
+  // An ambiguous piece given back is not removed: still a note.
+  const back = build(s, { pieces: [all, { ...all, id: 'h2', via: 'extension', half: [2, 2, 2] }], givenBack: ['h2'] });
+  assert.equal(back.holder.warning, null);
+});
+
+test('a correct removal of plates larger than the part shows the holder share as a note, no warning', () => {
+  for (const seed of [1, 2]) {
+    const s = S.makeHolderScene({ holder: 'plates', seed }), body = build(s), h = body.holder;
+    assert.ok(overlap(body.filled, s.truth.part) >= 0.98 * sum(s.truth.part), 'part kept');
+    assert.equal(h.warning, null, `seed ${seed}`);
+    assert.match(h.note, /^The holder is \d+ % of the solid\.$/, `seed ${seed}`);
+    assert.doesNotMatch(require('../app/vb_holderreview.js').statusLine({ ...h, given: false, stls: [] }), /may have been taken/);
+  }
 });
 
 test('a coupon standing on a base slab stays in the mask as a proposal, given back and named in the status', () => {
@@ -86,7 +110,7 @@ test('a coupon standing on a base slab stays in the mask as a proposal, given ba
 test('a round part cut into tiers by shape detection is kept or warns', () => {
   const s = Scenes.twoTierRoundScene(), body = build(s, {}), kept = overlap(body.filled, s.truth.part), total = sum(s.truth.part);
   const what = `${body.holder.method}: ${body.holder.pieces.map((p) => p.kind).join()}, kept ${kept}/${total}`;
-  assert.ok(kept >= 0.95 * total || body.holder.warning, what);
+  assert.ok(kept >= 0.95 * total || /may have been taken/.test(body.holder.warning), what);
   console.log(`two-tier part: ${kept >= 0.95 * total ? 'kept' : 'cut, with the warning'} (${what})`);
 });
 
