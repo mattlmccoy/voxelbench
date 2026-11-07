@@ -24,6 +24,7 @@ const H = require('../../app/vb_holder.js');
 const HS = require('../../app/vb_holderstl.js');
 const W = require('../../app/vb_holderwire.js');
 const St = require('../../app/vb_stl.js');
+const O = require('../../app/vb_orient.js');
 const { readNpy } = require('../../tools/npy.js');
 
 const LOCAL = process.env.VOXELBENCH_LOCAL_DIR || '';
@@ -71,18 +72,20 @@ function loadStl(name) {
   return s;
 }
 
-/** One sample-mask build with holder removal, as the worker runs it (prepareHolder, then buildBody), findHolder and every
-    STL fit timed. stls: STL names to fit ([] = detection only). */
-function build(scan, threshold, stls = []) {
+/** One sample-mask build with holder removal, as the worker runs it (prepareHolder, then buildBody), findHolder, every
+    STL fit and the whole build timed. stls: STL names to fit ([] = detection only); orient: the saved native
+    orientation when the scan is a leveled frame (ct_app.js frame.orient), else null. */
+function build(scan, threshold, stls = [], orient = null) {
   const vol = P.binVolume(scan.slices, scan.dims, BIN, scan.circle), voxelMm = BIN * scan.voxelMm, times = { find: 0, fits: [] };
   const modules = {
     holder: { findHolder: (a) => { const t = Date.now(); const r = H.findHolder(a); times.find += Date.now() - t; times.found = r; return r; } },
     stl: { fitHolderStl: (a) => { const t = Date.now(); const r = HS.fitHolderStl(a); times.fits.push(Date.now() - t); return r; } },
   };
   const holder = stls.length ? { pieces: null, givenBack: [], method: null, stls: stls.map(loadStl) } : null;
-  const prep = W.prepareHolder({ holder, scale: { bin: BIN, binFactor: F }, orient: null, dims: vol.dims, voxelMm, modules });
+  const prep = W.prepareHolder({ holder, scale: { bin: BIN, binFactor: F }, orient, dims: vol.dims, voxelMm, modules });
   if (!prep.input.find) prep.input.modules = { holder: modules.holder };
-  const body = P.buildBody(vol.gray, vol.outside, vol.dims, { ...P.DEFAULT_SETTINGS, bodyThreshold: threshold }, null, prep.input);
+  const t0 = Date.now(), body = P.buildBody(vol.gray, vol.outside, vol.dims, { ...P.DEFAULT_SETTINGS, bodyThreshold: threshold }, null, prep.input);
+  times.build = Date.now() - t0;
   let filled = 0;
   for (let i = 0; i < body.filled.length; i++) filled += body.filled[i];
   const holderSeconds = (times.find + times.fits.reduce((a, b) => a + b, 0)) / 1000;
@@ -105,7 +108,7 @@ const describe = (r) => ({
   method: r.info.method, envelopeCm3: +r.envelopeCm3.toFixed(3), holderSeconds: +r.holderSeconds.toFixed(1),
   pieces: r.info.pieces.map((p) => `${p.id} ${p.kind}${p.kind === 'plate' ? ` ${(2 * p.half[2] * r.voxelMm).toFixed(2)} mm` : ''} ${p.voxels} vox`),
   reports: (r.reports || []).map((s) => `${s.name}: ${s.outcome}${s.nearShare !== undefined ? ` near ${s.nearShare.toFixed(3)} RMS ${s.rmsMm.toFixed(2)} mm` : ''}`),
-  warning: r.info.warning || null,
+  warning: r.info.warning || null, note: r.info.note || null, buildSeconds: +(r.times.build / 1000).toFixed(1),
 });
 const within = (got, want, rel) => Math.abs(got - want) <= rel * want;
 
@@ -185,15 +188,70 @@ function judge(label, r, e, part, holder) {
 }
 
 let s6 = null; // the 32 s result, shared by the high-res check
+let s6Run = null; // the 32 s scan and its scan-axes build, shared by the leveled check
 
 test('Sample 6 (32 s) matches the Nov 5 part mask', { skip: why('s6_32s', 's6_b4_part.npy', 's6_b4_holder.npy') }, async () => {
-  const e = EXPECTED.s6, r = build(await readScan(path.join(HOLD, 's6_32s')), e.body_threshold), plates = plateMatch(r, e.body_threshold, e.plates_touching_mm);
+  const e = EXPECTED.s6, scan = await readScan(path.join(HOLD, 's6_32s')), r = build(scan, e.body_threshold), plates = plateMatch(r, e.body_threshold, e.plates_touching_mm);
   console.log('S6 32 s plates (Nov 5 rule)', JSON.stringify(plates));
   const checks = judge('S6 32 s', r, e, 's6_b4_part.npy', 's6_b4_holder.npy');
   s6 = { envelopeCm3: r.envelopeCm3 };
+  s6Run = { scan, r };
   assert.equal(r.info.method, 'shape', 'found by shape');
   checks();
   assert.ok(plates.ok, `the plates touching the part within ${LIMITS.plateMm} mm of ${e.plates_touching_mm} (Nov 5 rule): ${plates.why || `found ${JSON.stringify(plates.plates)}`}`);
+});
+
+/** A leveled worker-grid mask read back on the scan-axes worker grid (dims), nearest leveled voxel. orient: the leveled
+    grid on the loaded grid ({ R, center, origin }, loaded voxels); L: the leveled worker grid's dims. */
+function mappedBack(mask, L, dims, orient) {
+  const { nx, ny, nz } = dims, out = new Uint8Array(nx * ny * nz), off = (BIN - 1) / 2, { R, center: c, origin: o } = orient;
+  for (let z = 0, i = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++, i++) {
+    const d = [BIN * x + off - c[0], BIN * y + off - c[1], BIN * z + off - c[2]];
+    const b = [0, 1, 2].map((k) => Math.round((R[3 * k] * d[0] + R[3 * k + 1] * d[1] + R[3 * k + 2] * d[2] - o[k] - off) / BIN));
+    if (b[0] >= 0 && b[1] >= 0 && b[2] >= 0 && b[0] < L.nx && b[1] < L.ny && b[2] < L.nz) out[i] = mask[b[0] + L.nx * (b[1] + L.ny * b[2])];
+  }
+  return out;
+}
+
+/** The inverse direction: a scan-axes worker-grid mask on the leveled worker grid L, nearest scan voxel. */
+function mappedForward(mask, L, dims, orient) {
+  const { nx, ny, nz } = dims, out = new Uint8Array(L.nx * L.ny * L.nz), off = (BIN - 1) / 2, { R, center: c, origin: o } = orient;
+  for (let z = 0, i = 0; z < L.nz; z++) for (let y = 0; y < L.ny; y++) for (let x = 0; x < L.nx; x++, i++) {
+    const q = [BIN * x + off + o[0], BIN * y + off + o[1], BIN * z + off + o[2]];
+    const b = [0, 1, 2].map((k) => Math.round((R[k] * q[0] + R[3 + k] * q[1] + R[6 + k] * q[2] + c[k] - off) / BIN));
+    if (b[0] >= 0 && b[1] >= 0 && b[2] >= 0 && b[0] < nx && b[1] < ny && b[2] < nz) out[i] = mask[b[0] + nx * (b[1] + ny * b[2])];
+  }
+  return out;
+}
+const diceOf = (a, b) => { let x = 0, y = 0, both = 0; for (let i = 0; i < a.length; i++) { x += a[i]; y += b[i]; both += a[i] & b[i]; } return (2 * both) / (x + y); };
+
+// A scan leveled before holder removal re-levels on its next open from the holder-free mask (vb_orientrail.js) and
+// reopens leveled, where detection runs on the leveled grid: the part plus 2 mm of air, so only holder stubs within
+// that margin are left and the scan edge is the leveled volume's border. Level as the rail does (partMask, levelFromMask,
+// surfacePoints, gridForPoints with its margin), save and reopen at binFactor F (toNative, onGrid, resample).
+// Dice is information: on 11-07 the leveled mask scored 0.953 against the Nov 5 part (0.987 in scan axes) while the
+// envelope agreed to 0.9 %: a mis-fitted plate stub cut part and plate remainders stayed, offsetting each other. The
+// scan-axes pieces carried into the leveled frame (piecesFromNative) scored 0.987 there (final-fix-report.md).
+test('Sample 6 (32 s) leveled from its holder-free mask: no warning, envelope as in scan axes, holder time', { skip: why('s6_32s', 's6_b4_part.npy', 's6_b4_holder.npy') }, async () => {
+  const e = EXPECTED.s6;
+  if (!s6Run) { const scan = await readScan(path.join(HOLD, 's6_32s')); s6Run = { scan, r: build(scan, e.body_threshold) }; }
+  const { scan, r } = s6Run, marginVox = Math.round(2 / scan.voxelMm); // vb_orientrail.js MARGIN_MM over the loaded voxel
+  const L = O.levelFromMask(r.body.filled, r.vol.dims, BIN), pts = O.surfacePoints(r.body.filled, r.vol.dims, BIN); // the worker grid: bin BIN
+  const native = O.toNative({ R: L.R, center: L.center, ...O.gridForPoints({ R: L.R, center: L.center }, pts, BIN, marginVox) }, F);
+  const orient = O.onGrid(native, F), t0 = Date.now();
+  const slices = O.resample({ slices: scan.slices, dims: scan.dims, circle: scan.circle, orient });
+  const resampleSeconds = (Date.now() - t0) / 1000;
+  const lev = build({ slices, dims: { ...orient.dims }, voxelMm: scan.voxelMm, circle: null }, e.body_threshold, [], { ...native, holder_removed: true });
+  const back = mappedBack(lev.body.filled, lev.vol.dims, r.vol.dims, orient), d = dice(back, r.vol.dims, path.join(HOLD, 's6_b4_part.npy'));
+  // The Dice the two nearest-neighbor mappings cost on their own: the scan-axes mask taken to the leveled grid and back.
+  const floor = diceOf(mappedBack(mappedForward(r.body.filled, lev.vol.dims, r.vol.dims, orient), lev.vol.dims, r.vol.dims, orient), r.body.filled);
+  console.log('S6 32 s leveled', JSON.stringify({ ...describe(lev), scanAxesCm3: +r.envelopeCm3.toFixed(3), vsScanAxes: `${(100 * (lev.envelopeCm3 / r.envelopeCm3 - 1)).toFixed(2)} %`,
+    findSeconds: +(lev.times.find / 1000).toFixed(1), resampleSeconds: +resampleSeconds.toFixed(1), leveledDims: orient.dims, ambiguousAxes: L.ambiguous,
+    diceVsScanAxes: +diceOf(back, r.body.filled).toFixed(4), diceVsNov5Part: +d.toFixed(4), diceMappingFloor: +floor.toFixed(4),
+    information: 'Dice of the leveled mask mapped back (nearest voxel); diceMappingFloor: the scan-axes mask mapped there and back' }));
+  assert.equal(lev.info.warning, null, `no warning: ${lev.info.warning}`);
+  assert.ok(within(lev.envelopeCm3, r.envelopeCm3, LIMITS.envelope), `leveled envelope ${lev.envelopeCm3.toFixed(3)} vs ${r.envelopeCm3.toFixed(3)} cm3 in scan axes`);
+  assert.ok(lev.times.find / 1000 <= LIMITS.holderSeconds, `findHolder took ${(lev.times.find / 1000).toFixed(1)} s`);
 });
 
 // Agreement with the 32 s scan is informative (Matt, 11-07): the high-res scan keeps an artifact strip in the last slices
@@ -218,8 +276,8 @@ test('Sample 4 matches the Nov 5 part mask', { skip: why('s4', 's4_b4_part.npy',
 });
 
 // Informative only (a stand-in STL for the scanner's own stick, which has no STL): logged, not a pass requirement.
-test('Sample 4 with a stand-in post STL (informative)', { skip: why('s4', 's4_b4_part.npy', 'stl') }, async () => {
-  if (!fs.readdirSync(path.join(HOLD, 'stl')).some((n) => n.startsWith('ct_base_big'))) return;
+test('Sample 4 with a stand-in post STL (informative)', { skip: why('s4', 's4_b4_part.npy', 'stl') }, async (t) => {
+  if (!fs.readdirSync(path.join(HOLD, 'stl')).some((n) => n.startsWith('ct_base_big'))) { t.skip('holder/stl has no ct_base_big STL'); return; }
   const scan = s4Scan || await readScan(path.join(HOLD, 's4')), r = build(scan, EXPECTED.s4.body_threshold, ['ct_base_big']);
   const d = dice(r.body.filled, r.vol.dims, path.join(HOLD, 's4_b4_part.npy'));
   console.log('S4 STL (informative)', JSON.stringify({ ...describe(r), dice: +d.toFixed(4), stlBudgetSeconds: LIMITS.stlHolderSeconds }));
