@@ -239,12 +239,19 @@
     };
     const raw = new Float32Array(n);
     for (let i = 0; i < n; i++) if (w[i] > 0) { const c = baseAt(depth[i]); raw[i] = (gray[i] - c) / (c - airGray); }
-    return { refused: null, method, scanEdgeMm, excess: weightedSmooth(raw, w, dims, settings.sigma), depth, w, axis: name, baseline: mids.map((d, k) => ({ depth_mm: d, gray: base[k] })) };
+    return { refused: null, method, scanEdgeMm, baseShare: endCount / bodyCount, excess: weightedSmooth(raw, w, dims, settings.sigma), depth, w, axis: name, baseline: mids.map((d, k) => ({ depth_mm: d, gray: base[k] })) };
   }
 
   /** Gray value of the dip between the baseline group near zero and a brighter group, from a histogram with HIST's
       bins; null when no later peak rises clearly above the valley. */
   function dipInHistogram(raw) {
+    const d = endsDip(raw);
+    return d && d.ratio < DIP_RATIO ? d.value : null;
+  }
+
+  /** The deepest dip after the baseline group near zero, as { ratio (valley / smaller peak), value }; null when no
+      later peak rises above a valley at all. */
+  function endsDip(raw) {
     const count = raw.length;
     const h = raw.map((_, i) => (raw[Math.max(0, i - 1)] + raw[i] + raw[Math.min(count - 1, i + 1)]) / 3);
     const value = (i) => HIST.low + (i + 0.5) * HIST.step;
@@ -255,31 +262,39 @@
     for (let i = first + 1; i < count; i++) {
       if (h[i] < h[valley]) valley = i;
       const ratio = h[valley] / Math.min(h[first], h[i] || Infinity);
-      if (i > valley && h[i] > h[valley] && (!best || ratio < best.ratio)) best = { ratio, at: valley };
+      if (i > valley && h[i] > h[valley] && (!best || ratio < best.ratio)) best = { ratio, value: value(valley) };
     }
-    return best && best.ratio < DIP_RATIO ? value(best.at) : null;
+    return best;
   }
 
   /** Gray offset of the valley between the two most prominent groups in the histogram, wherever they sit; null when
       there is one group. Used with the whole-part baseline, whose zero lies among the groups rather than on one. */
   function valleyBetweenGroups(raw) {
+    const d = groupsDip(raw);
+    return d.chosen ? d.chosen.value : null;
+  }
+
+  /** Every pair of peaks in the histogram: the pair standing highest above its valley among those dipping below
+      DIP_RATIO (chosen), and the deepest ratio found at all (for the refusal message). */
+  function groupsDip(raw) {
     const count = raw.length;
     const h = raw.map((_, i) => (raw[Math.max(0, i - 1)] + raw[i] + raw[Math.min(count - 1, i + 1)]) / 3);
     const value = (i) => HIST.low + (i + 0.5) * HIST.step;
     const peaks = [];
     for (let i = 0; i < count; i++) if (h[i] > 0 && (i === 0 || h[i] >= h[i - 1]) && (i === count - 1 || h[i] > h[i + 1])) peaks.push(i);
-    let best = null;
+    let chosen = null, deepest = null;
     for (let a = 0; a < peaks.length; a++) {
       for (let c = a + 1; c < peaks.length; c++) {
         let valley = peaks[a];
         for (let i = peaks[a]; i <= peaks[c]; i++) if (h[i] < h[valley]) valley = i;
         const ratio = h[valley] / Math.min(h[peaks[a]], h[peaks[c]]);
+        if (deepest === null || ratio < deepest) deepest = ratio;
         // The pair that stands highest above its valley wins: both groups must be real, not noise on one shoulder.
         const height = Math.min(h[peaks[a]], h[peaks[c]]) - h[valley];
-        if (ratio < DIP_RATIO && (!best || height > best.height)) best = { height, at: valley };
+        if (ratio < DIP_RATIO && (!chosen || height > chosen.height)) chosen = { height, value: value(valley) };
       }
     }
-    return best ? value(best.at) : null;
+    return { chosen, deepest };
   }
 
   function histogramCounts(excess, depth, w) {
@@ -302,12 +317,21 @@
     return { low: HIST.low, step: HIST.step, volume_mm3: Array.from(counts, (c) => c * voxelMm ** 3) };
   }
 
+  /** The one-group refusal with what it rests on: the baseline used, the deepest dip found against DIP_RATIO, and how
+      much of the part served as baseline, so a scan with one material can be told from a weak second group. */
+  function oneGroupText(ready, counts) {
+    const ratio = ready.method === 'whole' ? groupsDip(counts).deepest : (endsDip(counts) || {}).ratio;
+    const dip = ratio == null ? 'none' : ratio.toFixed(2);
+    const share = ready.baseShare == null ? '' : ` ${(100 * ready.baseShare).toFixed(1)}% of the part was baseline.`;
+    return `Gray shows one group here, not two, so no zones are drawn. Baseline: ${baselineText(ready.method, ready.axis)}; deepest dip ${dip} of the smaller peak (${DIP_RATIO} or lower needed).${share} Outline regions by hand with Draw region instead.`;
+  }
+
   function finishZones(ready, { gray, voids, scanDepth, body, dims, voxelMm, settings }) {
     const { excess, depth, w } = ready, edgeMm = ready.scanEdgeMm != null ? ready.scanEdgeMm : SCAN_EDGE_MM;
     let threshold = settings.threshold;
     if (threshold === undefined) {
       threshold = ready.method === 'whole' ? valleyBetweenGroups(histogramCounts(excess, depth, w)) : findDip(excess, depth, w);
-      if (threshold === null) return { refused: 'Gray shows one group here, not two, so no zones are drawn. Outline regions by hand with Draw region instead.', zones: null };
+      if (threshold === null) return { refused: oneGroupText(ready, histogramCounts(excess, depth, w)), zones: null };
     }
     const n = gray.length;
     const bright = new Uint8Array(n);

@@ -315,3 +315,11 @@ test('with a whole-part baseline the zone threshold is the valley between the tw
   assert.ok(dip > -0.05 && dip < 0, `valley at ${dip}`);
   assert.equal(Z.valleyBetweenGroups(Float64Array.from({ length: 60 }, (_, i) => Math.exp(-(((i - 30) / 5) ** 2)))), null, 'one group');
 });
+
+test('the one-group refusal says which baseline was used, how deep the deepest dip was and how much of the part was baseline', () => {
+  const ends = Z.draftZones({ ...material({ core: 2000 }), settings: ZONE_SETTINGS });
+  assert.match(ends.refused, /one group/);
+  assert.match(ends.refused, /Baseline: the pore-free ends of the \w axis/);
+  assert.match(ends.refused, /deepest dip (\d\.\d\d|none) .*0\.97/);
+  assert.match(ends.refused, /\d+(\.\d)?% of the part/);
+});
