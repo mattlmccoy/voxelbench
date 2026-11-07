@@ -34,6 +34,7 @@
   const ANGLE_TOL = (10 * Math.PI) / 180; // same bar on the next slice: in-slice direction within 10 degrees
   const CHAIN_SPREAD = [1, 0.05]; // a disk chain: max - min radius <= 1 voxel + 5 %: a straight wall (a bar's width
                                   // also shrinks where the FOV circle cuts its ends obliquely, so bars rely on the per-step link)
+  const STRAIGHT_SHARE = 0.5;  // a post's straight wall is most of its chain (a chamfer is an end); a cone has none
   const MIN_SLICES = 3;        // a chain repeats over at least this many slices
   const MAX_POINTS = 1 << 21;  // fit points kept over all chains (voxels are sampled evenly past this)
 
@@ -269,14 +270,28 @@
     return v[d] < 0 ? v.map((x) => -x) : v;
   }
 
-  /** Comps grouped by chain; chains kept when they repeat over MIN_SLICES and keep a straight wall. */
+  const straight = (sizes) => { const top = Math.max(...sizes); return top - Math.min(...sizes) <= CHAIN_SPREAD[0] + CHAIN_SPREAD[1] * top; };
+
+  /** A disk chain's longest run of consecutive comps (in slice order) whose radii keep a straight wall. A chamfered or
+      tapered end links on (each step is small); it is judged out of the wall, but stays in the chain, so the post reaches
+      down to its next step. */
+  function straightRun(g) {
+    const s = [...g].sort((a, b) => a.slice - b.slice);
+    let best = [0, 0];
+    for (let i = 0; i < s.length; i++) for (let j = Math.max(i, i + best[1] - best[0]); j < s.length && straight(s.slice(i, j + 1).map((c) => c.size)); j++) best = [i, j + 1];
+    return s.slice(best[0], best[1]);
+  }
+
+  /** Comps grouped by chain; chains kept when they repeat over MIN_SLICES and keep a straight wall (a disk chain: its
+      straight run covers MIN_SLICES and at least STRAIGHT_SHARE of its slices). */
   function gather(comps, find, d, { nx, ny }) {
     const groups = new Map();
     comps.forEach((c) => { const r = find(c.gid); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(c); });
     const out = [];
+    const count = (g) => new Set(g.map((c) => c.slice)).size;
     groups.forEach((g) => {
-      const slices = new Set(g.map((c) => c.slice)).size, sizes = g.map((c) => c.size), top = Math.max(...sizes);
-      if (slices < MIN_SLICES || (g[0].kind === 'disk' && top - Math.min(...sizes) > CHAIN_SPREAD[0] + CHAIN_SPREAD[1] * top)) return;
+      const run = g[0].kind === 'disk' ? count(straightRun(g)) : count(g);
+      if (run < MIN_SLICES || run < STRAIGHT_SHARE * count(g)) return;
       const n = g.reduce((a, c) => a + (c.pts ? c.pts.length : 0), 0), points = new Float32Array(3 * n);
       let k = 0;
       g.forEach((c) => (c.pts || []).forEach((i) => { points[k++] = i % nx; points[k++] = Math.floor(i / nx) % ny; points[k++] = Math.floor(i / (nx * ny)); }));

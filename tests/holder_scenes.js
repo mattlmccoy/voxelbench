@@ -78,6 +78,22 @@ function twoTierRoundScene({ size = 128, seed = 1 } = {}) {
   return buildScene({ size, holder, part, seed });
 }
 
+/** A stepped post whose cap has a 45 degree chamfer on its bottom edge (radius 0.15 size down to 0.12 size over the bottom
+    0.03 size), under a porous flat-bottomed part wider than the cap, as a scanner's stick holds a printed part. */
+function chamferPostScene({ size = 128, seed = 1, holderGray = 'same' } = {}) {
+  const n = size, c = (n - 1) / 2, zs = Math.round(0.15 * n), zb = Math.round(0.25 * n), ch = 0.03 * n, zt = zb + Math.round(0.12 * n);
+  const r = (x, y) => Math.hypot(x - c, y - c), capR = (z) => 0.15 * n - Math.max(0, zs + ch - z);
+  const holder = (x, y, z) => (z < zs && r(x, y) <= 0.06 * n) || (z >= zs && z < zb && r(x, y) <= capR(z));
+  const part = (x, y, z) => z >= zb && z < zt && ((x - c) / (0.3 * n)) ** 2 + ((y - c) / (0.22 * n)) ** 2 <= 1;
+  const rnd = random(seed + 3), pores = [];
+  for (let k = 0; k < 400 && pores.length < 25; k++) {
+    const p = { x: c + (rnd() - 0.5) * 0.4 * n, y: c + (rnd() - 0.5) * 0.3 * n, z: zb + 3 + rnd() * (zt - zb - 6), r: 2 + 2 * rnd() };
+    const ok = [[0, 0, 0], [p.r + 2, 0, 0], [-p.r - 2, 0, 0], [0, p.r + 2, 0], [0, -p.r - 2, 0], [0, 0, p.r + 2], [0, 0, -p.r - 2]].every(([dx, dy, dz]) => part(p.x + dx, p.y + dy, p.z + dz));
+    if (ok && !pores.some((q) => Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) < p.r + q.r + 2)) pores.push(p);
+  }
+  return buildScene({ size, holder, part, pores, seed, holderGray });
+}
+
 /** An A-frame stand inside the field, as a printed stand sits in a scan: an upright plate and a plate leaning 30 degrees
     from it, meeting at the top, both standing on a base slab at the bottom of the volume (the base fills the FOV
     circle). Both plates end inside the FOV and below the top, so per slice each plate's run stops where it meets the
@@ -162,4 +178,4 @@ function displaced(voxTri, voxelMm, pivotVox) {
   return { tri, truth: { R, t }, cadPoint: (vox) => D(vox.map((v) => v * voxelMm)), cadDir: (d) => mat(Rd, d) };
 }
 
-module.exports = { tiltedPostScene, diskOnPostScene, twoTierRoundScene, standScene, lathe, box, cross, mat, matT, norm, rotation, displaced };
+module.exports = { tiltedPostScene, diskOnPostScene, twoTierRoundScene, chamferPostScene, standScene, lathe, box, cross, mat, matT, norm, rotation, displaced };

@@ -125,6 +125,13 @@ test('plates that reach the scan edge only through the base they stand on are fo
   assertCoverage(r);
 });
 
+test('a stepped post whose cap has a chamfered edge is still found as a post', () => {
+  const r = detect(Scenes.chamferPostScene());
+  assert.equal(r.method, 'shape');
+  assert.ok(r.pieces.length >= 2 && r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => `${p.kind} r${p.half[1].toFixed(1)}`).join());
+  assertCoverage(r);
+});
+
 test('a flat-faced cube on a post keeps every face', () => {
   const r = detect({ part: 'cube', holder: 'post' }), { nx, ny } = r.dims;
   assert.ok(r.pieces.length > 0 && r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => p.kind).join());
