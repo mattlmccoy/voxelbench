@@ -41,6 +41,14 @@ test('a piece reads as its kind, size, extents and volume in mm', () => {
   assert.equal(Rv.readoutText(stl, false, 0.1), ' | holder h1 (STL post holder)');
 });
 
+test('a piece found but not removed (it would take most of the part) is named in the status until the user removes it', () => {
+  const kept = { ...post('h1'), removed: false, reason: 'would take most of the part' }, h = { method: 'shape', pieces: [kept, post('h2')], givenBack: ['h1'], given: false, warning: null, stls: [] };
+  assert.equal(Rv.statusLine(h), 'Holder: 2 holder pieces, not reviewed; found by shape. Holder piece h1 was found but not removed: removing it would take most of the part. Click it to remove it.');
+  const two = { ...h, pieces: [kept, { ...post('h2'), removed: false, reason: 'would take most of the part' }], givenBack: ['h1', 'h2'] };
+  assert.match(Rv.statusLine(two), /Holder pieces h1, h2 were found but not removed: removing them would take most of the part\. Click one to remove it\.$/);
+  assert.equal(Rv.statusLine({ ...h, givenBack: [] }), 'Holder: 2 holder pieces, not reviewed; found by shape.', 'removed by the user: no note');
+});
+
 test('the status line says what was checked, how, and passes warnings through', () => {
   const two = [post('h1'), post('h2')], s = { name: 'post holder', hash: 'aa' };
   assert.equal(Rv.statusLine({ method: 'none', pieces: [], givenBack: [], given: false, warning: null, stls: [] }), 'Holder: no holder found.');

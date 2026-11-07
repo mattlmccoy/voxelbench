@@ -102,11 +102,13 @@ function bossOnCubeScene({ size = 128, seed = 1, bossR = 0.085 } = {}) {
 
 /** A dense flat coupon (part, 0.5 size wide, `thickness` voxels thick) standing upright on a base slab (holder) at the
     bottom of the volume, all inside the field: the coupon reaches the scan edge only through the base once extended, as a
-    stand's plate does, but it is the part. The base is a strip smaller than the coupon, or (wideBase) fills the field. */
-function couponOnSlabScene({ size = 128, seed = 1, thickness = 8, wideBase = false } = {}) {
+    stand's plate does, but it is the part. The base is a strip smaller than the coupon, or (wideBase) fills the field.
+    secondPart: a small cube part (0.1 size) also stands on the base, off to the side. */
+function couponOnSlabScene({ size = 128, seed = 1, thickness = 8, wideBase = false, secondPart = false } = {}) {
   const n = size, c = (n - 1) / 2, zb = Math.round(0.06 * n), zt = Math.round(0.6 * n);
   const holder = (x, y, z) => z < zb && (wideBase || (Math.abs(x - c) <= 0.3 * n && Math.abs(y - c) <= 0.08 * n));
-  const part = (x, y, z) => z >= zb && z < zt && Math.abs(x - c) <= 0.25 * n && Math.abs(y - c) <= thickness / 2;
+  const cube = (x, y, z) => secondPart && z >= zb && z < zb + 0.1 * n && Math.abs(x - c) <= 0.05 * n && Math.abs(y - c - 0.25 * n) <= 0.05 * n;
+  const part = (x, y, z) => (z >= zb && z < zt && Math.abs(x - c) <= 0.25 * n && Math.abs(y - c) <= thickness / 2) || cube(x, y, z);
   return buildScene({ size, holder, part, seed });
 }
 
@@ -127,20 +129,21 @@ function chamferPostScene({ size = 128, seed = 1, holderGray = 'same' } = {}) {
 }
 
 /** An A-frame stand inside the field, as a printed stand sits in a scan: an upright plate and a plate leaning 30 degrees
-    from it, meeting at the top, both standing on a base slab at the bottom of the volume (the base fills the FOV
-    circle). Both plates end inside the FOV and below the top, so per slice each plate's run stops where it meets the
+    from it, meeting at the top, both standing on a base slab (their foot) at the bottom of the volume. Both plates end inside the FOV and below the top, so per slice each plate's run stops where it meets the
     other plate or the base, short of the scan edge; a plate reaches the edge only through the base. A porous lumpy part
     leans on the leaning plate's outer face. Plates 0.05 size thick (truth.thicknessVox). */
 function standScene({ size = 128, seed = 1 } = {}) {
-  const n = size, c = (n - 1) / 2, zb = Math.round(0.06 * n), zt = Math.round(0.75 * n), t = Math.round(0.05 * n), half = 0.3 * n;
+  const n = size, c = (n - 1) / 2, zb = Math.round(0.06 * n), zt = Math.round(0.55 * n), t = Math.round(0.05 * n), half = 0.15 * n;
   const yA = c - 0.2 * n, lean = (30 * Math.PI) / 180, nB = [0, Math.cos(lean), Math.sin(lean)], dB = [0, Math.sin(lean), -Math.cos(lean)];
   const apex = [c, yA + t / 2, zt], onB = (y, z) => (y - apex[1]) * nB[1] + (z - apex[2]) * nB[2]; // signed distance off B's back face
   const plateA = (x, y, z) => Math.abs(y - yA) <= t / 2 && Math.abs(x - c) <= half && z < zt;
   const plateB = (x, y, z) => onB(y, z) >= -t && onB(y, z) <= 0 && Math.abs(x - c) <= half && z < zt;
-  const holder = (x, y, z) => z < zb || plateA(x, y, z) || plateB(x, y, z);
-  // The part: an ellipsoid on B's outer face (semi-axes 0.2 size across, 0.12 size off the face, 0.15 size along it),
-  // cut flat by that face.
-  const mid = [c, apex[1] + 0.5 * (zt - zb) * Math.tan(lean), (zt + zb) / 2], e = [0.2 * n, 0.12 * n, 0.15 * n];
+  // The base: under the plates only (a stand's foot), at the bottom of the volume.
+  const foot = (x, y) => Math.abs(x - c) <= half && y >= yA - t && y <= apex[1] + (zt - zb) * Math.tan(lean) + 2 * t;
+  const holder = (x, y, z) => (z < zb && foot(x, y)) || plateA(x, y, z) || plateB(x, y, z);
+  // The part: an ellipsoid on B's outer face (semi-axes 0.3 size across, 0.2 size off the face, 0.15 size along it),
+  // cut flat by that face. It outweighs the stand (about 63 % of the solid), as the part does on a real stand.
+  const mid = [c, apex[1] + 0.5 * (zt - zb) * Math.tan(lean), (zt + zb) / 2], e = [0.3 * n, 0.2 * n, 0.15 * n];
   const center = [0, 1, 2].map((k) => mid[k] + (e[1] - 0.02 * n) * nB[k]);
   const part = (x, y, z) => {
     if (onB(y, z) <= 0) return false;

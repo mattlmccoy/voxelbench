@@ -82,7 +82,8 @@ function detect(opts, onProgress) {
   const smoothed = P.gaussian(s.gray, dims, 1), cut = (truth.matrix_gray + truth.air_gray) / 2, solid = new Uint8Array(smoothed.length);
   for (let i = 0; i < solid.length; i++) solid[i] = smoothed[i] > cut && !s.outside[i] ? 1 : 0;
   const found = H.findHolder({ smoothed, solid, outside: s.outside, dims, voxelMm: s.voxelMm, onProgress });
-  const { holder } = H.holderMask({ solid, dims, pieces: found.pieces, givenBack: [] });
+  const proposed = found.pieces.filter((p) => p.removed === false).map((p) => p.id); // given back, as removeHolder does
+  const { holder } = H.holderMask({ solid, dims, pieces: found.pieces, givenBack: proposed });
   return { ...found, holder, truth, dims };
 }
 function assertCoverage({ holder, truth, pieces }) {
@@ -188,11 +189,18 @@ test('a round boss of the part coaxial with the post, far above it across the pa
 });
 
 test('a dense coupon standing upright on a base slab keeps its voxels; the slab is still removed', () => {
-  for (const opts of [{}, { wideBase: true, thickness: 6 }, { wideBase: true, thickness: 10 }]) {
-    const r = detect(Scenes.couponOnSlabScene(opts)), what = `${JSON.stringify(opts)} (${r.pieces.map((p) => p.kind).join()})`;
-    const [kept, total] = count(r.holder.map((v) => 1 - v), r.truth.part), [hit, holderTotal] = count(r.holder, r.truth.holder);
+  const variants = [{}, { size: 96, thickness: 8 }, { size: 128, thickness: 11 }, { size: 160, thickness: 13 },
+    { wideBase: true, thickness: 6 }, { wideBase: true, thickness: 10 }, { wideBase: true, thickness: 8, secondPart: true }];
+  for (const opts of variants) {
+    const r = detect(Scenes.couponOnSlabScene(opts)), what = `${JSON.stringify(opts)} (${r.pieces.map((p) => p.kind).join()})`, { nx, ny } = r.dims;
+    const side = r.truth.part.map((v, i) => (v && Math.floor(i / nx) % ny > (ny - 1) / 2 + 0.15 * ny ? 1 : 0)); // the second part
+    const coupon = r.truth.part.map((v, i) => (v && !side[i] ? 1 : 0));
+    const [kept, total] = count(r.holder.map((v) => 1 - v), coupon), [hit, holderTotal] = count(r.holder, r.truth.holder);
     assert.ok(kept >= 0.99 * total, `keeps ${kept}/${total} of the coupon ${what}`);
-    assert.ok(hit >= 0.95 * holderTotal, `covers ${hit}/${holderTotal} of the slab ${what}`);
+    if (opts.secondPart) { const [k2, t2] = count(r.holder.map((v) => 1 - v), side); assert.ok(k2 >= 0.99 * t2, `keeps ${k2}/${t2} of the second part ${what}`); }
+    // The slab is checked where it is found as its own piece (the default size); at other sizes a strip base too small
+    // for a plate chain is left to the review (the ruling asks only that the coupon is kept).
+    if (!opts.size) assert.ok(hit >= 0.95 * holderTotal, `covers ${hit}/${holderTotal} of the slab ${what}`);
   }
 });
 

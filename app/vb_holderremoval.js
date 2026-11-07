@@ -2,36 +2,12 @@
    add tape, and return the voxels to cut from the solid, with a warning when the cut looks too deep. Volume index
    i = x + nx * (y + ny * z), binned grid. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./ct_pores.js'), require('./vb_holder.js'), require('./vb_holdertape.js'));
-  else root.VBHolderRemoval = factory(root.CTPores, root.VBHolder, root.VBHolderTape);
-}(typeof self !== 'undefined' ? self : this, function (P, Holder, Tape) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_holder.js'), require('./vb_holdertape.js'), require('./vb_holderguard.js'));
+  else root.VBHolderRemoval = factory(root.VBHolder, root.VBHolderTape, root.VBHolderGuard);
+}(typeof self !== 'undefined' ? self : this, function (Holder, Tape, Guard) {
   'use strict';
 
-  const KEEP_BODY = 0.5;   // warn when the largest remaining body is under this share of the largest body before removal
-  const MAX_REMOVED = 0.5; // warn when removal takes more than this share of the solid
-
-  function largest(mask, dims) {
-    const { sizes, count } = P.label(mask, dims);
-    let top = 0;
-    for (let l = 1; l <= count; l++) if (sizes[l] > top) top = sizes[l];
-    return top;
-  }
-
-  /** The R5 rule: removal that cuts the part itself (a round part's tiers taken as post steps) shows as the largest
-      body shrinking to under half, or removal taking over half of the solid. */
-  function cutWarning(solid, holder, dims) {
-    let total = 0, removed = 0;
-    const rest = new Uint8Array(solid.length);
-    for (let i = 0; i < solid.length; i++) {
-      if (!solid[i]) continue;
-      total++;
-      if (holder[i]) removed++; else rest[i] = 1;
-    }
-    if (!removed) return null;
-    if (removed > MAX_REMOVED * total) return `Holder removal took ${Math.round((100 * removed) / total)} % of the solid. Check the pieces: part of the sample may have been taken as holder.`;
-    if (largest(rest, dims) < KEEP_BODY * largest(solid, dims)) return 'Holder removal split the sample: its largest body shrank to under half. Check the pieces: part of the sample may have been taken as holder.';
-    return null;
-  }
+  const { cutWarning } = Guard; // the R5 rule (vb_holderguard.js)
 
   /** The one-voxel contact band holderMask cuts past a piece's surface has no label; it takes the label of a cut,
       labeled neighbor (a piece not given back), so the review shows every voxel removal takes. Changes labels in place. */
@@ -53,12 +29,14 @@
       threshold mask before the crop, crop (or null) is applied to the warning test only. */
   function removeHolder({ smoothed, solid, outside, dims, crop }, input) {
     const mods = input.modules || {}, holderModule = { ...Holder, ...mods.holder }, tapeModule = { ...Tape, ...mods.tape };
-    const givenBack = input.givenBack || [];
+    let givenBack = input.givenBack || [];
     try {
       let pieces = input.pieces, method = input.method || 'given';
       if (!pieces) {
         const found = (input.find || holderModule.findHolder)({ smoothed, solid, outside, dims, voxelMm: input.voxelMm, onProgress: input.onProgress });
-        const first = holderModule.holderMask({ solid, dims, pieces: found.pieces, givenBack: [] }).holder;
+        // A found piece marked removed: false (vb_holderguard.js keepPart) is a proposal: listed, labeled, given back.
+        givenBack = [...givenBack, ...found.pieces.filter((p) => p.removed === false).map((p) => p.id)];
+        const first = holderModule.holderMask({ solid, dims, pieces: found.pieces, givenBack }).holder;
         const tape = tapeModule.findTape({ solid, holder: first, dims, voxelMm: input.voxelMm, firstId: found.pieces.length + 1 });
         pieces = found.pieces.concat(tape);
         method = found.method === 'none' && tape.length ? 'shape' : found.method;

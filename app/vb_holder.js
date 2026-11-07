@@ -265,7 +265,8 @@
   }
 
   /** Fits that pass the fill and even-gray cues, with fits of the same piece merged until none is left to merge (a
-      merge that fails the cues is not made), then candidates mostly inside a larger one dropped. */
+      merge that fails the cues is not made; a merge reaches the edge as its larger member does, so a fragment touching the
+      edge does not lend it that), then candidates mostly inside a larger one dropped. */
   function candidates(chains, ctx) {
     const list = chains.map((c) => fit(c, ctx)).filter((f) => passes(f, ctx)).sort((a, b) => b.voxels - a.voxels);
     const failed = new Set(), ids = new Map(), pair = (k, f) => [k, f].map((x) => { if (!ids.has(x)) ids.set(x, ids.size); return ids.get(x); }).join();
@@ -280,7 +281,7 @@
         };
         if (failed.has(pair(k, f)) || !samePiece(k, f, union)) continue;
         union();
-        const m = fit({ kind: k.kind, edge: k.edge || f.edge, voxels: k.voxels + f.voxels, points, axis: meanAxis(k, f) }, ctx);
+        const m = fit({ kind: k.kind, edge: (k.voxels >= f.voxels ? k : f).edge, voxels: k.voxels + f.voxels, points, axis: meanAxis(k, f) }, ctx);
         if (passes(m, ctx)) { list[a] = m; list.splice(b, 1); merged = true; } else failed.add(pair(k, f));
       }
     }

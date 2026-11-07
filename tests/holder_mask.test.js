@@ -72,6 +72,17 @@ test('removal that takes most of the solid warns', () => {
   assert.ok(body.holder.removedVoxels > 0);
 });
 
+test('a coupon standing on a base slab stays in the mask as a proposal, given back and named in the status', () => {
+  const s = Scenes.couponOnSlabScene(), body = build(s, {}), h = body.holder, proposed = h.pieces.filter((p) => p.removed === false);
+  assert.equal(proposed.length, 1, h.pieces.map((p) => `${p.id} ${p.kind} ${p.removed}`).join());
+  assert.deepEqual(h.givenBack, [proposed[0].id]);
+  // Against the mask built without removal (the mask's own edges), outside the coupon's one-voxel contact with the slab.
+  const plain = P.buildBody(s.gray, s.outside, s.dims, settingsFor(s), null), { nx, ny } = s.dims, t = s.truth;
+  const away = t.part.map((v, i) => (v && ![1, -1, nx, -nx, nx * ny, -nx * ny].some((d) => t.holder[i + d]) ? 1 : 0));
+  assert.ok(overlap(body.filled, away) >= 0.99 * overlap(plain.filled, away), `the coupon is in the mask: ${overlap(body.filled, away)} vs ${overlap(plain.filled, away)} without removal`);
+  assert.match(require('../app/vb_holderreview.js').statusLine({ ...h, given: false, stls: [] }), new RegExp(`Holder piece ${proposed[0].id} was found but not removed`));
+});
+
 test('a round part cut into tiers by shape detection is kept or warns', () => {
   const s = Scenes.twoTierRoundScene(), body = build(s, {}), kept = overlap(body.filled, s.truth.part), total = sum(s.truth.part);
   const what = `${body.holder.method}: ${body.holder.pieces.map((p) => p.kind).join()}, kept ${kept}/${total}`;

@@ -61,8 +61,8 @@
     return holderStatus(h && { ...h, reviewed }, (error && error.message) || (h && h.failed) || null);
   }
 
-  /** The sample-mask status after a model (reviewed: isReviewed): "Holder: <status>; <method>." then the poor fit's scores, the kept review and
-      removal's warning word for word. A failed removal shows its reason only. */
+  /** The sample-mask status after a model (reviewed: isReviewed): "Holder: <status>; <method>." then the poor fit's scores, the kept review,
+      any piece found but not removed, and removal's warning word for word. A failed removal shows its reason only. */
   function statusLine(h, reviewed = Boolean(h.given)) {
     if (h.failed) return `Holder: ${holderStatus(h, h.failed)}.`;
     const how = holderMethod(h), stls = h.stls || [];
@@ -72,6 +72,12 @@
       notes.push(`${whose} ${pct(r.nearShare)} of its surface in the field lies on the scan (${pct(r.inFieldShare)} of it is in the field).`);
     }
     if (h.keep) notes.push('The saved holder review is kept and applies when the STL loads.');
+    // A piece detection found but did not remove (removed: false, vb_holderguard.js), while it is still given back.
+    const kept = h.pieces.filter((p) => p.removed === false && (h.givenBack || []).includes(p.id));
+    if (kept.length) {
+      const many = kept.length > 1;
+      notes.push(`Holder piece${many ? 's' : ''} ${kept.map((p) => p.id).join(', ')} ${many ? 'were' : 'was'} found but not removed: removing ${many ? 'them' : 'it'} ${kept[0].reason}. Click ${many ? 'one' : 'it'} to remove it.`);
+    }
     if (h.warning) notes.push(h.warning);
     return [`Holder: ${holderStatus({ ...h, reviewed })}${how ? `; ${how}` : ''}.`, ...notes].join(' ');
   }
