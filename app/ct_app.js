@@ -515,7 +515,7 @@ window.CTApp = (function () {
       state.airGray = data.airGray;
       state.regionStats = new Map();
       emit('modelChanged');
-      emit('holderChanged');
+      emit('holderModel');
       if (state.porePhase !== 'running') emit('statusText', `${HW.holderLine(data.holder)} Ready. Press Segment pores.`);
       if (state.holderWait) { state.holderWait = false; maskChanged('holder'); }
     } else if (data.type === 'modelDone') { state.holderWait = false; emit('changed'); }
@@ -575,6 +575,10 @@ window.CTApp = (function () {
       emit('cadChanged');
     } else if (data.type === 'error') {
       holderBar(null);
+      // A failed mask build outside segmentation (opening the scan, a crop or holder change) says so; it would otherwise
+      // leave the last progress text standing.
+      const maskText = HW.maskErrorText(data.for, state.porePhase, data.message);
+      if (maskText) { state.holderWait = false; emit('statusText', maskText); }
       // An error belongs to the step whose request failed (every waiting step when the request is unknown); the pore
       // step only when segmentation was running.
       const step = CT.errorStep(data.for), mine = (s) => step === null || step === s;

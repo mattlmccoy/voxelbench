@@ -74,12 +74,34 @@ test('a saved STL piece with the same STL is rebuilt with its mask', () => {
   assert.deepEqual(r.report, { name: 'post holder', hash: 'aa', outcome: 'reused' });
 });
 
-test('a saved STL piece without its STL falls back to detection and says the STL is missing', () => {
-  const r = W.prepareHolder({ holder: { pieces: [stlNative('aa')], givenBack: ['h1'], method: 'stl', stl: null }, ...frame });
-  assert.equal(r.input.pieces, null);
+test('a saved STL piece without its STL is found for this build only; the saved holder and its give-backs are kept', () => {
+  const tape = { id: 'h2', kind: 'tape', foundBy: 'shape', center: [4, 5, 6], axes: [1, 0, 0, 0, 1, 0, 0, 0, 1], half: [3, 2, 1], voxels: 9, mm3: 0.1 };
+  const saved = { pieces: [stlNative('aa'), tape], givenBack: ['h2'], method: 'stl', stl: null };
+  const before = JSON.parse(JSON.stringify(saved));
+  const r = W.prepareHolder({ holder: saved, ...frame });
+  assert.equal(r.input.pieces, null, 'detection for this build');
   assert.equal(r.input.find, undefined);
-  assert.deepEqual(r.input.givenBack, [], 'the old ids name pieces that are gone');
+  assert.deepEqual(r.input.givenBack, [], 'the saved ids name no detected piece');
+  assert.deepEqual(r.keep, { pieces: before.pieces, givenBack: ['h2'], method: 'stl' }, 'the save-state is the saved holder, unchanged');
+  assert.deepEqual(saved, before, 'the request is not mutated');
   assert.deepEqual(r.report, { name: 'post holder', hash: 'aa', outcome: 'missing' });
+  const chosen = W.prepareHolder({ holder: { pieces: null, givenBack: [], method: null, stl: { name: 'post holder', hash: 'aa', triangles: null } }, ...frame });
+  assert.equal(chosen.keep, null, 'nothing saved, nothing to keep');
+  assert.equal(chosen.report.outcome, 'missing');
+});
+
+test('only the not-loaded case keeps a saved holder apart from the build', () => {
+  const native = F.piecesToNative([post('h1', [5, 6, 7])], frame.scale, null);
+  assert.equal(W.prepareHolder({ holder: null, ...frame }).keep, null);
+  assert.equal(W.prepareHolder({ holder: { pieces: native, givenBack: [], method: 'shape', stl: null }, ...frame }).keep, null, 'given pieces are what is built');
+});
+
+test('a failed mask build outside segmentation is said in the status', () => {
+  assert.equal(W.maskErrorText('model', 'idle', 'boom'), 'Could not build the sample mask: boom');
+  assert.equal(W.maskErrorText('volume', 'done', 'out of memory'), 'Could not build the sample mask: out of memory');
+  assert.equal(W.maskErrorText('model', 'running', 'boom'), null, 'segmentation reports its own failure');
+  assert.equal(W.maskErrorText('detect', 'idle', 'boom'), null, 'not a mask-only request');
+  assert.equal(W.maskErrorText('wall', 'idle', 'boom'), null);
 });
 
 const found = { method: 'shape', pieces: [post('h1', [5, 6, 7])] };
@@ -135,7 +157,10 @@ test('the status line says what removal did, and passes warnings through unchang
   assert.equal(W.holderLine({ method: 'stl', pieces: two, given: false, warning: null, stl: { ...stl, outcome: 'fitted', rmsMm: 0.1234 } }), 'Holder removed: 2 pieces, holder STL post holder fitted (RMS 0.12 mm).');
   assert.equal(W.holderLine({ method: 'shape', pieces: two, given: false, warning: null, stl: { ...stl, outcome: 'poor fit', nearShare: 0.314, inFieldShare: 0.5, fallback: 'shape' } }),
     'Holder removed: 2 pieces, found by shape. Holder STL post holder did not fit: 31 % of its surface in the field lies on the scan (50 % of it is in the field).');
-  assert.equal(W.holderLine({ method: 'bright', pieces: two, given: false, warning: null, stl: { ...stl, outcome: 'missing' } }), 'Holder removed: 2 pieces, found by bright resin. Holder STL post holder is not in the library.');
+  assert.equal(W.holderLine({ method: 'bright', pieces: two, given: false, warning: null, stl: { ...stl, outcome: 'missing' } }), 'Holder removed: 2 pieces, holder STL post holder not loaded; found by bright resin.');
+  assert.equal(W.holderLine({ method: 'shape', pieces: two, given: false, warning: null, keep: { pieces: two, givenBack: ['h2'], method: 'stl' }, stl: { ...stl, outcome: 'missing' } }),
+    'Holder removed: 2 pieces, holder STL post holder not loaded; found by shape. The saved holder review is kept and applies when the STL loads.');
+  assert.equal(W.holderLine({ method: 'none', pieces: [], given: false, warning: null, stl: { ...stl, outcome: 'missing' } }), 'No holder found; holder STL post holder not loaded.');
   assert.equal(W.holderLine({ method: 'stl', pieces: two, given: true, warning: null, stl: { ...stl, outcome: 'reused' } }), 'Holder removed: 2 saved pieces, holder STL post holder.');
   assert.equal(W.holderLine({ method: 'shape', pieces: two, givenBack: ['h2'], given: true, warning: null, stl: null }), 'Holder removed: 1 saved piece (1 given back), found by shape.');
 });

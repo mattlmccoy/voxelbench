@@ -60,11 +60,14 @@
 
   /** buildBody's holderInput from the request's holder (see the header). frame: scale { bin, binFactor }, orient (the
       saved native orientation or null), dims and voxelMm of the worker's grid. modules ({ holder, stl, frame }) override
-      single functions of the real modules (tests). Returns { input, given, report }:
+      single functions of the real modules (tests). Returns { input, given, report, keep }:
       - saved pieces stand (mapped onto the grid, 'stl' pieces voxelized again) when they need no STL or their STL is the
         one sent (same hash); given is then true and the method is the saved one ('given' when unknown);
+      - a saved 'stl' piece whose STL is not loaded: the holder is found by detection for this build only; keep is the
+        saved holder { pieces, givenBack, method }, untouched, which must stay saved (the build's pieces never replace it);
       - otherwise the holder is found again (givenBack cleared: the saved ids name pieces that are gone), by detection, or
         with the STL loaded: detection seeds fitHolderStl, and only a fit with fits === true is the holder.
+      keep is null except in the not-loaded case.
       report (null when no STL is involved): { name, hash, outcome: 'reused' | 'unused' | 'missing' | 'fitted' | 'poor
       fit', changedFrom (the saved piece's STL hash when it changed), rmsMm, nearShare, inFieldShare, fallback (the
       detection method used after a poor fit) }; the fit fields are filled when buildBody runs the find. */
@@ -79,12 +82,12 @@
     if (saved && savedStl.every((p) => triangles && p.hash === stl.hash)) {
       const pieces = F.piecesFromNative(saved, scale, orient).map((p) => (p.kind === 'stl' ? { ...p, mask: HS.voxelizeMesh({ triangles, pose: p.pose, dims }) } : p));
       const report = stl ? { name: stl.name, hash: stl.hash, outcome: savedStl.length ? 'reused' : 'unused' } : null;
-      return { input: { ...base, pieces, givenBack: h.givenBack || [], method: h.method || 'given' }, given: true, report };
+      return { input: { ...base, pieces, givenBack: h.givenBack || [], method: h.method || 'given' }, given: true, report, keep: null };
     }
     const old = savedStl[0] || null, input = { ...base, pieces: null, givenBack: [] };
     if (!triangles) {
-      const named = stl || old;
-      return { input, given: false, report: named ? { name: named.name, hash: named.hash, outcome: 'missing' } : null };
+      const named = stl || old, keep = old ? { pieces: saved, givenBack: h.givenBack || [], method: h.method || null } : null;
+      return { input, given: false, report: named ? { name: named.name, hash: named.hash, outcome: 'missing' } : null, keep };
     }
     const report = { name: stl.name, hash: stl.hash, outcome: null, changedFrom: old ? old.hash : null };
     input.find = (ctx) => {
@@ -99,7 +102,7 @@
       report.outcome = 'fitted';
       return { method: 'stl', pieces: [piece] };
     };
-    return { input, given: false, report };
+    return { input, given: false, report, keep: null };
   }
 
   const FOUND_BY = { bright: 'found by bright resin', shape: 'found by shape' };
@@ -109,15 +112,22 @@
       removed and how it was found, the STL's outcome, then removal's warning word for word. */
   function holderLine(h) {
     if (!h) return '';
-    if (!h.pieces.length) return h.warning || 'No holder found.';
-    const back = (h.givenBack || []).length, n = h.pieces.length - back, r = h.stl;
+    const r = h.stl, missing = r && r.outcome === 'missing';
+    if (!h.pieces.length) return h.warning || (missing ? `No holder found; holder STL ${r.name} not loaded.` : 'No holder found.');
+    const back = (h.givenBack || []).length, n = h.pieces.length - back;
     const what = `${n} ${h.given ? 'saved ' : ''}piece${n === 1 ? '' : 's'}${back ? ` (${back} given back)` : ''}`;
     const how = r && r.outcome === 'fitted' ? `holder STL ${r.name} fitted (RMS ${r.rmsMm.toFixed(2)} mm)`
-      : r && r.outcome === 'reused' ? `holder STL ${r.name}` : FOUND_BY[h.method];
-    const note = r && r.outcome === 'poor fit' ? ` Holder STL ${r.name} did not fit: ${pct(r.nearShare)} of its surface in the field lies on the scan (${pct(r.inFieldShare)} of it is in the field).`
-      : r && r.outcome === 'missing' ? ` Holder STL ${r.name} is not in the library.` : '';
+      : r && r.outcome === 'reused' ? `holder STL ${r.name}`
+        : missing ? `holder STL ${r.name} not loaded; ${FOUND_BY[h.method] || 'found by detection'}` : FOUND_BY[h.method];
+    const note = (r && r.outcome === 'poor fit' ? ` Holder STL ${r.name} did not fit: ${pct(r.nearShare)} of its surface in the field lies on the scan (${pct(r.inFieldShare)} of it is in the field).` : '')
+      + (h.keep ? ' The saved holder review is kept and applies when the STL loads.' : '');
     return `Holder removed: ${what}${how ? `, ${how}` : ''}.${note}${h.warning ? ` ${h.warning}` : ''}`;
   }
 
-  return { FIND_STAGE, FIT_STAGE, holderKey, progressText, progressTracker, holderMessage, prepareHolder, holderLine };
+  /** The status for a failed request that only builds the sample mask ('volume', 'model') while segmentation is not
+      running (a running segmentation reports its own failure); null otherwise. */
+  const maskErrorText = (requestType, porePhase, message) =>
+    ((requestType === 'volume' || requestType === 'model') && porePhase !== 'running' ? `Could not build the sample mask: ${message}` : null);
+
+  return { FIND_STAGE, FIT_STAGE, holderKey, progressText, progressTracker, holderMessage, prepareHolder, holderLine, maskErrorText };
 }));
