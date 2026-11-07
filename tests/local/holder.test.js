@@ -9,7 +9,8 @@
 //   s4_b4_part.npy      the Nov 5 part mask for it, same grid
 //   s6_b4_holder.npy, s4_b4_holder.npy   the Nov 5 holder masks, same grid
 //   stl/                holder STL files (<name>__*.stl); a stand-in post STL is fitted on the post scan, informative only
-//   expected.json       { s6: { envelope_cm3, body_threshold, plates_mm }, s4: { envelope_cm3, body_threshold } }
+//   expected.json       { s6: { envelope_cm3, body_threshold, plates_touching_mm }, s4: { envelope_cm3, body_threshold } }
+//                       (plates_touching_mm: the Nov 5 plates that hold the part, by the Nov 5 rule)
 // Every test skips unless its own files exist. Run with: VOXELBENCH_LOCAL_DIR=... npm run test:local
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -33,7 +34,8 @@ const why = (...names) => !(EXPECTED && has(...names)) && `VOXELBENCH_LOCAL_DIR 
 
 const F = 2;           // read binned x2 while reading (to 0.08 mm), as the page does for a stack this size
 const BIN = 2;         // the worker's grid: 0.16 mm, the Nov 5 grid
-const LIMITS = { envelope: 0.02, dice: 0.97, plateMm: 0.3, holderSeconds: 15 };
+// Holder time: detection alone 15 s; with a holder STL ticked up to about 20 s (Matt, 11-07).
+const LIMITS = { envelope: 0.02, dice: 0.97, plateMm: 0.3, holderSeconds: 15, stlHolderSeconds: 20 };
 
 /** A scan folder read binned F x F x F while reading: a TIFF stack, or the .VOX in an export folder. The circle is fitted on
     a native slice and scaled to the binned grid (ct_app.js). */
@@ -145,18 +147,27 @@ function nov5Thickness(p, solid, { nx, ny, nz }) {
   return v.length ? v[Math.ceil(0.995 * (v.length - 1))] - v[Math.floor(0.005 * (v.length - 1))] + 2 : 0;
 }
 
-/** Found plate thicknesses (Nov 5 rule) matched to the expected ones: the best one-to-one match of sorted values. */
+/** Ids of the pieces that touch the part: a voxel the piece cut (labels, removeHolder's) is a 6-neighbor of the final
+    part mask. A piece that touches nothing does not change the mask. */
+function touching(r) {
+  const { labels, pieces } = r.info, f = r.body.filled, { nx, ny } = r.vol.dims, steps = [1, -1, nx, -nx, nx * ny, -nx * ny], hit = new Set();
+  for (let i = 0; i < labels.length; i++) if (labels[i] && !hit.has(labels[i]) && steps.some((d) => f[i + d])) hit.add(labels[i]);
+  return new Set([...hit].map((l) => pieces[l - 1].id));
+}
+
+/** The plates touching the part, measured by the Nov 5 rule, matched one to one to the Nov 5 plates that hold the part:
+    ok when each expected plate has its own found plate within LIMITS.plateMm (more touching plates are reported). */
 function plateMatch(r, threshold, want) {
-  const solid = r.body.smoothed.map((g, i) => (g > threshold && !r.vol.outside[i] ? 1 : 0));
-  const got = r.info.pieces.filter((p) => p.kind === 'plate').map((p) => nov5Thickness(p, solid, r.vol.dims) * r.voxelMm).sort((a, b) => a - b);
-  const w = [...want].sort((a, b) => a - b);
+  const solid = r.body.smoothed.map((g, i) => (g > threshold && !r.vol.outside[i] ? 1 : 0)), touch = touching(r);
+  const all = r.info.pieces.filter((p) => p.kind === 'plate').map((p) => ({ id: p.id, touches: touch.has(p.id), mm: +(nov5Thickness(p, solid, r.vol.dims) * r.voxelMm).toFixed(2) }));
+  const got = all.filter((p) => p.touches).map((p) => p.mm);
   let best = Infinity;
-  const pick = (from, k, worst) => {
-    if (k === w.length) { best = Math.min(best, worst); return; }
-    for (let j = from; j <= got.length - (w.length - k); j++) pick(j + 1, k + 1, Math.max(worst, Math.abs(got[j] - w[k])));
+  const pick = (k, used, worst) => {
+    if (k === want.length) { best = Math.min(best, worst); return; }
+    got.forEach((g, j) => { if (!used.has(j)) pick(k + 1, new Set([...used, j]), Math.max(worst, Math.abs(g - want[k]))); });
   };
-  pick(0, 0, 0);
-  return { ok: best <= LIMITS.plateMm, got: got.map((t) => +t.toFixed(2)), worstMm: best === Infinity ? null : +best.toFixed(2) };
+  pick(0, new Set(), 0);
+  return { ok: best <= LIMITS.plateMm, plates: all, want, worstMm: best === Infinity ? null : +best.toFixed(2) };
 }
 
 /** The holder-effect checks shared by both scans: envelope against VoxelBench-with-the-Nov-5-holder, Dice, find time. */
@@ -175,22 +186,24 @@ function judge(label, r, e, part, holder) {
 let s6 = null; // the 32 s result, shared by the high-res check
 
 test('Sample 6 (32 s) matches the Nov 5 part mask', { skip: why('s6_32s', 's6_b4_part.npy', 's6_b4_holder.npy') }, async () => {
-  const e = EXPECTED.s6, r = build(await readScan(path.join(HOLD, 's6_32s')), e.body_threshold), plates = plateMatch(r, e.body_threshold, e.plates_mm);
+  const e = EXPECTED.s6, r = build(await readScan(path.join(HOLD, 's6_32s')), e.body_threshold), plates = plateMatch(r, e.body_threshold, e.plates_touching_mm);
   console.log('S6 32 s plates (Nov 5 rule)', JSON.stringify(plates));
   const checks = judge('S6 32 s', r, e, 's6_b4_part.npy', 's6_b4_holder.npy');
-  s6 = { envelopeCm3: r.envelopeCm3, passed: false };
+  s6 = { envelopeCm3: r.envelopeCm3 };
   assert.equal(r.info.method, 'shape', 'found by shape');
   checks();
-  s6.passed = true;
-  assert.ok(plates.ok, `three plates within ${LIMITS.plateMm} mm of ${e.plates_mm} (Nov 5 rule): found ${plates.got}`);
+  assert.ok(plates.ok, `the plates touching the part within ${LIMITS.plateMm} mm of ${e.plates_touching_mm} (Nov 5 rule): found ${JSON.stringify(plates.plates)}`);
 });
 
-test('Sample 6 high-res agrees with the 32 s scan', { skip: why('s6_32s', 's6_high', 's6_b4_part.npy', 's6_b4_holder.npy') }, async () => {
+// Agreement with the 32 s scan is informative (Matt, 11-07): the high-res scan keeps an artifact strip in the last slices
+// of the field as part (cone-beam end-slice gray; deferred to the field-of-view item of the next design). The holder
+// time stays a pass requirement.
+test('Sample 6 high-res: agreement with the 32 s scan (informative), holder time', { skip: why('s6_32s', 's6_high', 's6_b4_part.npy', 's6_b4_holder.npy') }, async () => {
   const e = EXPECTED.s6, r = build(await readScan(path.join(HOLD, 's6_high')), e.body_threshold);
   judge('S6 high-res (information: against the 32 s Nov 5 masks)', r, e, 's6_b4_part.npy', 's6_b4_holder.npy');
-  // Agreeing with a 32 s result that failed its own checks proves nothing (both can keep the same holder).
-  assert.ok(s6 && s6.passed, 'the 32 s scan did not pass, so it is no reference');
-  assert.ok(within(r.envelopeCm3, s6.envelopeCm3, LIMITS.envelope), `envelope ${r.envelopeCm3.toFixed(3)} vs ${s6.envelopeCm3.toFixed(3)} cm3 (32 s)`);
+  console.log('S6 high-res vs 32 s (informative)', JSON.stringify({ envelopeCm3: +r.envelopeCm3.toFixed(3), thirtyTwoSecondsCm3: s6 && +s6.envelopeCm3.toFixed(3),
+    difference: s6 ? `${(100 * (r.envelopeCm3 / s6.envelopeCm3 - 1)).toFixed(2)} %` : 'the 32 s test did not run',
+    cause: 'an artifact strip in the last slices of the field is kept as part (end-slice gray fails the even-gray cue)' }));
   assert.ok(r.times.find / 1000 <= LIMITS.holderSeconds, `findHolder took ${(r.times.find / 1000).toFixed(1)} s`);
 });
 
@@ -208,5 +221,5 @@ test('Sample 4 with a stand-in post STL (informative)', { skip: why('s4', 's4_b4
   if (!fs.readdirSync(path.join(HOLD, 'stl')).some((n) => n.startsWith('ct_base_big'))) return;
   const scan = s4Scan || await readScan(path.join(HOLD, 's4')), r = build(scan, EXPECTED.s4.body_threshold, ['ct_base_big']);
   const d = dice(r.body.filled, r.vol.dims, path.join(HOLD, 's4_b4_part.npy'));
-  console.log('S4 STL (informative)', JSON.stringify({ ...describe(r), dice: +d.toFixed(4) }));
+  console.log('S4 STL (informative)', JSON.stringify({ ...describe(r), dice: +d.toFixed(4), stlBudgetSeconds: LIMITS.stlHolderSeconds }));
 });
