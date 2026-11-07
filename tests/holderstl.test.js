@@ -8,57 +8,7 @@ const S = require('../app/vb_synthetic.js');
 const P = require('../app/ct_pores.js');
 const Scenes = require('./holder_scenes.js');
 
-// Synthetic holder STLs, built in grid voxel coordinates and returned in mm (voxel x voxelMm), wound counter-clockwise
-// seen from outside.
-const SEGMENTS = 48;
-/** A closed surface of revolution about the z line through (cx, cy): profile is [r, z] from the bottom center to the
-    top center. */
-function lathe(profile, [cx, cy]) {
-  const out = [], at = (r, z, k) => { const a = (2 * Math.PI * k) / SEGMENTS; return [cx + r * Math.cos(a), cy + r * Math.sin(a), z]; };
-  for (let s = 0; s + 1 < profile.length; s++) {
-    const [ra, za] = profile[s], [rb, zb] = profile[s + 1];
-    for (let k = 0; k < SEGMENTS; k++) {
-      const a = at(ra, za, k), b = at(ra, za, k + 1), c = at(rb, zb, k + 1), d = at(rb, zb, k);
-      if (ra > 0) out.push(...a, ...b, ...c);
-      if (rb > 0) out.push(...a, ...c, ...d);
-    }
-  }
-  return out;
-}
-/** An oriented box: rows u, v (w = u x v), half extents h. */
-function box(center, u, v, h) {
-  const w = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], e = [u, v, w], out = [];
-  const pt = (s) => [0, 1, 2].map((r) => center[r] + s[0] * h[0] * e[0][r] + s[1] * h[1] * e[1][r] + s[2] * h[2] * e[2][r]);
-  for (let k = 0; k < 3; k++) for (const side of [1, -1]) {
-    const a = (k + 1) % 3, b = (k + 2) % 3, corner = (p, q) => { const s = [0, 0, 0]; s[k] = side; s[a] = p; s[b] = q; return pt(s); };
-    const quad = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
-    if (side < 0) quad.reverse();
-    out.push(...quad[0], ...quad[1], ...quad[2], ...quad[0], ...quad[2], ...quad[3]);
-  }
-  return out;
-}
-
-const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const norm = (a) => { const l = Math.hypot(...a); return a.map((v) => v / l); };
-const mat = (R, v) => [0, 1, 2].map((r) => R[3 * r] * v[0] + R[3 * r + 1] * v[1] + R[3 * r + 2] * v[2]);
-const matT = (R, v) => [0, 1, 2].map((c) => R[c] * v[0] + R[3 + c] * v[1] + R[6 + c] * v[2]);
-function rotation(axis, deg) {
-  const [x, y, z] = norm(axis), t = (deg * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t), k = 1 - c;
-  return [c + x * x * k, x * y * k - z * s, x * z * k + y * s, y * x * k + z * s, c + y * y * k, y * z * k - x * s, z * x * k - y * s, z * y * k + x * s, c + z * z * k];
-}
-
-/** Voxel-coordinate triangles to a CAD frame 10 voxels and 15 degrees off the scan: CAD = D(voxel x voxelMm). Returns
-    the CAD triangles (mm), the true pose (CAD mm -> grid voxels) and D for mapping reference points and directions. */
-function displaced(voxTri, voxelMm, pivotVox) {
-  const Rd = rotation([1, 1, 0], 15), shift = [6 * voxelMm, 0, 8 * voxelMm], pivot = pivotVox.map((v) => v * voxelMm);
-  const D = (p) => mat(Rd, p.map((v, k) => v - pivot[k])).map((v, k) => v + pivot[k] + shift[k]);
-  const tri = new Float32Array(voxTri.length);
-  for (let i = 0; i < voxTri.length; i += 3) tri.set(D([voxTri[i], voxTri[i + 1], voxTri[i + 2]].map((v) => v * voxelMm)), i);
-  // pose: voxel = Rdᵀ(cad - pivot - shift)/voxelMm + pivot/voxelMm
-  const R = [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => Rd[3 * c + r] / voxelMm));
-  const t = matT(Rd, pivot.map((v, k) => -v - shift[k])).map((v, k) => v / voxelMm + pivotVox[k]);
-  return { tri, truth: { R, t }, cadPoint: (vox) => D(vox.map((v) => v * voxelMm)), cadDir: (d) => mat(Rd, d) };
-}
+const { lathe, box, cross, mat, norm, rotation, displaced } = Scenes;
 
 const place = (pose, p) => mat(pose.R, p).map((v, k) => v + pose.t[k]);
 const angleDeg = (a, b) => (Math.acos(Math.min(1, Math.abs(norm(a).reduce((s, v, k) => s + v * norm(b)[k], 0)))) * 180) / Math.PI;

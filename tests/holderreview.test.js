@@ -43,21 +43,21 @@ test('a piece reads as its kind, size, extents and volume in mm', () => {
 
 test('the status line says what was checked, how, and passes warnings through', () => {
   const two = [post('h1'), post('h2')], s = { name: 'post holder', hash: 'aa' };
-  assert.equal(Rv.statusLine({ method: 'none', pieces: [], givenBack: [], given: false, warning: null, stl: null }), 'Holder: no holder found.');
-  assert.equal(Rv.statusLine({ method: 'bright', pieces: two, givenBack: [], given: false, warning: null, stl: null }), 'Holder: 2 holder pieces, not reviewed; found by bright resin.');
-  assert.equal(Rv.statusLine({ method: 'shape', pieces: two, givenBack: ['h2'], given: true, warning: null, stl: null }), 'Holder: 2 holder pieces, reviewed (1 given back); found by shape.');
+  assert.equal(Rv.statusLine({ method: 'none', pieces: [], givenBack: [], given: false, warning: null, stls: [] }), 'Holder: no holder found.');
+  assert.equal(Rv.statusLine({ method: 'bright', pieces: two, givenBack: [], given: false, warning: null, stls: [] }), 'Holder: 2 holder pieces, not reviewed; found by bright resin.');
+  assert.equal(Rv.statusLine({ method: 'shape', pieces: two, givenBack: ['h2'], given: true, warning: null, stls: [] }), 'Holder: 2 holder pieces, reviewed (1 given back); found by shape.');
   const failed = 'Found 300 holder pieces; at most 254 can be labeled.';
-  assert.equal(Rv.statusLine({ method: 'none', pieces: [], givenBack: [], given: false, failed, warning: `Holder detection failed: ${failed}`, stl: null }), `Holder: removal failed: ${failed}.`);
+  assert.equal(Rv.statusLine({ method: 'none', pieces: [], givenBack: [], given: false, failed, warning: `Holder detection failed: ${failed}`, stls: [] }), `Holder: removal failed: ${failed}.`);
   const cut = 'Holder removal took 61 % of the solid. Check the pieces: part of the sample may have been taken as holder.';
-  assert.equal(Rv.statusLine({ method: 'shape', pieces: two, givenBack: [], given: false, warning: cut, stl: null }), `Holder: 2 holder pieces, not reviewed; found by shape. ${cut}`);
-  assert.equal(Rv.statusLine({ method: 'shape', pieces: two, givenBack: [], given: false, warning: null, stl: { ...s, outcome: 'poor fit', nearShare: 0.314, inFieldShare: 0.5, fallback: 'shape' } }),
+  assert.equal(Rv.statusLine({ method: 'shape', pieces: two, givenBack: [], given: false, warning: cut, stls: [] }), `Holder: 2 holder pieces, not reviewed; found by shape. ${cut}`);
+  assert.equal(Rv.statusLine({ method: 'shape', pieces: two, givenBack: [], given: false, warning: null, stls: [{ ...s, outcome: 'poor fit', nearShare: 0.314, inFieldShare: 0.5, fallback: 'shape' }] }),
     'Holder: 2 holder pieces, not reviewed; holder STL post holder did not fit; found by shape. Only 31 % of its surface in the field lies on the scan (50 % of it is in the field).');
-  assert.equal(Rv.statusLine({ method: 'shape', pieces: two, givenBack: [], given: false, warning: null, keep: { pieces: two, givenBack: ['h2'], method: 'stl' }, stl: { ...s, outcome: 'missing' } }),
+  assert.equal(Rv.statusLine({ method: 'shape', pieces: two, givenBack: [], given: false, warning: null, keep: { pieces: two, givenBack: ['h2'], method: 'stl' }, stls: [{ ...s, outcome: 'missing' }] }),
     'Holder: 2 holder pieces, not reviewed; holder STL post holder not loaded; found by shape. The saved holder review is kept and applies when the STL loads.');
-  assert.equal(Rv.statusLine({ method: 'none', pieces: [], givenBack: [], given: false, warning: null, stl: { ...s, outcome: 'missing' } }), 'Holder: no holder found; holder STL post holder not loaded; nothing found by detection.');
-  assert.equal(Rv.statusLine({ method: 'stl', pieces: [stl], givenBack: [], given: true, warning: null, stl: { ...s, outcome: 'reused' } }), 'Holder: 1 holder piece, reviewed; holder STL post holder, fitted earlier.');
-  assert.equal(Rv.holderMethod({ method: 'shape', pieces: two, stl: { ...s, outcome: 'unused' } }), 'found by shape; holder STL post holder not used');
-  assert.equal(Rv.holderMethod({ method: 'given', pieces: two, stl: null }), 'found earlier');
+  assert.equal(Rv.statusLine({ method: 'none', pieces: [], givenBack: [], given: false, warning: null, stls: [{ ...s, outcome: 'missing' }] }), 'Holder: no holder found; holder STL post holder not loaded; nothing found by detection.');
+  assert.equal(Rv.statusLine({ method: 'stl', pieces: [stl], givenBack: [], given: true, warning: null, stls: [{ ...s, outcome: 'reused' }] }), 'Holder: 1 holder piece, reviewed; holder STL post holder, fitted earlier.');
+  assert.equal(Rv.holderMethod({ method: 'shape', pieces: two, stls: [{ ...s, outcome: 'unused' }] }), 'found by shape; holder STL post holder not used');
+  assert.equal(Rv.holderMethod({ method: 'given', pieces: two, stls: [] }), 'found earlier');
 });
 
 // A closed box STL (12 triangles) of size s mm.
@@ -94,7 +94,7 @@ test('adding refuses a file that is not an STL and a name already in the library
 });
 
 test('the holder reads as reviewed when the mask was built from the saved review or the saved review is this build', () => {
-  const h = { method: 'shape', given: false, pieces: [post('h1'), plate('h2')], givenBack: ['h2'], stl: null };
+  const h = { method: 'shape', given: false, pieces: [post('h1'), plate('h2')], givenBack: ['h2'], stls: [] };
   assert.equal(Rv.isReviewed(h, null), false, 'nothing saved');
   assert.equal(Rv.isReviewed({ ...h, given: true }, null), true, 'built from the saved review');
   const saved = Rv.holderRecord(h, ['h2'], '2026-11-07T12:00:00.000Z');
@@ -102,24 +102,24 @@ test('the holder reads as reviewed when the mask was built from the saved review
   const reordered = { ...saved, pieces: saved.pieces.map((p) => Object.fromEntries(Object.entries(p).reverse())) };
   assert.equal(Rv.isReviewed(h, reordered), true, 'field order does not matter');
   assert.equal(Rv.isReviewed(h, { ...saved, given_back: [] }), false, 'another toggle');
-  assert.equal(Rv.isReviewed(h, { stl: { name: 'post holder', hash: 'aa' } }), false, 'an STL chosen, nothing reviewed');
+  assert.equal(Rv.isReviewed(h, { stls: [{ name: 'post holder', hash: 'aa' }] }), false, 'an STL chosen, nothing reviewed');
   assert.equal(Rv.isReviewed({ ...h, keep: { pieces: saved.pieces, givenBack: ['h2'], method: 'shape' } }, saved), false, 'a kept review waiting for its STL is not this build');
   assert.equal(Rv.statusLine({ ...h, warning: null }, true), 'Holder: 2 holder pieces, reviewed (1 given back); found by shape.');
 });
 
 test('a holder STL changed since the review says it was refitted and the review cleared', () => {
   const s = { name: 'post holder', hash: 'bb', changedFrom: 'aa' };
-  assert.equal(Rv.holderMethod({ method: 'stl', pieces: [stl], stl: { ...s, outcome: 'fitted', rmsMm: 0.1234 } }),
+  assert.equal(Rv.holderMethod({ method: 'stl', pieces: [stl], stls: [{ ...s, outcome: 'fitted', rmsMm: 0.1234 }] }),
     'holder STL post holder changed since the review; refitted, review cleared (RMS 0.12 mm)');
-  assert.equal(Rv.holderMethod({ method: 'shape', pieces: [post('h1')], stl: { ...s, outcome: 'poor fit', fallback: 'shape' } }),
+  assert.equal(Rv.holderMethod({ method: 'shape', pieces: [post('h1')], stls: [{ ...s, outcome: 'poor fit', fallback: 'shape' }] }),
     'holder STL post holder changed since the review; refitted, review cleared; it did not fit; found by shape');
-  assert.equal(Rv.statusLine({ method: 'stl', pieces: [stl], givenBack: [], given: false, warning: null, stl: { ...s, outcome: 'fitted', rmsMm: 0.1 } }),
+  assert.equal(Rv.statusLine({ method: 'stl', pieces: [stl], givenBack: [], given: false, warning: null, stls: [{ ...s, outcome: 'fitted', rmsMm: 0.1 }] }),
     'Holder: 1 holder piece, not reviewed; holder STL post holder changed since the review; refitted, review cleared (RMS 0.10 mm).');
-  assert.equal(Rv.holderMethod({ method: 'stl', pieces: [stl], stl: { ...s, changedFrom: null, outcome: 'fitted', rmsMm: 0.1 } }), 'holder STL post holder fitted (RMS 0.10 mm)', 'a first fit is not a change');
+  assert.equal(Rv.holderMethod({ method: 'stl', pieces: [stl], stls: [{ ...s, changedFrom: null, outcome: 'fitted', rmsMm: 0.1 }] }), 'holder STL post holder fitted (RMS 0.10 mm)', 'a first fit is not a change');
 });
 
 test('the holder tag says a build is running, never the last result, and which stage failed', () => {
-  const h = { method: 'shape', given: true, pieces: [post('h1')], givenBack: [], stl: null };
+  const h = { method: 'shape', given: true, pieces: [post('h1')], givenBack: [], stls: [] };
   assert.equal(Rv.holderStatus(h, null, true), 'finding the holder…', 'a rebuild in flight hides the last build');
   assert.equal(Rv.holderStatus({ ...h, reviewed: true }, null, false), '1 holder piece, reviewed');
   assert.equal(Rv.holderStatus(null, null, true), 'finding the holder…', 'the first build');

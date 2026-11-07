@@ -672,4 +672,6 @@ html[data-skin="glass"][data-mode="light"] {
   --g-glow-a: #dce4f0; --g-glow-b: #e6eef0;
 }
 html[data-skin="glass"][data-mode="light"] .skinbackdrop { filter: blur(46px) saturate(1.2) brightness(1.6); opacity: .35; }
+#holderMethod { white-space: pre-line; } /* one line per holder STL */
+#holderStls .pickrow { grid-template-columns: auto minmax(0, 1fr); } /* one ticked row per holder STL in the library */
 #holderTable tr.givenback td { color: var(--muted); font-style: italic; } /* a holder piece given back to the part */

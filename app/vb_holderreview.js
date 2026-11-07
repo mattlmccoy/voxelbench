@@ -1,7 +1,8 @@
 /* The holder review on the page: the status that says what was checked, how the holder was found, which piece a voxel
    shows, the size of each piece in mm, and the record saved with the sample once the user accepts or toggles.
    The holder h is the model's (ct_worker.js sendModel): { method, given, pieces (native scan voxels), givenBack, labels
-   (worker grid, piece index + 1), labelsDims, labelsBin, warning, failed, keep, stl report (vb_holderwire.js) }. */
+   (worker grid, piece index + 1), labelsDims, labelsBin, warning, failed, keep, stls: one report per chosen STL
+   (vb_holderwire.js prepareHolder) }. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.VBHolderReview = factory();
@@ -27,23 +28,28 @@
     return h.reviewed ? `${pieces}, reviewed${back ? ` (${back} given back)` : ''}` : `${pieces}, not reviewed`;
   }
 
-  /** How the holder was found: by bright resin, by shape, or by the holder STL (fitted, did not fit, not loaded). Saved
-      pieces carry the method they were found by. '' when nothing was found and no STL is involved. */
-  function holderMethod(h) {
-    if (!h) return '';
-    const r = h.stl;
-    // The chosen file differs from the one the review was fitted with: it was fitted again and the review (pieces and
-    // give-backs) no longer applies.
-    const changed = r && r.changedFrom ? `holder STL ${r.name} changed since the review; refitted, review cleared` : null;
-    if (changed && r.outcome === 'fitted') return `${changed} (RMS ${r.rmsMm.toFixed(2)} mm)`;
-    if (changed && r.outcome === 'poor fit') return `${changed}; it did not fit; ${detected(r.fallback)}`;
-    if (r && r.outcome === 'fitted') return `holder STL ${r.name} fitted (RMS ${r.rmsMm.toFixed(2)} mm)`;
-    if (r && r.outcome === 'reused') return `holder STL ${r.name}, fitted earlier`;
-    if (r && r.outcome === 'poor fit') return `holder STL ${r.name} did not fit; ${detected(r.fallback)}`;
-    if (r && r.outcome === 'missing') return `holder STL ${r.name} not loaded; ${detected(h.method)}`;
-    if (r && r.outcome === 'unused') return `${detected(h.method)}; holder STL ${r.name} not used`;
-    return h.pieces.length ? detected(h.method) : '';
+  /** How the holder was found, one line per chosen STL (fitted, did not fit, not loaded, changed), or the detection
+      method when no STL is involved. Saved pieces carry the method they were found by. [] when nothing was found and no
+      STL is involved. */
+  function methodLines(h) {
+    if (!h) return [];
+    const stls = h.stls || [];
+    if (!stls.length) return h.pieces.length ? [detected(h.method)] : [];
+    const by = (m) => (m === 'stl' || m === 'given' ? '' : `; ${detected(m)}`); // a method another STL or the review set is not detection
+    return stls.map((r) => {
+      // The chosen file differs from the one the review was fitted with: it was fitted again and the review (pieces and
+      // give-backs) no longer applies.
+      const changed = r.changedFrom ? `holder STL ${r.name} changed since the review; refitted, review cleared` : null;
+      if (changed && r.outcome === 'fitted') return `${changed} (RMS ${r.rmsMm.toFixed(2)} mm)`;
+      if (changed && r.outcome === 'poor fit') return `${changed}; it did not fit; ${detected(r.fallback)}`;
+      if (r.outcome === 'fitted') return `holder STL ${r.name} fitted (RMS ${r.rmsMm.toFixed(2)} mm)`;
+      if (r.outcome === 'reused') return `holder STL ${r.name}, fitted earlier`;
+      if (r.outcome === 'poor fit') return `holder STL ${r.name} did not fit; ${detected(r.fallback)}`;
+      if (r.outcome === 'missing') return `holder STL ${r.name} not loaded${by(r.fallback || h.method)}`;
+      return h.method === 'stl' ? `holder STL ${r.name} not used` : `${detected(h.method)}; holder STL ${r.name} not used`; // 'unused'
+    });
   }
+  const holderMethod = (h) => methodLines(h).join('; ');
 
   /** The rail's holder tag: a running build first, then a failed build (holder removal's own failure reads "removal
       failed: …", any other mask-build failure "Could not build the sample mask: …"), then holderStatus. error is the
@@ -58,9 +64,12 @@
       removal's warning word for word. A failed removal shows its reason only. */
   function statusLine(h, reviewed = Boolean(h.given)) {
     if (h.failed) return `Holder: ${holderStatus(h, h.failed)}.`;
-    const how = holderMethod(h), r = h.stl;
+    const how = holderMethod(h), stls = h.stls || [];
     const notes = [];
-    if (r && r.outcome === 'poor fit') notes.push(`Only ${pct(r.nearShare)} of its surface in the field lies on the scan (${pct(r.inFieldShare)} of it is in the field).`);
+    for (const r of stls.filter((x) => x.outcome === 'poor fit')) {
+      const whose = stls.length > 1 ? `Holder STL ${r.name}: only` : 'Only';
+      notes.push(`${whose} ${pct(r.nearShare)} of its surface in the field lies on the scan (${pct(r.inFieldShare)} of it is in the field).`);
+    }
     if (h.keep) notes.push('The saved holder review is kept and applies when the STL loads.');
     if (h.warning) notes.push(h.warning);
     return [`Holder: ${holderStatus({ ...h, reviewed })}${how ? `; ${how}` : ''}.`, ...notes].join(' ');
@@ -70,19 +79,23 @@
       removal is not a review, and nothing found is nothing to review. */
   function reviewBlock(h) {
     if (!h) return 'The holder has not been found yet.';
-    if (h.keep) return `The holder STL ${h.stl ? h.stl.name : ''} is not loaded; the saved review is kept and applies when it loads. Add the STL to the library's holders to review again.`;
+    if (h.keep) {
+      const gone = (h.stls || []).filter((r) => r.outcome === 'missing').map((r) => r.name);
+      const which = gone.length > 1 ? `The holder STLs ${gone.join(', ')} are` : `The holder STL ${gone.join('')} is`;
+      return `${which} not loaded; the saved review is kept and applies when ${gone.length > 1 ? 'they load' : 'it loads'}. Add the STL to the library's holders to review again.`;
+    }
     if (h.failed) return `Holder removal failed: ${h.failed}`;
     if (!h.pieces.length) return 'No holder was found, so there is nothing to review.';
     return null;
   }
 
   /** What saveSample({ holder }) stores: the pieces (native, without runtime masks), the ids given back, the method and
-      when it was reviewed, and the chosen STL ({ name, hash }) when one was involved. null when reviewBlock refuses. */
+      when it was reviewed, and the chosen STLs ([{ name, hash }], in order) when any were. null when reviewBlock refuses. */
   function holderRecord(h, givenBack, at = new Date().toISOString()) {
     if (reviewBlock(h)) return null;
     const pieces = h.pieces.map(({ mask, ...p }) => JSON.parse(JSON.stringify(p)));
     const out = { pieces, given_back: [...givenBack], method: h.method, reviewed_at: at };
-    if (h.stl) out.stl = { name: h.stl.name, hash: h.stl.hash };
+    if (h.stls && h.stls.length) out.stls = h.stls.map(({ name, hash }) => ({ name, hash }));
     return out;
   }
 
@@ -128,5 +141,5 @@
     return ` | holder ${p.id}${givenBack ? ', given back to the part' : ''} (${p.kind === 'stl' ? `STL ${p.name}` : `${s.kind}, ${s.size}`})`;
   }
 
-  return { holderStatus, holderTag, holderMethod, statusLine, reviewBlock, holderRecord, isReviewed, labelAt, toggleGiven, pieceSummary, readoutText };
+  return { holderStatus, holderTag, holderMethod, methodLines, statusLine, reviewBlock, holderRecord, isReviewed, labelAt, toggleGiven, pieceSummary, readoutText };
 }));

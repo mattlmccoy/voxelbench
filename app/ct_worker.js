@@ -11,7 +11,7 @@ const ORIENTATION_RETRY_BELOW = 0.5, ORIENTATION_STEP = 8; // Dice under which t
 let poreCoarse = null; // detectPores' coarse result: its interior minus edge zone is where pore voxels are counted
 let coarse = null, voidShare = null, zoneReady = null, airGray = null, patchLabels = null, solidGray = null;
 // The holder: the frame its saved pieces are in ({ binFactor, orient }, sent with each request), and the last mask
-// build's result (buildBody's holder info on the grid, plus given and the STL report).
+// build's result (buildBody's holder info on the grid, plus given and one report per chosen STL).
 let frame = { binFactor: 1, orient: null }, holder = null;
 const HOLDER_SPANS = { [HW.FIND_STAGE]: [0, 0.7], [HW.FIT_STAGE]: [0.7, 1] }, FIND_ONLY = { [HW.FIND_STAGE]: [0, 1] };
 
@@ -30,17 +30,17 @@ function ensureBody({ settings, crops, holder: request = null, frame: f }) {
   if (key === bodyKey && body) return false;
   say('Building the sample mask');
   const crop = P.cropMask(crops, vol.dims, vol.bin);
-  const fitting = !!(request && request.stl && request.stl.triangles), share = HW.progressTracker(fitting ? HOLDER_SPANS : FIND_ONLY);
+  const fitting = Boolean(request && (request.stls || []).some((t) => t.triangles)), share = HW.progressTracker(fitting ? HOLDER_SPANS : FIND_ONLY);
   const onProgress = (stage, k, total) => { const s = share(stage, k, total); if (s !== null) postMessage({ type: 'progress', text: HW.progressText(stage, k, total), share: s }); };
   let prep;
   try {
     prep = HW.prepareHolder({ holder: request, scale: scale(), orient: frame.orient, dims: vol.dims, voxelMm: vol.bin * vol.voxelMm, onProgress });
   } catch (e) { e.stage = 'holder'; throw e; } // the page says "removal failed" only for the holder's own failures
   body = P.buildBody(vol.gray, vol.outside, vol.dims, settings, crop, prep.input);
-  holder = { ...body.holder, given: prep.given, stl: prep.report, keep: prep.keep };
+  holder = { ...body.holder, given: prep.given, stls: prep.reports, keep: prep.keep };
   holder.native = self.VBHolderFrame.piecesToNative(holder.pieces, scale(), frame.orient);
   bodyKey = key;
-  bodyAlias = base + HW.holderKey({ pieces: holder.native, givenBack: holder.givenBack, stl: request ? request.stl : null });
+  bodyAlias = base + HW.holderKey({ pieces: holder.native, givenBack: holder.givenBack, stls: request ? request.stls : [] });
   poreCoarse = null; coarse = null; voidShare = null; zoneReady = null; patchLabels = null; solidGray = null; airGray = null; pores = null;
   return true;
 }
@@ -55,7 +55,7 @@ function sendModel() {
   // The holder for the page: pieces in native scan voxels (as saved), labels on the worker's grid (piece index + 1).
   const h = holder, labels = h.labels.slice();
   const out = { method: h.method, given: h.given, pieces: h.native, givenBack: h.givenBack,
-    labels, labelsDims: vol.dims, labelsBin: vol.bin, removedVoxels: h.removedVoxels, warning: h.warning, failed: h.failed || null, stl: h.stl,
+    labels, labelsDims: vol.dims, labelsBin: vol.bin, removedVoxels: h.removedVoxels, warning: h.warning, failed: h.failed || null, stls: h.stls,
     keep: h.keep }; // keep (native, or null): the saved holder that stays saved while its STL is not loaded; never save pieces over it
   postMessage({ type: 'model', positions, indices, bodyMm3: filled * (vol.bin * vol.voxelMm) ** 3, airGray, holder: out }, [positions.buffer, indices.buffer, labels.buffer]);
 }

@@ -32,7 +32,7 @@ window.CTApp = (function () {
     bodyMm3: null, airGray: null, regionStats: new Map(), referenceId: '', referenceDensity: NaN,
     main: 'XY', fill: 0.5, minVoidMm: 0, patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, zoneBaseline: 'auto',
     show: Object.fromEntries(LAYERS.map((l) => [l.id, true])),
-    holder: null, holderStl: null, holderWait: false, holderError: null, // the last model's holder; the chosen STL as loaded { name, hash, triangles }; a failed mask build's { stage ('holder' or null), message }
+    holder: null, holderStls: [], holderWait: false, holderError: null, // the last model's holder; the chosen STLs as loaded [{ name, hash, triangles }]; a failed mask build's { stage ('holder' or null), message }
   };
   let worker = null;
   const listeners = {};
@@ -294,7 +294,7 @@ window.CTApp = (function () {
     const label = stack.title || stack.folder; // a library scan's folder is its id; it is shown by its title
     if (worker) { worker.terminate(); worker = null; }
     for (const c of calls.values()) c.reject(new Error('Another scan was opened.')); calls.clear();
-    Object.assign(state, { slices: null, folder: null, stack, reader: null, scanInfo: null, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, sheetSaved: false, holder: null, holderStl: null, holderWait: false, holderError: null, relevel: null });
+    Object.assign(state, { slices: null, folder: null, stack, reader: null, scanInfo: null, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, sheetSaved: false, holder: null, holderStls: [], holderWait: false, holderError: null, relevel: null });
     showPage('library'); // the loading progress shows there
     showError('');
     emit('samplesChanged');
@@ -381,7 +381,7 @@ window.CTApp = (function () {
     showPage('studio');
     emit('loaded');
     await restoreRun();
-    // The chosen holder STL is read before the first mask build. A step that fails is said, and the mask is still built.
+    // The chosen holder STLs are read before the first mask build. A step that fails is said, and the mask is still built.
     for (const fn of beforeMask) {
       try { await fn(); } catch (e) { if (token === state.loadToken) emit('statusText', `A step before the sample mask failed (${e.message}); building the mask without it.`); }
     }
@@ -416,7 +416,7 @@ window.CTApp = (function () {
   const cropOutlines = () => cropsOf(state.folder).map((c) => ({ plane: c.plane, points: c.points }));
   // What every request that builds the sample mask carries: the saved holder (vb_holderwire.js) and the frame its native
   // pieces map from (the loaded grid's binning, and the saved orientation when the scan is leveled).
-  const bodyArgs = () => ({ settings: state.settings, crops: cropOutlines(), holder: HW.holderMessage(sampleNow().holder || null, state.holderStl),
+  const bodyArgs = () => ({ settings: state.settings, crops: cropOutlines(), holder: HW.holderMessage(sampleNow().holder || null, state.holderStls),
     frame: { binFactor: state.binFactor, orient: state.orientation ? savedOrientation(state.folder) : null } });
   const holderBar = (share) => { const bar = $('holderProgress'); bar.hidden = share === null; if (share !== null) bar.firstElementChild.style.width = `${100 * share}%`; };
 

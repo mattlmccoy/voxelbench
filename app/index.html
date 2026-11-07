@@ -195,8 +195,8 @@
           <details class="sub" id="holderBox" open>
             <summary>Holder <span class="mono muted" id="holderState">not run</span></summary>
             <div>
-              <p class="hint">The holder (plates, a post, tape) is found and cut from the sample mask on every build, shown in green in the views. With the holder's STL in the library, choose it: it is fitted first, and detection runs if it does not fit.</p>
-              <label class="pickrow">Holder <select id="holderStl"><option value="">Detect automatically</option></select></label>
+              <p class="hint">The holder (plates, a post, tape) is found and cut from the sample mask on every build, shown in green in the views. With the holder's STLs in the library, tick them: a holder printed as several parts has one STL per part, each fitted on its own, and detection covers what none of them fits. With none ticked, the holder is detected automatically.</p>
+              <div id="holderStls" role="group" aria-label="Holder STLs"></div>
               <div class="row"><button id="holderAdd" disabled>Add holder STL…</button><input type="file" id="holderFile" accept=".stl" hidden></div>
               <p class="mono" id="holderMethod"></p>
               <p class="hint bad" id="holderWarning" hidden></p>

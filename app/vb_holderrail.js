@@ -1,18 +1,19 @@
 /* Step 1 > Holder: the review of automatic holder removal. The holder is found on every sample-mask build (ct_worker.js);
    this lists its pieces (kind, size, volume) with how they were found, gives a piece back to the part or takes it again
    (also by clicking it in the views with the review tool, ct_views.js), and Accept saves the reviewed holder with the
-   sample (vb_holderreview.js holderRecord). The holder can also be a holder STL from the library's holders folder
-   (vb_holderlib.js): choosing one saves { stl: { name, hash } } and drops the saved pieces, so the next build fits it. */
+   sample (vb_holderreview.js holderRecord). The holder can also be one or more holder STLs from the library's holders
+   folder (vb_holderlib.js), one per printed part: ticking or unticking one saves { stls: [{ name, hash }, ...] } in
+   choice order and drops the saved pieces, so the next build fits each of them. */
 (function (App) {
   'use strict';
-  const HR = window.VBHolderReview, HL = window.VBHolderLib;
+  const HR = window.VBHolderReview, HL = window.VBHolderLib, HW = window.VBHolderWire;
   const { state, $, on, emit } = App;
   let names = null; // the library's holder STLs; null when the open scan is not from a library
   let busy = '', note = '';
 
   const libDir = () => (state.store && state.store.kind === 'library' && App.library && App.library.dir) || null;
   const saved = () => (state.folder ? App.sampleNow().holder || null : null);
-  const chosen = () => { const s = saved(); return s && s.stl ? s.stl.name : ''; };
+  const chosen = () => HW.savedStls(saved()).map((s) => s.name);
   const waiting = () => state.holderWait || Boolean(busy);
   // A failed mask build leaves the last holder on screen; it is not the build, so it cannot be reviewed.
   const blockOf = (h) => (state.holderError ? `The sample mask could not be built: ${state.holderError.message}` : HR.reviewBlock(h));
@@ -27,15 +28,22 @@
     try { names = dir ? await HL.listHolders(dir) : null; } catch (e) { names = []; note = `Could not list the library's holders: ${e.message}`; }
   }
 
-  function renderSelect() {
-    const sel = $('holderStl'), want = chosen();
-    sel.textContent = '';
-    const add = (value, text) => { const o = document.createElement('option'); o.value = value; o.textContent = text; sel.append(o); };
-    add('', 'Detect automatically');
-    for (const n of names || []) add(n, `Holder STL: ${n}`);
-    if (want && !(names || []).includes(want)) add(want, `Holder STL: ${want} (not in the library)`);
-    sel.value = want;
-    sel.disabled = !libDir() || !state.folder || waiting();
+  /** One ticked row per library holder STL, plus any the record chose that the library no longer has. */
+  function renderChoice() {
+    const box = $('holderStls'), want = chosen(), have = names || [], off = !libDir() || !state.folder || waiting();
+    box.textContent = '';
+    for (const n of [...have, ...want.filter((w) => !have.includes(w))]) {
+      const row = document.createElement('label'), tick = document.createElement('input'), text = document.createElement('span');
+      row.className = 'pickrow';
+      tick.type = 'checkbox';
+      tick.checked = want.includes(n);
+      tick.disabled = off;
+      tick.addEventListener('change', () => pick(n, tick.checked));
+      text.textContent = `Holder STL: ${n}${have.includes(n) ? '' : ' (not in the library)'}`;
+      row.append(tick, text);
+      box.append(row);
+    }
+    if (!box.childElementCount && libDir()) box.textContent = 'No holder STLs in the library yet.';
     $('holderAdd').disabled = !libDir() || Boolean(busy);
   }
 
@@ -65,8 +73,8 @@
     const h = state.holder, reviewed = HR.isReviewed(h, saved()), run = building();
     const failed = Boolean(state.holderError || (h && h.failed));
     $('holderState').textContent = HR.holderTag({ h, reviewed, error: state.holderError, building: run });
-    renderSelect();
-    $('holderMethod').textContent = h && !failed && !run ? HR.holderMethod(h) : '';
+    renderChoice();
+    $('holderMethod').textContent = h && !failed && !run ? HR.methodLines(h).join('\n') : ''; // one line per holder STL
     $('holderWarning').hidden = !(h && h.warning);
     $('holderWarning').textContent = (h && h.warning) || '';
     renderTable(h);
@@ -97,25 +105,33 @@
     render();
   }
 
-  /** "Detect automatically" ('') or a library holder: the saved pieces and toggles go (a new holder invalidates them).
-      The record's own holder, added back to the library, is loaded without saving: its saved review then applies. */
-  async function choose(name) {
-    const same = name === chosen();
-    if (same && (!name || (state.holderStl && state.holderStl.name === name))) return;
+  /** Ticks (on) or unticks a library holder STL. A new choice drops the saved pieces and toggles (each STL is fitted
+      again); none ticked is detection. The record's own STL, added back to the library, is loaded without saving: its
+      saved review then applies. */
+  async function pick(name, on) {
+    const want = chosen();
     note = '';
-    if (!name) { state.holderStl = null; App.saveSample({ holder: null }); render(); return; }
+    if (!on) { state.holderStls = state.holderStls.filter((s) => s.name !== name); saveChoice(want.filter((n) => n !== name)); render(); return; }
+    if (want.includes(name) && state.holderStls.some((s) => s.name === name)) return;
     busy = `Reading holder STL ${name}…`; render();
     const still = sameScan();
     try {
       const loaded = await HL.readHolder(libDir(), name);
       if (!still()) return; // another scan opened during the read: its holder is not this choice
       if (!loaded) throw new Error('it is not in the library\'s holders folder');
-      state.holderStl = loaded; // set before the request: it carries the triangles
-      if (same) App.holderChanged();
-      else App.saveSample({ holder: { stl: { name: loaded.name, hash: loaded.hash } } });
+      state.holderStls = [...state.holderStls.filter((s) => s.name !== name), loaded]; // set before the request: it carries the triangles
+      if (want.includes(name)) App.holderChanged();
+      else saveChoice([...want, name]);
     } catch (e) {
       note = `Could not read holder STL ${name}: ${e.message}`;
     } finally { busy = ''; render(); }
+  }
+
+  /** Saves the chosen STLs by name, in order, with the hash of the file loaded (or the saved one while it is not). */
+  function saveChoice(list) {
+    const hashOf = (n) => (state.holderStls.find((s) => s.name === n) || HW.savedStls(saved()).find((s) => s.name === n)).hash;
+    const stls = list.map((n) => ({ name: n, hash: hashOf(n) }));
+    App.saveSample({ holder: stls.length ? { stls } : null });
   }
 
   async function addFile(file) {
@@ -124,28 +140,29 @@
     let name = null;
     try { name = await HL.addHolder(libDir(), file); await refreshNames(); } catch (e) { note = `Could not add ${file.name}: ${e.message}`; }
     busy = ''; render();
-    if (name && still()) await choose(name); // added to the library either way; chosen only for the scan it was added on
+    if (name && still()) await pick(name, true); // added to the library either way; ticked only for the scan it was added on
   }
 
-  /** On opening a scan: the library's holders, and the STL its record names, read before the first mask build. A file
+  /** On opening a scan: the library's holders, and the STLs its record names, read before the first mask build. A file
       missing or changed is left to the worker, which falls back to detection and says so. */
   App.beforeFirstMask(async () => {
     note = '';
     const still = sameScan();
     await refreshNames();
-    const s = saved(), dir = libDir();
-    if (s && s.stl && dir) {
+    const dir = libDir(), got = [];
+    for (const s of dir ? HW.savedStls(saved()) : []) {
       try {
-        const loaded = await HL.readHolder(dir, s.stl.name);
-        if (still()) state.holderStl = loaded;
-      } catch (e) { if (still()) note = `Could not read holder STL ${s.stl.name}: ${e.message}`; }
+        const loaded = await HL.readHolder(dir, s.name);
+        if (loaded) got.push(loaded);
+      } catch (e) { if (still()) note = `Could not read holder STL ${s.name}: ${e.message}`; }
     }
-    if (still()) render();
+    if (!still()) return;
+    state.holderStls = got;
+    render();
   });
   App.toggleHolderPiece = toggle;
 
   on('start', () => {
-    $('holderStl').addEventListener('change', (e) => choose(e.target.value));
     $('holderAdd').addEventListener('click', () => $('holderFile').click());
     $('holderFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) addFile(f); });
     $('holderAccept').addEventListener('click', accept);
