@@ -19,12 +19,12 @@ function buildScene({ size, holder, part, pores = [], holderGray = 'same', seed 
   const n = size, c = (n - 1) / 2, fovR = 0.47 * n, N = n * n * n, rnd = random(seed);
   const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
   const gray = new Float32Array(N), outside = new Uint8Array(N), partMask = new Uint8Array(N), holderMask = new Uint8Array(N);
-  const hGray = MATRIX_GRAY + (holderGray === 'bright' ? HOLDER_BRIGHT : 0);
+  const hGray = MATRIX_GRAY + (holderGray === 'bright' ? HOLDER_BRIGHT : typeof holderGray === 'number' ? holderGray : 0);
   for (let z = 0, i = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++, i++) {
     if (Math.hypot(x - c, y - c) > fovR) { outside[i] = 1; continue; }
     let mean = AIR_GRAY;
     if (part(x, y, z)) { partMask[i] = 1; if (!pores.some((p) => (x - p.x) ** 2 + (y - p.y) ** 2 + (z - p.z) ** 2 <= p.r * p.r)) mean = MATRIX_GRAY; }
-    else if (holder(x, y, z)) { holderMask[i] = 1; mean = hGray; }
+    else { const h = holder(x, y, z); if (h) { holderMask[i] = 1; mean = typeof h === 'number' ? h : hGray; } } // a number: that gray
     gray[i] = Math.max(1, mean + NOISE_SD * gauss());
   }
   return { gray, outside, dims: { nx: n, ny: n, nz: n }, voxelMm, truth: { part: partMask, holder: holderMask, matrix_gray: MATRIX_GRAY, air_gray: AIR_GRAY } };
@@ -59,10 +59,11 @@ function tiltedPostScene({ size = 128, radius = 0.15, tiltDeg = 10, seed = 1 } =
 
 /** A stepped post on the z axis (stem 0.06 size to 0.15 size, cap 0.11 size to 0.25 size) under a dense flat disk part
     of radius 0.23 size, 0.08 size thick, coaxial and wider than the cap: a printed disk sitting on the post. */
-function diskOnPostScene({ size = 128, seed = 1, holderGray = 'same' } = {}) {
+function diskOnPostScene({ size = 128, seed = 1, holderGray = 'same', seam = 0 } = {}) {
   const n = size, c = (n - 1) / 2, zs = Math.round(0.15 * n), zb = Math.round(0.25 * n), zt = zb + Math.round(0.08 * n);
   const r = (x, y) => Math.hypot(x - c, y - c);
-  const holder = (x, y, z) => (z < zs && r(x, y) <= 0.06 * n) || (z >= zs && z < zb && r(x, y) <= 0.11 * n);
+  // seam: the cap's bottom layers (voxels) read at part gray, as where two printed holder parts meet.
+  const holder = (x, y, z) => (z < zs && r(x, y) <= 0.06 * n) || (z >= zs && z < zb && r(x, y) <= 0.11 * n && (z >= zs + seam || MATRIX_GRAY));
   const part = (x, y, z) => z >= zb && z < zt && r(x, y) <= 0.23 * n;
   return buildScene({ size, holder, part, seed, holderGray });
 }

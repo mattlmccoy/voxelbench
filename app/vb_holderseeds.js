@@ -14,6 +14,8 @@
   const DEEP = 3;              // voxels: gray statistics come from voxels this far inside the solid (past the smoothing
                                // blur and the partial-volume voxel; the same depth as vb_holder's even-gray core)
   const BRIGHT_SIGMAS = 5;     // bright = beyond 5 part-spreads above the part's peak (Gaussian tail share ~3e-7)
+  const RESOLVED = 0.265;      // two gray populations are resolved when the dip between them falls to 73.5 % of the
+                               // smaller peak (the classical Rayleigh resolution criterion)
   const BRIGHT_DOMINANT = 0.5; // the largest bright body holds at least this share of all bright voxels
   const BRIGHT_MIN_SHARE = 0.01; // and at least this share of the solid: a holder, not an inclusion
   const EDGE_REACH = 2;        // voxels: "reaches the edge" = within this of the outside mask or the volume border
@@ -101,26 +103,33 @@
   /** Whether voxel i is within EDGE_REACH of the outside mask (nearEdge, nearEdgeMask's) or the volume border. */
   const atEdge = (i, nearEdge, { nx, ny, nz }) => Boolean(nearEdge[i]) || nearBorder(i % nx, nx) || nearBorder(Math.floor(i / nx) % ny, ny) || nearBorder(Math.floor(i / (nx * ny)), nz);
 
-  /** Gray populations above the part's peak (beyond BRIGHT_SIGMAS spreads), brightest first, as { peak, cut }: each a
-      peak of the smoothed histogram standing at least half its height above the deeper of the valleys to the nearest
-      higher peak on each side, with the cut midway to the next population down (or the part's peak). A doped part
-      can be one of them, as bright resin can: findHolder tries each as the holder until one yields holder pieces. */
-  function brightPopulations({ peak, spread, lo, width, soft }) {
-    const from = Math.max(1, Math.floor((peak + BRIGHT_SIGMAS * spread - lo) / width) + 1), tops = [];
-    for (let b = from; b < soft.length; b++) {
+  /** Gray populations above the part's peak, brightest first, as { peak, cut }: each a peak of the smoothed histogram
+      resolved from its neighbors (the shallower of the valleys to the nearest higher peak on each side dips at least
+      RESOLVED below it), with the cut at the valley down to the next population (or the part's peak): the middle of
+      its lowest bins. How far above the part a population sits does not matter, only that a valley separates them. A
+      doped part can be one of them, as bright resin can: findHolder tries each as the holder until one yields pieces. */
+  function brightPopulations({ peak, lo, width, soft }) {
+    const partBin = Math.floor((peak - lo) / width), tops = [];
+    for (let b = partBin + 1; b < soft.length; b++) {
       if (!(soft[b] > 0) || soft[b] < soft[b - 1] || soft[b] < (soft[b + 1] || 0)) continue;
       let left = soft[b], right = soft[b];
       for (let j = b - 1; j >= 0 && soft[j] <= soft[b]; j--) left = Math.min(left, soft[j]);
       for (let j = b + 1; j < soft.length && soft[j] <= soft[b]; j++) right = Math.min(right, soft[j]);
-      if (soft[b] - Math.max(left, right) >= soft[b] / 2 && !tops.some((t) => Math.abs(t - b) * width < BRIGHT_SIGMAS * spread)) tops.push(b);
+      if (soft[b] - Math.max(left, right) >= RESOLVED * soft[b]) tops.push(b);
     }
-    const grays = tops.map((b) => lo + (b + 0.5) * width).sort((a, b) => b - a);
-    return grays.map((g, k) => ({ peak: g, cut: (g + (k + 1 < grays.length ? grays[k + 1] : peak)) / 2 }));
+    tops.sort((a, b) => b - a);
+    return tops.map((b, k) => {
+      const down = k + 1 < tops.length ? tops[k + 1] : partBin;
+      let low = Infinity, first = b, last = b;
+      for (let j = down + 1; j < b; j++) if (soft[j] < low) { low = soft[j]; first = last = j; } else if (soft[j] === low) last = j;
+      return { peak: lo + (b + 0.5) * width, cut: lo + ((first + last) / 2 + 0.5) * width };
+    });
   }
 
-  /** The bright holder body for one population { mask, peak }, or null: the solid above the population's cut, whose
-      largest connected body must hold most of it, be a real share of the solid and reach the scan edge (bright
-      inclusions are many, small and inside the part). */
+  /** The bright holder body for one population { mask, peak }, or null: the solid above the population's cut. Its
+      largest connected body must hold most of it and be a real share of the solid (bright inclusions are many, small and
+      inside the part); the mask is that body and every other bright body reaching the scan edge (a holder of several
+      printed parts meets at seams that read below the cut), and some body of it must reach the edge. */
   function brightBody(smoothed, solid, nearEdge, dims, { count }, { peak, cut }) {
     const bright = new Uint8Array(solid.length);
     let total = 0;
@@ -130,12 +139,13 @@
     let big = 1;
     for (let l = 2; l <= n; l++) if (sizes[l] > sizes[big]) big = l;
     if (sizes[big] < BRIGHT_DOMINANT * total || sizes[big] < BRIGHT_MIN_SHARE * count) return null;
-    let edge = false;
+    const reach = new Uint8Array(n + 1);
     for (let z = 0, i = 0; z < dims.nz; z++) for (let y = 0; y < dims.ny; y++) for (let x = 0; x < dims.nx; x++, i++) {
-      bright[i] = labels[i] === big ? 1 : 0;
-      if (bright[i] && (nearEdge[i] || nearBorder(x, dims.nx) || nearBorder(y, dims.ny) || nearBorder(z, dims.nz))) edge = true;
+      if (labels[i] && (nearEdge[i] || nearBorder(x, dims.nx) || nearBorder(y, dims.ny) || nearBorder(z, dims.nz))) reach[labels[i]] = 1;
     }
-    return edge ? { mask: bright, peak } : null;
+    if (!reach.some((v) => v)) return null;
+    for (let i = 0; i < bright.length; i++) bright[i] = labels[i] && (labels[i] === big || reach[labels[i]]) ? 1 : 0;
+    return { mask: bright, peak };
   }
 
   /** Air's gray: the mode of the smoothed gray over the reconstruction outside the solid. */

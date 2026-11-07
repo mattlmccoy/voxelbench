@@ -132,6 +132,28 @@ test('a stepped post whose cap has a chamfered edge is still found as a post', (
   assertCoverage(r);
 });
 
+test('a bright post only a few part spreads above the part, with a shallow valley, goes the bright path', () => {
+  // The resin reads 40 gray over the part (noise SD 60 before smoothing): about 4.4 of the part's spreads, a valley
+  // dipping about a third of the resin's peak; the 5-spread, half-height rule saw no population.
+  const scene = Scenes.diskOnPostScene({ holderGray: 40 }), Seeds = require('../app/vb_holderseeds.js');
+  const sm = P.gaussian(scene.gray, scene.dims, 1), cut = (scene.truth.matrix_gray + scene.truth.air_gray) / 2;
+  const st = Seeds.grayStats(sm, Uint8Array.from(sm, (v, i) => (v > cut && !scene.outside[i] ? 1 : 0)), scene.dims);
+  const pops = Seeds.brightPopulations(st);
+  assert.equal(pops.length, 1, 'one resolved population above the part');
+  assert.ok((pops[0].peak - st.peak) / st.spread < 5, `scene: ${((pops[0].peak - st.peak) / st.spread).toFixed(2)} spreads`);
+  const r = detect(scene);
+  assert.equal(r.method, 'bright');
+  assert.ok(r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => p.kind).join());
+  assertCoverage(r);
+});
+
+test('a bright post of two printed parts meeting at a seam that reads below the bright cut goes the bright path', () => {
+  const r = detect(Scenes.diskOnPostScene({ holderGray: 'bright', seam: 4 }));
+  assert.equal(r.method, 'bright');
+  assert.ok(r.pieces.length >= 2 && r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => p.kind).join());
+  assertCoverage(r);
+});
+
 test('a flat-faced cube on a post keeps every face', () => {
   const r = detect({ part: 'cube', holder: 'post' }), { nx, ny } = r.dims;
   assert.ok(r.pieces.length > 0 && r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => p.kind).join());

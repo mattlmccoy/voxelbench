@@ -159,7 +159,7 @@
   const SLACK = 1;           // voxels: a point counts as inside a piece within this of its surface (digitization)
   const RING = [0.5, 2];     // voxels: a post's wall ring, this far outside its radius
   const RING_SOLID = 0.1;    // a post grows along its axis only while its wall ring is bare (at most this share solid)
-  const STEP_GAP = 2;        // voxels: a post step whose end is this close to an accepted step's end is the same post
+  const STEP_GAP = 2;        // voxels: a post step whose end is this close to an accepted step's end is the same post (or solid fills the gap)
   const SUPPORT = [2, 0.25]; // a post step not reaching the edge must hold something up: within 2 voxels past its far
                              // end, solid fills at least this share of its cross-section (a part's own top is bare)
   const BRIGHT_STEP = 0.5;   // an extension step on the bright path is the holder's when at least this share reads bright
@@ -259,8 +259,7 @@
 
   /** Share of the points (xyz triples) inside piece p grown by SLACK. */
   function shareInside(points, p) {
-    const grown = { ...p, half: p.half.map((h) => h + SLACK) };
-    let k = 0;
+    const grown = { ...p, half: p.half.map((h) => h + SLACK) }; let k = 0;
     for (let i = 0; i < points.length; i += 3) if (insidePiece(grown, points[i], points[i + 1], points[i + 2])) k++;
     return k / (points.length / 3);
   }
@@ -290,12 +289,13 @@
     return kept;
   }
 
-  /** A post step not reaching the edge itself sits on an accepted step (coaxial and end to end) and holds something
-      up past its far end. Without that, a round part resting centered on a post would pass as one more step. */
+  /** A post step not reaching the edge itself sits on an accepted step (coaxial and end to end, or across a gap that solid
+      fills: a chamfer, a seam) and holds something up past its far end. Else a round part centered on a post is one more step. */
   function onStep(p, s, ctx) {
     if (p.kind !== 'post' || s.kind !== 'post' || angle(row(p, 0), row(s, 0)) > SAME_ANGLE) return false;
     const u = row(s, 0), d = sub(p.center, s.center), t = dot(d, u), off = Math.hypot(d[0] - t * u[0], d[1] - t * u[1], d[2] - t * u[2]);
-    if (off > SAME_SIZE[0] + SAME_SIZE[1] * Math.max(p.half[1], s.half[1]) || Math.abs(t) - p.half[0] - s.half[0] > STEP_GAP) return false;
+    const gap = Math.abs(t) - p.half[0] - s.half[0], r = Math.max(Math.min(p.half[1], s.half[1]) - 1, Math.min(p.half[1], s.half[1]) / 2);
+    if (off > SAME_SIZE[0] + SAME_SIZE[1] * Math.max(p.half[1], s.half[1]) || (gap > STEP_GAP && cues({ kind: 'post', axes: s.axes, half: [gap / 2, r, r], center: s.center.map((v, k) => v + Math.sign(t) * (s.half[0] + gap / 2) * u[k]) }, ctx).fill < FILL)) return false;
     const away = Math.sign(dot(row(p, 0), d)) || 1, inner = Math.max(p.half[1] - 1, p.half[1] / 2);
     let n = 0, full = 0;
     visit(p, ctx.dims, [SUPPORT[0], 0, 0], (i, q) => {
@@ -329,15 +329,15 @@
       });
       // A step passes when it and the one before are filled with material together (aliasing against a slightly tilted
       // fit) and a post's wall ring is bare. It is the piece's when at least BRIGHT_STEP of it is core (bright on the
-      // bright path, which a part's facet is not) or it is an end layer with no filled layer past it (a bright face
-      // against air reads below the bright cut). The piece ends at the last such step filled on its own.
+      // bright path, which a part's facet is not) or it ends a run of filled layers before an unfilled one: a bright face
+      // against air reads below the bright cut, one layer or (a post, its wall ring bare) the scan's whole edge ramp.
+      // The piece ends at the last such step filled on its own.
       const steps = cells.map((c) => {
-        const filled = (j) => c.n[j] > 0 && c.mat[j] >= FILL * c.n[j];
-        let last = 0;
+        const filled = (j) => c.n[j] > 0 && c.mat[j] >= FILL * c.n[j]; let last = 0;
         for (let j = 1; j <= reach && c.n[j] > 0 && c.ringFull[j] <= RING_SOLID * c.ring[j] && c.mat[j - 1] + c.mat[j] >= FILL * (c.n[j - 1] + c.n[j]); j++) {
           if (c.full[j] >= BRIGHT_STEP * c.n[j]) { if (filled(j)) last = j; continue; }
-          if (filled(j) && !filled(j + 1)) last = j;
-          break;
+          const ramp = (k) => p.kind === 'post' && c.ringFull[k] <= RING_SOLID * c.ring[k] && c.full[k] < BRIGHT_STEP * c.n[k];
+          for (let k = j; k <= reach && filled(k) && (k === j || ramp(k)); k++) if (!filled(k + 1)) last = k; break;
         }
         return last;
       });
