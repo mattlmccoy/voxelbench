@@ -243,9 +243,8 @@ window.CTApp = (function () {
   const inFrame = (r) => window.VBOrient.sameFrame(r, state.orientId);
   const annotationsOf = (folder) => marksOf('annotations', folder).filter(inFrame).map((a) => CT.toGrid(a, state.binFactor));
   const regionsOf = (folder) => marksOf('regions', folder).filter(inFrame).map((r) => CT.toGrid(r, state.binFactor));
-  /** How many of this scan's marks were drawn in another orientation (hidden until the scan is back in it). */
+  /** The frame id (null: scan axes) of each of this scan's marks drawn in another orientation (hidden until the scan is back in it). */
   const hiddenFrames = (folder) => [...marksOf('annotations', folder), ...marksOf('regions', folder)].filter((r) => !inFrame(r)).map((r) => r.orientation || null);
-  const hiddenMarks = (folder) => hiddenFrames(folder).length;
   const cropsOf = (folder) => regionsOf(folder).filter((r) => r.label === 'crop');
   const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `a${Date.now()}${Math.floor(Math.random() * 1e9)}`);
 
@@ -698,5 +697,5 @@ window.CTApp = (function () {
     emit('wallChanged');
   }
 
-  return { showPage, useStore, openReader, openFiles, sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, relative, hiddenMarks, hiddenFrames, orientLimit, cropOutlines, savedOrientation, bodyArgs, holderChanged, beforeFirstMask, projectNote };
+  return { showPage, useStore, openReader, openFiles, sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, relative, hiddenFrames, orientLimit, cropOutlines, savedOrientation, bodyArgs, holderChanged, beforeFirstMask, projectNote };
 }());

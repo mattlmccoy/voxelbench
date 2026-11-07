@@ -4,9 +4,9 @@
      scan axes (binFactor·l in a leveled frame); a half extent h becomes h·bin·binFactor; axes do not change.
    - Leveled to scan (vb_orient: q = R(p - center) - origin): p = center + Rᵀ(q + origin); axes rows turn by Rᵀ.
    voxels and mm3 are copied unscaled.
-   Pieces are { id, kind, foundBy, center, axes (3 rows), half, voxels, mm3 }; an 'stl' piece has pose { R, t } (STL mm
-   to voxels, vb_holderstl.js) in place of center, axes and half, and loses its runtime mask. The converters return new
-   objects. */
+   Pieces are { id, kind, foundBy, center, axes (3 rows), half, voxels, mm3 } (vb_holder.js); an 'stl' piece has pose
+   { R, t } (STL mm to voxels, vb_holderstl.js) in place of center, axes and half, and loses its runtime mask. Every
+   other field (via, removed, reason, name, hash) passes through unchanged. The converters return new objects. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.VBHolderFrame = factory();
