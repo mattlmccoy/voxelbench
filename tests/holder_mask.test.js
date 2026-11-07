@@ -1,0 +1,93 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const P = require('../app/ct_pores.js');
+const S = require('../app/vb_synthetic.js');
+const Scenes = require('./holder_scenes.js');
+
+const sum = (a) => a.reduce((t, v) => t + v, 0);
+const overlap = (a, b) => { let c = 0; for (let i = 0; i < a.length; i++) if (a[i] && b[i]) c++; return c; };
+const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+const midCut = (t) => (t.matrix_gray + t.air_gray) / 2;
+const settingsFor = (s, sigma = 1) => ({ ...P.DEFAULT_SETTINGS, sigma, bodyThreshold: midCut(s.truth) });
+const build = (s, input, { crop = null, sigma } = {}) =>
+  P.buildBody(s.gray, s.outside, s.dims, settingsFor(s, sigma), crop, { pieces: null, givenBack: [], voxelMm: s.voxelMm, ...input });
+
+test('the sample mask leaves the holder out', () => {
+  const s = S.makeHolderScene({ holder: 'post', holderGray: 'bright' });
+  const body = build(s);
+  assert.equal(body.holder.method, 'bright');
+  assert.ok(overlap(body.filled, s.truth.holder) <= 0.01 * sum(s.truth.holder), `holder voxels kept ${overlap(body.filled, s.truth.holder)}`);
+  assert.ok(overlap(body.filled, s.truth.part) >= 0.98 * sum(s.truth.part), 'part kept');
+  assert.ok(body.holder.removedVoxels > 0);
+  assert.equal(body.holder.warning, null);
+});
+
+test('tape is stripped and the air under it is not counted', () => {
+  // Light smoothing (sigma 0.5) keeps the one-voxel shell above the threshold and thin.
+  const tape = S.makeHolderScene({ holder: 'post', holderGray: 'bright', tape: true }), bare = S.makeHolderScene({ holder: 'post', holderGray: 'bright' });
+  const withTape = build(tape, {}, { sigma: 0.5 }), without = build(bare, {}, { sigma: 0.5 });
+  assert.ok(withTape.holder.pieces.some((p) => p.kind === 'tape'), withTape.holder.pieces.map((p) => p.kind).join());
+  assert.ok(sum(withTape.filled) <= 1.01 * sum(without.filled), `${sum(withTape.filled)} vs ${sum(without.filled)}`);
+});
+
+test('a crop through the post does not stop removal', () => {
+  const s = S.makeHolderScene({ holder: 'post', holderGray: 'bright' }), { nx, ny, nz } = s.dims, crop = new Uint8Array(s.gray.length);
+  for (let i = 0; i < crop.length; i++) crop[i] = Math.floor(i / (nx * ny)) >= 0.4 * nz ? 1 : 0;
+  const body = build(s, {}, { crop });
+  assert.ok(body.holder.pieces.some((p) => p.kind === 'post'));
+  assert.ok(overlap(body.filled, s.truth.holder) <= 0.01 * sum(s.truth.holder));
+  assert.ok(overlap(body.filled, crop) === sum(body.filled), 'nothing outside the crop');
+});
+
+test('a piece given back returns to the part', () => {
+  const s = S.makeHolderScene({ holder: 'post', holderGray: 'bright' }), { nx, ny } = s.dims;
+  const first = build(s), ids = first.holder.pieces.filter((p) => p.kind === 'post').map((p) => p.id);
+  const back = build(s, { pieces: first.holder.pieces, givenBack: ids });
+  let touching = 0, kept = 0;
+  const plane = nx * ny;
+  for (let i = plane; i < s.truth.holder.length - plane; i++) {
+    if (!s.truth.holder[i]) continue;
+    const near = [i - 1, i + 1, i - nx, i + nx, i - plane, i + plane].some((j) => s.truth.part[j]);
+    if (near) { touching++; if (back.filled[i]) kept++; }
+  }
+  assert.ok(touching > 0 && kept >= 0.95 * touching, `${kept}/${touching} post voxels at the part came back`);
+  assert.ok(sum(back.filled) > sum(first.filled));
+});
+
+test('given pieces are used, not found again', () => {
+  const s = S.makeHolderScene({ holder: 'post', holderGray: 'bright', tape: true });
+  const first = build(s, {}, { sigma: 0.5 });
+  const calls = [];
+  const again = build(s, { pieces: first.holder.pieces, modules: { holder: { findHolder: () => { calls.push(1); throw new Error('no'); } } } }, { sigma: 0.5 });
+  assert.equal(calls.length, 0);
+  assert.ok(same(again.filled, first.filled));
+});
+
+test('removal that takes most of the solid warns', () => {
+  const s = S.makeHolderScene({ holder: 'post', holderGray: 'bright' }), { nx } = s.dims, c = (nx - 1) / 2;
+  const all = { id: 'h1', kind: 'plate', foundBy: 'shape', center: [c, c, c], axes: [1, 0, 0, 0, 1, 0, 0, 0, 1], half: [nx, nx, nx], voxels: 0, mm3: 0 };
+  const body = build(s, { pieces: [all] });
+  assert.ok(body.holder.warning, 'warning set');
+  assert.ok(body.holder.removedVoxels > 0);
+});
+
+test('a round part cut into tiers by shape detection warns', () => {
+  const s = Scenes.twoTierRoundScene(), body = build(s, {});
+  assert.ok(body.holder.warning, `${body.holder.method}: ${body.holder.pieces.map((p) => p.kind).join()}, kept ${overlap(body.filled, s.truth.part)}/${sum(s.truth.part)}`);
+});
+
+test('a failure in holder detection leaves the mask unremoved and says so', () => {
+  const s = S.makeHolderScene({ holder: 'post', holderGray: 'bright' });
+  const plain = P.buildBody(s.gray, s.outside, s.dims, settingsFor(s), null);
+  const body = build(s, { modules: { holder: { findHolder: () => { throw new Error('too many pieces'); } } } });
+  assert.ok(same(body.filled, plain.filled));
+  assert.equal(body.holder.method, 'none');
+  assert.deepEqual(body.holder.pieces, []);
+  assert.match(body.holder.warning, /^Holder detection failed: too many pieces$/);
+});
+
+test('without holder input the result has no holder field', () => {
+  const s = S.makeHolderScene({ holder: 'post' });
+  assert.equal(P.buildBody(s.gray, s.outside, s.dims, settingsFor(s), null).holder, undefined);
+});

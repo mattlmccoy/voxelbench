@@ -395,5 +395,5 @@
     return { method: pieces.length ? 'shape' : 'none', pieces };
   }
 
-  return { fitSlab, fitCylinder, insidePiece, holderMask, findHolder };
+  return { fitSlab, fitCylinder, insidePiece, shortestRun, holderMask, findHolder };
 }));

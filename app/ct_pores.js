@@ -395,13 +395,22 @@
     return keep;
   }
 
-  /** The part: largest solid component above the body threshold (within the crop), closed and filled. */
-  function buildBody(gray, outside, dims, settings, crop) {
+  /** The part: largest solid component above the body threshold (within the crop), closed and filled. With holderInput
+      ({ pieces | null, givenBack, voxelMm, onProgress? }) the holder is found (or the given pieces used) on the solid
+      without the crop, cut out before the opening (then the crop) and cut again from the result; the return also holds
+      holder: { method, pieces, givenBack, labels, removedVoxels, warning }. Lazy require: a load-time one would cycle. */
+  function buildBody(gray, outside, dims, settings, crop, holderInput) {
     const smoothed = gaussian(gray, dims, settings.sigma);
     const n = gray.length;
     const solid = new Uint8Array(n);
     for (let i = 0; i < n; i++) {
-      if (smoothed[i] > settings.bodyThreshold && !outside[i] && (!crop || crop[i])) solid[i] = 1;
+      if (smoothed[i] > settings.bodyThreshold && !outside[i] && (holderInput || !crop || crop[i])) solid[i] = 1;
+    }
+    let cut = null;
+    if (holderInput) {
+      cut = (typeof module === 'object' && module.exports ? require('./vb_holderremoval.js') : globalThis.VBHolderRemoval)
+        .removeHolder({ smoothed, solid, outside, dims, crop }, holderInput);
+      for (let i = 0; i < n; i++) if (cut.holder[i] || (crop && !crop[i])) solid[i] = 0;
     }
     const opened = dilateSteps(erodeSteps(solid, dims, OPEN_ITERATIONS), dims, OPEN_ITERATIONS);
     const { labels, count, sizes } = label(opened, dims);
@@ -412,7 +421,9 @@
     const closed = closeMask(main, dims, settings.closeRadius, settings.closeShape);
     const filled = fillHoles(closed, dims);
     if (crop) for (let i = 0; i < n; i++) if (!crop[i]) filled[i] = 0;
-    return { smoothed, filled };
+    if (!cut) return { smoothed, filled };
+    for (let i = 0; i < n; i++) if (cut.holder[i]) filled[i] = 0;
+    return { smoothed, filled, holder: cut.info };
   }
 
   /** Ratio of longest to shortest axis from second moments: sqrt of the largest over smallest eigenvalue. */

@@ -67,4 +67,15 @@ function diskOnPostScene({ size = 128, seed = 1, holderGray = 'same' } = {}) {
   return buildScene({ size, holder, part, seed, holderGray });
 }
 
-module.exports = { tiltedPostScene, diskOnPostScene };
+/** A two-tier round part, a flat disk (radius 0.23 size) with a coaxial boss (radius 0.15 size) on top, resting on the
+    same stepped post as diskOnPostScene, all at one gray: the boss looks like one more post step, so shape detection
+    may take a tier of the part. */
+function twoTierRoundScene({ size = 128, seed = 1 } = {}) {
+  const n = size, c = (n - 1) / 2, zs = Math.round(0.15 * n), zb = Math.round(0.25 * n), zd = zb + Math.round(0.08 * n), zt = zd + Math.round(0.12 * n);
+  const r = (x, y) => Math.hypot(x - c, y - c);
+  const holder = (x, y, z) => (z < zs && r(x, y) <= 0.06 * n) || (z >= zs && z < zb && r(x, y) <= 0.11 * n);
+  const part = (x, y, z) => (z >= zb && z < zd && r(x, y) <= 0.23 * n) || (z >= zd && z < zt && r(x, y) <= 0.15 * n);
+  return buildScene({ size, holder, part, seed });
+}
+
+module.exports = { tiltedPostScene, diskOnPostScene, twoTierRoundScene };
