@@ -99,3 +99,59 @@ test('the synthetic scan with a dense band gives step 3 a high-gray zone over po
   assert.ok(high.volume_mm3 > 100, `high-gray zone ${high.volume_mm3} mm³`);
   assert.ok(Math.abs(high.solid_gray_mean - truth.dense_band.gray) < 30, `${high.solid_gray_mean} vs ${truth.dense_band.gray}`);
 });
+
+test('holder scenes are reproducible and their truth masks are disjoint', () => {
+  const a = S.makeHolderScene({ size: 48, seed: 5, holder: 'post', tape: true }), b = S.makeHolderScene({ size: 48, seed: 5, holder: 'post', tape: true });
+  assert.deepEqual(a.gray, b.gray);
+  for (const scene of [a, S.makeHolderScene({ size: 48, seed: 2, holder: 'plates', part: 'cube', tape: true })]) {
+    const { part, holder, tape } = scene.truth;
+    let overlap = 0, nPart = 0, nHolder = 0, nTape = 0;
+    for (let i = 0; i < part.length; i++) { overlap += (part[i] && holder[i]) + (part[i] && tape[i]) + (holder[i] && tape[i]); nPart += part[i]; nHolder += holder[i]; nTape += tape[i]; }
+    assert.equal(overlap, 0);
+    assert.ok(nPart > 0 && nHolder > 0 && nTape > 0, `${nPart} ${nHolder} ${nTape}`);
+  }
+  let onSlice0 = 0;
+  for (let i = 0; i < 48 * 48; i++) onSlice0 += a.truth.holder[i];
+  assert.ok(onSlice0 > 0);
+  const plates = S.makeHolderScene({ size: 48, holder: 'plates' });
+  assert.deepEqual(plates.truth.pieces.map((p) => p.kind), ['plate', 'plate', 'plate']);
+  assert.ok(plates.truth.pieces.every((p) => p.thicknessVox > 0));
+  assert.ok(a.truth.pieces.every((p) => p.kind === 'post' && p.radiusVox > 0));
+  assert.equal(S.makeHolderScene({ size: 48, holder: 'none' }).truth.holder.reduce((s, v) => s + v, 0), 0);
+});
+
+test('a bright holder reads brighter than the part', () => {
+  const median = (scene, mask) => { const v = []; for (let i = 0; i < mask.length; i++) if (mask[i]) v.push(scene.gray[i]); v.sort((p, q) => p - q); return v[v.length >> 1]; };
+  for (const [holderGray, test] of [['bright', (d) => d > 400], ['same', (d) => Math.abs(d) < 50]]) {
+    const s = S.makeHolderScene({ size: 48, part: 'cube', holderGray });
+    const d = median(s, s.truth.holder) - median(s, s.truth.part);
+    assert.ok(test(d), `${holderGray}: ${d}`);
+  }
+});
+
+test('holder scene parts rest on the holder, tape touches the part, and the options do what they say', () => {
+  const touches = (n, a, b) => { // voxels of a face-adjacent to b
+    let k = 0;
+    for (let z = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const i = x + n * (y + n * z);
+      if (a[i] && ((x > 0 && b[i - 1]) || (x < n - 1 && b[i + 1]) || (y > 0 && b[i - n]) || (y < n - 1 && b[i + n]) || (z > 0 && b[i - n * n]) || (z < n - 1 && b[i + n * n]))) k++;
+    }
+    return k;
+  };
+  const n = 64, rimOf = (mask) => { let k = 0; for (let i = 0; i < n ** 3; i++) if (mask[i] && Math.hypot((i % n) - (n - 1) / 2, (Math.floor(i / n) % n) - (n - 1) / 2) > 0.47 * n - 2) k++; return k; };
+  for (const holder of ['post', 'plates']) for (const part of ['blob', 'cube']) {
+    const s = S.makeHolderScene({ size: n, holder, part, tape: true, inclusions: true });
+    assert.ok(touches(n, s.truth.part, s.truth.holder) > 20, `${holder} ${part} rests`);
+    const t = touches(n, s.truth.tape, s.truth.part);
+    assert.equal(t, 3, `${holder} ${part} tape touches ${t}`);
+    assert.ok(s.truth.tape.reduce((a, v) => a + v, 0) > 100);
+  }
+  assert.ok(rimOf(S.makeHolderScene({ size: n, holder: 'plates' }).truth.holder) > 50, 'plates reach the FOV edge');
+  const inc = S.makeHolderScene({ size: n, part: 'cube', inclusions: true });
+  let bright = 0;
+  for (let i = 0; i < n ** 3; i++) if (inc.truth.part[i] && inc.gray[i] > 2400 + 3 * 60) bright++;
+  assert.ok(bright > 30, `inclusions: ${bright}`);
+  const edge = S.makeHolderScene({ size: n, touchEdge: true }), mid = S.makeHolderScene({ size: n });
+  assert.ok(rimOf(edge.truth.part) > 20 && rimOf(mid.truth.part) === 0, `${rimOf(edge.truth.part)} ${rimOf(mid.truth.part)}`);
+  assert.ok(edge.outside.some((v, i) => v && edge.gray[i] === 0));
+});

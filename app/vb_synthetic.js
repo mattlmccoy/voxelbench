@@ -166,5 +166,133 @@
     return St.writeStl(Float32Array.from(tri));
   }
 
-  return { makeScan, makePart, partStl };
+  // Holder scenes. A part rests on a post or in tilted plates. Sizes are ratios of the volume size. The part is built
+  // first, so one seed gives one part whatever the holder, and truth carries disjoint masks for part, holder and tape.
+  const HOLDER_BRIGHT = 600, POST_CAP_R = 0.14, POST_CAP_H = 0.1, POST_STEM_R = 0.06, PLATE_T = 0.035, PLATE_TILTS = [25, 60];
+  const CUBE_SIDE = 0.3, EDGE_SHIFT = 0.34, BLOB_PORES = 25, BLOB_PORE_R = [2, 4], INCLUSIONS = 30, INCLUSION_R = [1, 2];
+  const TAPE_NEAR = 2.8, TAPE_CLOSE = 1.8, TAPE_TOUCHES = 3, TAPE_FROM = 0.3;
+
+  /** Offsets within radius r, for stamping a ball around a voxel. */
+  function ballOffsets(r) {
+    const out = [], k = Math.ceil(r);
+    for (let dz = -k; dz <= k; dz++) for (let dy = -k; dy <= k; dy++) for (let dx = -k; dx <= k; dx++) if (dx * dx + dy * dy + dz * dz <= r * r) out.push([dx, dy, dz]);
+    return out;
+  }
+
+  /** The part mask (lumpy 'blob' of 3 ellipsoids or flat 'cube'), cut to the FOV, with its lowest voxel on slice zb. */
+  function holderScenePart({ rnd, n, cx, cy, fov, part, zb }) {
+    const lumps = [[-0.05, 0, 0.12, 0.16, 0.12, 0.12], [0.06, 0.05, 0.14, 0.12, 0.14, 0.14], [0, -0.06, 0.11, 0.13, 0.13, 0.11]].map((b) => {
+      const j = () => (rnd() - 0.5) * 0.04 * n;
+      return { x: cx + b[0] * n + j(), y: cy + b[1] * n + j(), z: b[2] * n + j(), a: (b[3] + rnd() * 0.02) * n, b: (b[4] + rnd() * 0.02) * n, h: (b[5] + rnd() * 0.02) * n };
+    });
+    const side = CUBE_SIDE * n;
+    const raster = (dz) => {
+      const m = new Uint8Array(n * n * n);
+      for (let z = 0, i = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++, i++) {
+        if (!fov[i]) continue;
+        m[i] = part === 'cube'
+          ? (Math.abs(x - cx) <= side / 2 && Math.abs(y - cy) <= side / 2 && z - dz >= 0 && z - dz < side ? 1 : 0)
+          : (lumps.some((l) => ((x - l.x) / l.a) ** 2 + ((y - l.y) / l.b) ** 2 + ((z - dz - l.z) / l.h) ** 2 <= 1) ? 1 : 0);
+      }
+      return m;
+    };
+    const lowest = (m) => { const i = m.indexOf(1); return i < 0 ? n : Math.floor(i / (n * n)); };
+    return raster(2 * zb - lowest(raster(zb))); // a whole-voxel move, so the mask keeps its shape
+  }
+
+  /** Stepped post on the z axis through (cx, cy): a cap just under the part, a stem down to slice 0. Plates: a base
+      slab and two plates tilted 25 and 60 degrees whose top faces touch the part, running out to the FOV edge. */
+  function holderSceneHolder({ n, cx, cy, fov, partMask, zb, holder }) {
+    const mask = new Uint8Array(n * n * n), pieces = [], t = Math.max(2, PLATE_T * n);
+    if (holder === 'none') return { mask, pieces };
+    const capH = Math.max(2, Math.round(POST_CAP_H * n)), capR = POST_CAP_R * n, stemR = POST_STEM_R * n;
+    const planes = PLATE_TILTS.map((deg, k) => {
+      const a = (deg * Math.PI) / 180, nx = (k ? -1 : 1) * Math.sin(a), nz = Math.cos(a);
+      let d = Infinity; // the plane n.p = d just touches the part from below
+      for (let z = 0, i = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++, i++) if (partMask[i]) d = Math.min(d, nx * x + nz * z);
+      return { nx, nz, d, deg };
+    });
+    for (let z = 0, i = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++, i++) {
+      if (!fov[i] || partMask[i]) continue;
+      const r = Math.hypot(x - cx, y - cy);
+      mask[i] = holder === 'post'
+        ? ((z >= zb - capH && z < zb && r <= capR) || (z < zb - capH && r <= stemR) ? 1 : 0)
+        : (z < t || planes.some((p) => onPlate(p, x, z, t)) ? 1 : 0);
+    }
+    if (holder === 'post') pieces.push({ kind: 'post', radiusVox: capR, zFrom: zb - capH, zTo: zb - 1 }, { kind: 'post', radiusVox: stemR, zFrom: 0, zTo: zb - capH - 1 });
+    else pieces.push({ kind: 'plate', thicknessVox: t, tiltDeg: 0 }, ...planes.map((p) => ({ kind: 'plate', thicknessVox: t, tiltDeg: p.deg })));
+    return { mask, pieces };
+  }
+  const onPlate = (p, x, z, t) => { const s = p.nx * x + p.nz * z; return s > p.d - t && s < p.d + 0.5; };
+
+  /** Spheres inside the part (all six axis points of radius r + margin in the part) clear of each other. */
+  function holderSceneBalls({ rnd, n, at, partMask, count, radius, margin, avoid = [] }) {
+    const balls = [], inPart = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < n && y < n && z < n && partMask[at(Math.round(x), Math.round(y), Math.round(z))];
+    for (let tries = 0; balls.length < count && tries < 40000; tries++) {
+      const r = radius[0] + rnd() * (radius[1] - radius[0]), m = r + margin, x = rnd() * n, y = rnd() * n, z = rnd() * n;
+      if (![[m, 0, 0], [-m, 0, 0], [0, m, 0], [0, -m, 0], [0, 0, m], [0, 0, -m], [0, 0, 0]].every(([a, b, d]) => inPart(x + a, y + b, z + d))) continue;
+      if ([...balls, ...avoid].some((q) => Math.hypot(x - q.x, y - q.y, z - q.z) < r + q.r + margin)) continue;
+      balls.push({ x, y, z, r });
+    }
+    return balls;
+  }
+
+  /** A one-voxel shell 1 voxel off the part (2.8 voxels away at most), above TAPE_FROM of its height, plus a voxel on
+      the part's top at 3 columns so it touches there. Never overlaps part or holder. */
+  function holderSceneTape({ rnd, n, at, partMask, holderMask, cx, cy }) {
+    const near = new Uint8Array(n * n * n), close = new Uint8Array(n * n * n), outer = ballOffsets(TAPE_NEAR), inner = ballOffsets(TAPE_CLOSE);
+    let lo = n, hi = 0;
+    for (let z = 0, i = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++, i++) {
+      if (!partMask[i]) continue;
+      lo = Math.min(lo, z); hi = Math.max(hi, z);
+      if (x > 0 && x < n - 1 && y > 0 && y < n - 1 && z > 0 && z < n - 1 && partMask[i - 1] && partMask[i + 1] && partMask[i - n] && partMask[i + n] && partMask[i - n * n] && partMask[i + n * n]) continue;
+      for (const [dx, dy, dz] of outer) if (x + dx >= 0 && y + dy >= 0 && z + dz >= 0 && x + dx < n && y + dy < n && z + dz < n) near[at(x + dx, y + dy, z + dz)] = 1;
+      for (const [dx, dy, dz] of inner) if (x + dx >= 0 && y + dy >= 0 && z + dz >= 0 && x + dx < n && y + dy < n && z + dz < n) close[at(x + dx, y + dy, z + dz)] = 1;
+    }
+    const mask = new Uint8Array(n * n * n), from = lo + TAPE_FROM * (hi - lo);
+    for (let z = Math.ceil(from), i = at(0, 0, z); z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++, i++) if (near[i] && !close[i] && !partMask[i] && !holderMask[i]) mask[i] = 1;
+    const turn = rnd() * 2 * Math.PI, topOf = (x, y) => { for (let z = n - 1; z >= 0; z--) if (partMask[at(x, y, z)]) return z; return -1; };
+    for (let k = 0; k < TAPE_TOUCHES; k++) {
+      const a = turn + (2 * Math.PI * k) / TAPE_TOUCHES, col = (r) => [Math.round(cx + r * Math.cos(a)), Math.round(cy + r * Math.sin(a))];
+      let edge = 0;
+      while (edge < n && topOf(...col(edge + 1)) >= 0) edge++;
+      const [x, y] = col(edge / 2), z = topOf(x, y);
+      const up = z < 0 ? 0 : [2, 3, 4].find((d) => z + d < n && mask[at(x, y, z + d)]); // the shell above this top
+      for (let d = 1; up && d < up; d++) if (!holderMask[at(x, y, z + d)]) mask[at(x, y, z + d)] = 1;
+    }
+    return mask;
+  }
+
+  /** Volume of size^3 voxels with a part ('blob': lumpy and porous, or 'cube': flat faces, pore-free) resting on a
+      holder ('post': a stepped cylinder from slice 0 up to the part, 'plates': a base slab and two tilted plates out to
+      the FOV edge, or 'none'). gray is raw with noise: part and tape MATRIX_GRAY, pores and air AIR_GRAY, holder
+      MATRIX_GRAY ('same') or MATRIX_GRAY + 600 ('bright'); outside the FOV circle (radius 0.47 size) gray is 0 and
+      outside is 1. With tape, a thin shell lies just off the part; with inclusions, 30 bright spheres sit inside it;
+      with touchEdge, part and holder sit off center so the part runs past the FOV. */
+  function makeHolderScene({ size = 96, voxelMm = 0.16, seed = 1, part = 'blob', holder = 'post', holderGray = 'same', tape = false, inclusions = false, touchEdge = false } = {}) {
+    const rnd = random(seed), noise = random(seed + 7919), n = size, c = (n - 1) / 2, FOV = 0.47 * n;
+    const gauss = () => Math.sqrt(-2 * Math.log(1 - noise())) * Math.cos(2 * Math.PI * noise());
+    const cx = c + (touchEdge ? EDGE_SHIFT * n : 0), cy = c, at = (x, y, z) => x + n * (y + n * z), N3 = n * n * n;
+    const fov = new Uint8Array(N3), outside = new Uint8Array(N3);
+    for (let z = 0, i = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++, i++) { fov[i] = Math.hypot(x - c, y - c) <= FOV ? 1 : 0; outside[i] = 1 - fov[i]; }
+    const zb = Math.round((holder === 'plates' ? 0.3 : 0.25) * n);
+    const partMask = holderScenePart({ rnd, n, cx, cy, fov, part, zb });
+    const pores = part === 'blob' ? holderSceneBalls({ rnd, n, at, partMask, count: BLOB_PORES, radius: BLOB_PORE_R, margin: 2 }) : [];
+    const bright = inclusions ? holderSceneBalls({ rnd, n, at, partMask, count: INCLUSIONS, radius: INCLUSION_R, margin: 1, avoid: pores }) : [];
+    const { mask: holderMask, pieces } = holderSceneHolder({ n, cx, cy, fov, partMask, zb, holder });
+    const tapeMask = tape ? holderSceneTape({ rnd, n, at, partMask, holderMask, cx, cy }) : new Uint8Array(N3);
+    const gray = new Float32Array(N3), hGray = MATRIX_GRAY + (holderGray === 'bright' ? HOLDER_BRIGHT : 0);
+    for (let i = 0; i < N3; i++) gray[i] = AIR_GRAY;
+    const paint = (balls, value) => {
+      for (const b of balls) for (let z = Math.max(0, Math.floor(b.z - b.r)); z <= Math.min(n - 1, Math.ceil(b.z + b.r)); z++) for (let y = Math.max(0, Math.floor(b.y - b.r)); y <= Math.min(n - 1, Math.ceil(b.y + b.r)); y++) for (let x = Math.max(0, Math.floor(b.x - b.r)); x <= Math.min(n - 1, Math.ceil(b.x + b.r)); x++) {
+        if ((x - b.x) ** 2 + (y - b.y) ** 2 + (z - b.z) ** 2 <= b.r * b.r) gray[at(x, y, z)] = value;
+      }
+    };
+    for (let i = 0; i < N3; i++) if (partMask[i] || tapeMask[i]) gray[i] = MATRIX_GRAY; else if (holderMask[i]) gray[i] = hGray;
+    paint(pores, AIR_GRAY); paint(bright, MATRIX_GRAY + HOLDER_BRIGHT);
+    for (let i = 0; i < N3; i++) gray[i] = fov[i] ? Math.max(1, gray[i] + NOISE_SD * gauss()) : 0;
+    return { gray, outside, dims: { nx: n, ny: n, nz: n }, voxelMm, truth: { part: partMask, holder: holderMask, tape: tapeMask, pieces, pores, matrix_gray: MATRIX_GRAY, air_gray: AIR_GRAY } };
+  }
+
+  return { makeScan, makePart, partStl, makeHolderScene };
 }));
