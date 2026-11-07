@@ -168,6 +168,12 @@ test('a bright post of two printed parts meeting at a seam that reads below the 
   assertCoverage(r);
 });
 
+test('a part cylinder as wide as a bright post, standing on it, is not taken as the post\'s face ramp', () => {
+  const r = detect(Scenes.cylinderOnPostScene());
+  assert.equal(r.method, 'bright');
+  assertCoverage(r);
+});
+
 test('a round boss of the part coaxial with the post, far above it across the part, is not a post step', () => {
   const r = detect(Scenes.bossOnCubeScene());
   const [kept, total] = count(r.holder.map((v) => 1 - v), r.truth.part);

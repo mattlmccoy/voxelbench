@@ -79,6 +79,16 @@ function twoTierRoundScene({ size = 128, seed = 1 } = {}) {
   return buildScene({ size, holder, part, seed });
 }
 
+/** The stepped post of diskOnPostScene (bright by default) with a coaxial dense part cylinder standing on the cap, one
+    voxel narrower than the cap (inside its wall ring), 0.12 size tall, air above: a part as wide as the post. */
+function cylinderOnPostScene({ size = 128, seed = 1, holderGray = 'bright' } = {}) {
+  const n = size, c = (n - 1) / 2, zs = Math.round(0.15 * n), zb = Math.round(0.25 * n), zt = zb + Math.round(0.12 * n);
+  const r = (x, y) => Math.hypot(x - c, y - c);
+  const holder = (x, y, z) => (z < zs && r(x, y) <= 0.06 * n) || (z >= zs && z < zb && r(x, y) <= 0.11 * n);
+  const part = (x, y, z) => z >= zb && z < zt && r(x, y) <= 0.11 * n - 1;
+  return buildScene({ size, holder, part, seed, holderGray });
+}
+
 /** The stepped post of diskOnPostScene under a dense cube part (half 0.18 size, z 0.25 to 0.45 size) with a coaxial round
     boss (radius `bossR` size, between the stem's and the cap's) to 0.55 size and a wide disk (radius 0.2 size) on it, all
     part: the boss is a round step coaxial with the post, the cube fills the long gap down to the cap. */
@@ -200,4 +210,4 @@ function displaced(voxTri, voxelMm, pivotVox) {
   return { tri, truth: { R, t }, cadPoint: (vox) => D(vox.map((v) => v * voxelMm)), cadDir: (d) => mat(Rd, d) };
 }
 
-module.exports = { tiltedPostScene, diskOnPostScene, twoTierRoundScene, bossOnCubeScene, couponOnSlabScene, chamferPostScene, standScene, lathe, box, cross, mat, matT, norm, rotation, displaced };
+module.exports = { tiltedPostScene, diskOnPostScene, twoTierRoundScene, cylinderOnPostScene, bossOnCubeScene, couponOnSlabScene, chamferPostScene, standScene, lathe, box, cross, mat, matT, norm, rotation, displaced };

@@ -308,10 +308,10 @@
 
   /** Grow a piece along its long axes (a post's axis; a plate's two in-plane axes) one voxel step at a time while the
       cross-section (less its rim) stays the piece's; a post also needs its wall ring bare of material (as in refine). */
-  function extend(p, { material: solid, core, nearEdge, dims }) {
+  function extend(p, { material: solid, core, nearEdge, smoothed, dims }) {
     const reach = Math.ceil(Math.hypot(dims.nx, dims.ny, dims.nz));
     for (const a of p.kind === 'post' ? [0] : [0, 1]) {
-      const cells = [0, 1].map(() => ({ n: new Float64Array(reach + 2), full: new Float64Array(reach + 2), mat: new Float64Array(reach + 2), ring: new Float64Array(reach + 2), ringFull: new Float64Array(reach + 2) }));
+      const cells = [0, 1].map(() => ({ n: new Float64Array(reach + 2), full: new Float64Array(reach + 2), mat: new Float64Array(reach + 2), ring: new Float64Array(reach + 2), ringFull: new Float64Array(reach + 2), gray: new Float64Array(reach + 2) }));
       const grow = [0, 0, 0];
       grow[a] = reach;
       if (p.kind === 'post') grow[1] = grow[2] = RING[1];
@@ -324,19 +324,19 @@
         const cell = cells[q[a] > 0 ? 1 : 0];
         if (p.kind === 'post') {
           const r = Math.hypot(q[1], q[2]);
-          if (r <= inner[1]) { cell.n[j]++; cell.full[j] += core[i]; cell.mat[j] += solid[i]; } else if (r > p.half[1] + RING[0] && r <= p.half[1] + RING[1]) { cell.ring[j]++; cell.ringFull[j] += solid[i]; }
+          if (r <= inner[1]) { cell.n[j]++; cell.full[j] += core[i]; cell.mat[j] += solid[i]; cell.gray[j] += smoothed[i]; } else if (r > p.half[1] + RING[0] && r <= p.half[1] + RING[1]) { cell.ring[j]++; cell.ringFull[j] += solid[i]; }
         } else if (Math.abs(q[1 - a]) <= inner[1 - a] && Math.abs(q[2]) <= inner[2]) { cell.n[j]++; cell.full[j] += core[i]; cell.mat[j] += solid[i]; }
       });
       // A step passes when it and the one before are filled with material together (aliasing against a slightly tilted
       // fit) and a post's wall ring is bare. It is the piece's when at least BRIGHT_STEP of it is core (bright on the
       // bright path, which a part's facet is not) or it ends a run of filled layers before an unfilled one: a bright face
-      // against air reads below the bright cut, one layer or (a post, its wall ring bare) the scan's whole edge ramp.
+      // against air reads below the bright cut, one layer or (a post, its wall ring bare) a ramp darkening layer by layer away from it (a part reads level).
       // The piece ends at the last such step filled on its own.
       const steps = cells.map((c) => {
         const filled = (j) => c.n[j] > 0 && c.mat[j] >= FILL * c.n[j]; let last = 0;
         for (let j = 1; j <= reach && c.n[j] > 0 && c.ringFull[j] <= RING_SOLID * c.ring[j] && c.mat[j - 1] + c.mat[j] >= FILL * (c.n[j - 1] + c.n[j]); j++) {
           if (c.full[j] >= BRIGHT_STEP * c.n[j]) { if (filled(j)) last = j; continue; }
-          const ramp = (k) => p.kind === 'post' && c.ringFull[k] <= RING_SOLID * c.ring[k] && c.full[k] < BRIGHT_STEP * c.n[k];
+          const ramp = (k) => p.kind === 'post' && c.gray[k] * c.n[k - 1] < c.gray[k - 1] * c.n[k] && c.ringFull[k] <= RING_SOLID * c.ring[k] && c.full[k] < BRIGHT_STEP * c.n[k];
           for (let k = j; k <= reach && filled(k) && (k === j || ramp(k)); k++) if (!filled(k + 1)) last = k; break;
         }
         return last;
