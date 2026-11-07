@@ -321,9 +321,9 @@
       much of the part served as baseline, so a scan with one material can be told from a weak second group. */
   function oneGroupText(ready, counts) {
     const ratio = ready.method === 'whole' ? groupsDip(counts).deepest : (endsDip(counts) || {}).ratio;
-    const dip = ratio == null ? 'none' : ratio.toFixed(2);
+    const dip = ratio == null ? 'no second peak after the baseline group' : `deepest dip ${ratio.toFixed(2)} of the smaller peak (${DIP_RATIO} or lower needed)`;
     const share = ready.baseShare == null ? '' : ` ${(100 * ready.baseShare).toFixed(1)}% of the part was baseline.`;
-    return `Gray shows one group here, not two, so no zones are drawn. Baseline: ${baselineText(ready.method, ready.axis)}; deepest dip ${dip} of the smaller peak (${DIP_RATIO} or lower needed).${share} Outline regions by hand with Draw region instead.`;
+    return `Gray shows one group here, not two, so no zones are drawn. Baseline: ${baselineText(ready.method, ready.axis)}; ${dip}.${share} Outline regions by hand with Draw region instead.`;
   }
 
   function finishZones(ready, { gray, voids, scanDepth, body, dims, voxelMm, settings }) {
@@ -542,5 +542,5 @@
   /** One phrase for what the gray offset is measured against, used in the page, the sheet and the CSV. */
   const baselineText = (method, axis) => (method === 'ends' ? `the pore-free ends of the ${axis} axis at equal depth below the surface` : 'the median of all pore-free solid at equal depth below the surface');
 
-  return { ZONE, ZONE_NAMES, MAX_DRAWN, zoneName, baselineText, DEFAULT_PATCH_SETTINGS, DEFAULT_ZONE_SETTINGS, distanceInside, findPatches, scanEdgeBand, prepareZones, finishZones, draftZones, dipInHistogram, valleyBetweenGroups, offsetHistogram, voidSizeMasks, paintZones, zoneTotals, voidPercentByZone, voidFractions, coarsenSolid, prepareCoarse, voidClassMasks };
+  return { ZONE, ZONE_NAMES, MAX_DRAWN, zoneName, baselineText, DEFAULT_PATCH_SETTINGS, DEFAULT_ZONE_SETTINGS, distanceInside, findPatches, scanEdgeBand, prepareZones, finishZones, draftZones, oneGroupText, dipInHistogram, valleyBetweenGroups, offsetHistogram, voidSizeMasks, paintZones, zoneTotals, voidPercentByZone, voidFractions, coarsenSolid, prepareCoarse, voidClassMasks };
 }));

@@ -316,10 +316,15 @@ test('with a whole-part baseline the zone threshold is the valley between the tw
   assert.equal(Z.valleyBetweenGroups(Float64Array.from({ length: 60 }, (_, i) => Math.exp(-(((i - 30) / 5) ** 2)))), null, 'one group');
 });
 
+test('a refusal with no second peak at all says so in words', () => {
+  assert.match(Z.oneGroupText({ method: 'ends', axis: 'x', baseShare: 0.097 }, new Float64Array(60)), /no second peak after the baseline group/);
+});
+
 test('the one-group refusal says which baseline was used, how deep the deepest dip was and how much of the part was baseline', () => {
   const ends = Z.draftZones({ ...material({ core: 2000 }), settings: ZONE_SETTINGS });
   assert.match(ends.refused, /one group/);
   assert.match(ends.refused, /Baseline: the pore-free ends of the \w axis/);
-  assert.match(ends.refused, /deepest dip (\d\.\d\d|none) .*0\.97/);
+  assert.match(ends.refused, /(deepest dip \d\.\d\d of the smaller peak \(0\.97 or lower needed\)|no second peak after the baseline group)/);
+  assert.doesNotMatch(ends.refused, /dip none/);
   assert.match(ends.refused, /\d+(\.\d)?% of the part/);
 });
