@@ -357,13 +357,12 @@
     const ext = new Map(), grow = (c) => ext.get(c) || ext.set(c, extend({ kind: c.kind, center: c.center, axes: c.axes, half: c.half }, ctx)).get(c);
     const reaches = (p, hit = false) => { visit(p, ctx.dims, [0, 0, 0], (i, q) => { hit = hit || (ctx.material[i] === 1 && inShape(p.kind, q, p.half) && Seeds.atEdge(i, ctx.nearEdge, ctx.dims)); }); return hit; };
     const ok = cands.filter((c) => c.edge || reaches(grow(c)));
-    for (let grew = true; grew;) {
-      grew = false;
-      for (const c of cands) if (!ok.includes(c) && ok.some((s) => onStep(c, s, ctx))) { ok.push(c); grew = true; }
-    }
+    const steps = []; // [step, the step it sits on]: the solid between them (a chamfer, a seam) is the post's too
+    for (let grew = true; grew;) { grew = false; for (const c of cands) { const s = !ok.includes(c) && ok.find((x) => onStep(c, x, ctx)); if (s) { ok.push(c); steps.push([c, s]); grew = true; } } }
     // Extend the largest first; a later candidate mostly inside an extended piece is a fragment of it.
     const grown = [];
     ok.sort((a, b) => b.voxels - a.voxels).forEach((c) => { if (!grown.some((g) => shareInside(c.points, g) >= DUPLICATE)) grown.push(grow(c)); });
+    steps.forEach(([c, s]) => { const g = grow(c), h = grow(s), u = row(h, 0), t = dot(sub(g.center, h.center), u), gap = Math.abs(t) - g.half[0] - h.half[0]; if (gap > 0 && grown.includes(g) && grown.includes(h)) { g.half = [g.half[0] + gap / 2, g.half[1], g.half[2]]; g.center = g.center.map((v, k) => v - Math.sign(t) * (gap / 2) * u[k]); } });
     if (grown.length > MAX_PIECES) throw new Error(`Found ${grown.length} holder pieces; at most ${MAX_PIECES} can be labeled.`);
     const pieces = grown.map((p) => {
       let voxels = 0;

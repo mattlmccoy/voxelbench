@@ -147,6 +147,20 @@ test('a bright post only a few part spreads above the part, with a shallow valle
   assertCoverage(r);
 });
 
+test('a bright post 3.4 part spreads above the part goes the bright path; it is covered outside its contact layer', () => {
+  // At this contrast the post's one-voxel layer against the part reads like the part (partial volume), so coverage is
+  // judged on the holder outside that layer; nothing of the part may be taken.
+  const r = detect(Scenes.chamferPostScene({ holderGray: 36 })), { nx, ny } = r.dims, plane = nx * ny, t = r.truth;
+  assert.equal(r.method, 'bright');
+  assert.ok(r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => p.kind).join());
+  const contact = (i) => [1, -1, nx, -nx, plane, -plane].some((d) => t.part[i + d]);
+  let total = 0, hit = 0;
+  t.holder.forEach((v, i) => { if (v && !contact(i)) { total++; hit += r.holder[i]; } });
+  assert.ok(hit >= 0.95 * total, `covers ${hit}/${total} outside the contact layer`);
+  const [leak, partTotal] = count(r.holder, t.part);
+  assert.ok(leak <= 0.01 * partTotal, `takes ${leak}/${partTotal} of the part`);
+});
+
 test('a bright post of two printed parts meeting at a seam that reads below the bright cut goes the bright path', () => {
   const r = detect(Scenes.diskOnPostScene({ holderGray: 'bright', seam: 4 }));
   assert.equal(r.method, 'bright');
