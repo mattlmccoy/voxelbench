@@ -60,10 +60,13 @@
   }
 
   /** A round post (or a short round cap) from the voxels of its solid body. The radius comes from the median distance
-      to the axis, which for a filled disk is R / sqrt(2), so it is scaled back up by sqrt(2). */
-  function fitCylinder(points) {
+      to the axis, which for a filled disk is R / sqrt(2), so it is scaled back up by sqrt(2). axis (a unit vector),
+      when known from elsewhere (the line through a chain's disk centers), replaces the principal-axis choice. */
+  function fitCylinder(points, axis) {
     const { mean, vectors: all, values } = pca(points);
-    const k = roundAxis(values), rest = all.filter((_, j) => j !== k), vectors = [all[k], rest[0], cross(all[k], rest[0])];
+    const k = roundAxis(values), u0 = axis || all[k];
+    const seed = Math.abs(u0[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0], w = cross(u0, seed), wl = Math.hypot(...w);
+    const v0 = axis ? w.map((x) => x / wl) : all.filter((_, j) => j !== k)[0], vectors = [u0, v0, cross(u0, v0)];
     const [u] = vectors, n = points.length / 3, dist = new Float64Array(n);
     for (let i = 0; i < n; i++) {
       const d = [points[3 * i] - mean[0], points[3 * i + 1] - mean[1], points[3 * i + 2] - mean[2]];
@@ -145,14 +148,20 @@
   const CORE = 2;            // voxels: a seed can miss this much rim; the thin size moves at most this far
   const GRAY_CORE = 3;       // voxels: the even-gray core stays this far inside the fitted surface (past the smoothing
                              // blur and the partial-volume voxel), or is the central voxel layer of a thinner piece
-  const SAME_ANGLE = (5 * Math.PI) / 180; // two fits of one plate or post: axes within 5 degrees
+  const SAME_ANGLE = (5 * Math.PI) / 180; // two fits of one post: axes within 5 degrees
+  const PLANE_TRY = (30 * Math.PI) / 180; // two plate fits are tried as one plate when their normals are within 30
+                             // degrees (a cost bound only: the union-fit test below decides)
+  const ONE_PLANE = 1.25;    // two plate fits are one plate when their points' spread across the union's best plane
+                             // is at most this many times the larger member's own spread across its plane
   const SAME_SIZE = [1, 0.05]; // two fits of one post (or a post step on the next): radius or axis offset <= 1 voxel + 5 %
   const DUPLICATE = 0.5;     // a candidate with this share of its points inside a kept piece adds nothing new
-  const SLACK = 1;           // voxels: two fits of one plate agree on its plane, and a point counts as inside a piece,
-                             // within this of the fitted surface (a voxel's digitization)
+  const SLACK = 1;           // voxels: a point counts as inside a piece within this of its surface (digitization)
   const RING = [0.5, 2];     // voxels: a post's wall ring, this far outside its radius
   const RING_SOLID = 0.1;    // a post grows along its axis only while its wall ring is bare (at most this share solid)
   const STEP_GAP = 2;        // voxels: a post step whose end is this close to an accepted step's end is the same post
+  const SUPPORT = [2, 0.25]; // a post step not reaching the edge must hold something up: within 2 voxels past its far
+                             // end, solid fills at least this share of its cross-section (a part's own top is bare)
+  const BRIGHT_STEP = 0.5;   // an extension step on the bright path is the holder's when at least this share reads bright
   const MAX_PIECES = 254;    // holderMask labels are 8-bit (piece index + 1)
 
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -190,28 +199,27 @@
     return { fill: n ? full / n : 0, sd: m ? Math.sqrt(Math.max(0, ss / m - (s / m) ** 2)) : Infinity };
   }
 
-  /** Re-measure the thin size from the solid's profile across it: a plate's solid share in 1-voxel layers along its
-      normal summed to a thickness (centered on the layers' weighted mean), a post's in 0.5-voxel rings summed to a
-      cross-section area. Each layer or ring is a share of its own voxels, so a cut by the scan edge does not bias it.
-      The window reaches CORE voxels past the fit, and the size moves by at most CORE (a seed can miss the rim). */
-  function refine(p, { solid, nearEdge, dims }) {
-    const post = p.kind === 'post', grow = post ? [0, CORE, CORE] : [0, 0, CORE], w = p.half.map((h, k) => h + grow[k]);
+  /** Re-measure the thin size from the material's profile across it: a post's share in 0.5-voxel rings summed to an
+      area, a plate's in 1-voxel layers along its normal summed to a thickness (centered on their weighted mean). Each
+      bin is a share of its own voxels (unbiased by an edge cut); material past a face (a resting part, a crossing
+      plate), the outermost margin bin's share, comes off that side. The window reaches 2 CORE past the fit and the
+      size moves at most CORE. material is the solid, or on the bright path the solid above the holder's half-maximum
+      (the part's threshold puts a brighter holder's edge past its true one, into the part where they touch). */
+  function refine(p, { material, nearEdge, dims }) {
+    const post = p.kind === 'post', grow = post ? [0, 2 * CORE, 2 * CORE] : [0, 0, 2 * CORE], w = p.half.map((h, k) => h + grow[k]);
     const step = post ? 0.5 : 1, bins = Math.ceil((post ? w[1] : 2 * w[2]) / step) + 1, n = new Float64Array(bins), full = new Float64Array(bins);
     visit(p, dims, grow, (i, q) => {
       if (nearEdge[i] || !inShape(p.kind, q, w)) return;
       const b = Math.floor((post ? Math.hypot(q[1], q[2]) : q[2] + w[2]) / step);
-      n[b]++; full[b] += solid[i];
+      n[b]++; full[b] += material[i];
     });
-    // Solid beyond the faces (a part resting on the plate, a crossing plate) is measured in the outermost of the CORE
-    // margin bins on each side that holds at least half the voxels of the fullest bin, and taken off that side's shares.
     const share = (b) => (n[b] ? full[b] / n[b] : 0), clamp = (v, h) => Math.max(h - CORE, Math.min(h + CORE, v));
-    const most = Math.max(...n), outer = (from, to) => {
-      const by = from <= to ? 1 : -1;
-      for (let b = from; by * (to - b) >= 0; b += by) if (n[b] >= most / 2) return share(b);
+    const most = Math.max(...n), span = post ? w[1] : 2 * w[2], mid = (bins - 1) / 2;
+    const margin = (from, to) => { // the outermost well-filled bin (at least half the fullest) wholly past the face
+      for (let b = from; from <= to ? b <= to : b >= to; b += from <= to ? 1 : -1) if (n[b] >= most / 2) return share(b);
       return 0;
     };
-    const span = post ? w[1] : 2 * w[2], mid = (bins - 1) / 2; // margin bins lie wholly past the fitted face
-    const base = [post ? 0 : outer(0, Math.floor(CORE / step) - 1), outer(Math.floor(span / step), Math.ceil((span - CORE) / step))];
+    const base = [post ? 0 : margin(0, Math.floor(CORE / step) - 1), margin(Math.floor(span / step), Math.ceil((span - CORE) / step))];
     let size = 0, moment = 0;
     for (let b = 0; b < bins; b++) {
       const f0 = base[post || b > mid ? 1 : 0], f = f0 < 1 ? Math.max(0, (share(b) - f0) / (1 - f0)) : 0;
@@ -225,14 +233,26 @@
   }
 
   const passes = (p, ctx) => { const { fill, sd } = cues(p, ctx); return fill >= FILL && sd <= EVEN_GRAY * ctx.stats.spread; };
-  const fit = (c, ctx) => refine({ kind: c.kind, edge: c.edge, voxels: c.voxels, points: c.points, ...(c.kind === 'post' ? fitCylinder(c.points) : fitSlab(c.points)) }, ctx);
+  const fit = (c, ctx) => refine({ kind: c.kind, edge: c.edge, voxels: c.voxels, points: c.points, axis: c.axis,
+    ...(c.kind === 'post' ? fitCylinder(c.points, c.axis) : { ...fitSlab(c.points), flat: flatness(c.points) }) }, ctx);
 
-  /** Two fits of the same plate (coplanar) or the same post step (coaxial, same radius). */
-  function samePiece(a, b) {
-    if (a.kind !== b.kind || angle(row(a, a.kind === 'post' ? 0 : 2), row(b, b.kind === 'post' ? 0 : 2)) > SAME_ANGLE) return false;
-    const d = sub(b.center, a.center);
-    if (a.kind === 'plate') return Math.abs(dot(d, row(a, 2))) <= a.half[2] + SLACK && Math.abs(dot(d, row(b, 2))) <= b.half[2] + SLACK;
-    const u = row(a, 0), t = dot(d, u), off = Math.hypot(d[0] - t * u[0], d[1] - t * u[1], d[2] - t * u[2]);
+  /** Two posts' center-line axes averaged by size (sign-aligned); undefined for plates. */
+  function meanAxis(k, f) {
+    if (!k.axis || !f.axis) return undefined;
+    const sign = dot(k.axis, f.axis) < 0 ? -1 : 1, m = k.axis.map((v, j) => k.voxels * v + sign * f.voxels * f.axis[j]), len = Math.hypot(...m);
+    return m.map((v) => v / len);
+  }
+
+  /** Spread of points across their best plane: the square root of the least principal variance. */
+  const flatness = (points) => Math.sqrt(Math.max(0, pca(points).values[2]));
+
+  /** Two fits of the same plate (their points lie on one plane about as tightly as each alone; fragments of one plate
+      can tilt several degrees apart, more at finer voxels) or the same post step (coaxial, same radius). */
+  function samePiece(a, b, union) {
+    if (a.kind !== b.kind) return false;
+    if (a.kind === 'plate') return angle(row(a, 2), row(b, 2)) <= PLANE_TRY && flatness(union()) <= ONE_PLANE * Math.max(a.flat, b.flat);
+    if (angle(row(a, 0), row(b, 0)) > SAME_ANGLE) return false;
+    const d = sub(b.center, a.center), u = row(a, 0), t = dot(d, u), off = Math.hypot(d[0] - t * u[0], d[1] - t * u[1], d[2] - t * u[2]);
     return within(a.half[1], b.half[1], SAME_SIZE) && off <= SAME_SIZE[0] + SAME_SIZE[1] * a.half[1];
   }
 
@@ -253,10 +273,14 @@
       merged = false;
       for (let a = 0; a < list.length && !merged; a++) for (let b = a + 1; b < list.length && !merged; b++) {
         const [k, f] = [list[a], list[b]];
-        if (failed.has(pair(k, f)) || !samePiece(k, f)) continue;
-        const points = new Float32Array(k.points.length + f.points.length);
-        points.set(k.points); points.set(f.points, k.points.length);
-        const m = fit({ kind: k.kind, edge: k.edge || f.edge, voxels: k.voxels + f.voxels, points }, ctx);
+        let points = null;
+        const union = () => {
+          if (!points) { points = new Float32Array(k.points.length + f.points.length); points.set(k.points); points.set(f.points, k.points.length); }
+          return points;
+        };
+        if (failed.has(pair(k, f)) || !samePiece(k, f, union)) continue;
+        union();
+        const m = fit({ kind: k.kind, edge: k.edge || f.edge, voxels: k.voxels + f.voxels, points, axis: meanAxis(k, f) }, ctx);
         if (passes(m, ctx)) { list[a] = m; list.splice(b, 1); merged = true; } else failed.add(pair(k, f));
       }
     }
@@ -265,19 +289,28 @@
     return kept;
   }
 
-  /** A post step not reaching the edge itself sits on an accepted step: coaxial and end to end. */
-  function onStep(p, s) {
+  /** A post step not reaching the edge itself sits on an accepted step (coaxial and end to end) and holds something
+      up past its far end. Without that, a round part resting centered on a post would pass as one more step. */
+  function onStep(p, s, ctx) {
     if (p.kind !== 'post' || s.kind !== 'post' || angle(row(p, 0), row(s, 0)) > SAME_ANGLE) return false;
     const u = row(s, 0), d = sub(p.center, s.center), t = dot(d, u), off = Math.hypot(d[0] - t * u[0], d[1] - t * u[1], d[2] - t * u[2]);
-    return off <= SAME_SIZE[0] + SAME_SIZE[1] * Math.max(p.half[1], s.half[1]) && Math.abs(t) - p.half[0] - s.half[0] <= STEP_GAP;
+    if (off > SAME_SIZE[0] + SAME_SIZE[1] * Math.max(p.half[1], s.half[1]) || Math.abs(t) - p.half[0] - s.half[0] > STEP_GAP) return false;
+    const away = Math.sign(dot(row(p, 0), d)) || 1, inner = Math.max(p.half[1] - 1, p.half[1] / 2);
+    let n = 0, full = 0;
+    visit(p, ctx.dims, [SUPPORT[0], 0, 0], (i, q) => {
+      const over = away * q[0] - p.half[0];
+      if (over <= 0 || over > SUPPORT[0] || ctx.nearEdge[i] || Math.hypot(q[1], q[2]) > inner) return;
+      n++; full += ctx.solid[i];
+    });
+    return n > 0 && full >= SUPPORT[1] * n;
   }
 
-  /** Grow a piece along its long axes (a post's axis; a plate's two in-plane axes), one voxel step at a time, while
-      the solid fills the cross-section; a post also needs its wall ring bare (else it runs into something wider). */
-  function extend(p, { solid, nearEdge, dims }) {
+  /** Grow a piece along its long axes (a post's axis; a plate's two in-plane axes) one voxel step at a time while the
+      cross-section (less its rim) stays the piece's; a post also needs its wall ring bare of material (as in refine). */
+  function extend(p, { material: solid, core, nearEdge, dims }) {
     const reach = Math.ceil(Math.hypot(dims.nx, dims.ny, dims.nz));
     for (const a of p.kind === 'post' ? [0] : [0, 1]) {
-      const cells = [0, 1].map(() => ({ n: new Float64Array(reach + 2), full: new Float64Array(reach + 2), ring: new Float64Array(reach + 2), ringFull: new Float64Array(reach + 2) }));
+      const cells = [0, 1].map(() => ({ n: new Float64Array(reach + 2), full: new Float64Array(reach + 2), mat: new Float64Array(reach + 2), ring: new Float64Array(reach + 2), ringFull: new Float64Array(reach + 2) }));
       const grow = [0, 0, 0];
       grow[a] = reach;
       if (p.kind === 'post') grow[1] = grow[2] = RING[1];
@@ -290,15 +323,20 @@
         const cell = cells[q[a] > 0 ? 1 : 0];
         if (p.kind === 'post') {
           const r = Math.hypot(q[1], q[2]);
-          if (r <= inner[1]) { cell.n[j]++; cell.full[j] += solid[i]; } else if (r > p.half[1] + RING[0] && r <= p.half[1] + RING[1]) { cell.ring[j]++; cell.ringFull[j] += solid[i]; }
-        } else if (Math.abs(q[1 - a]) <= inner[1 - a] && Math.abs(q[2]) <= inner[2]) { cell.n[j]++; cell.full[j] += solid[i]; }
+          if (r <= inner[1]) { cell.n[j]++; cell.full[j] += core[i]; cell.mat[j] += solid[i]; } else if (r > p.half[1] + RING[0] && r <= p.half[1] + RING[1]) { cell.ring[j]++; cell.ringFull[j] += solid[i]; }
+        } else if (Math.abs(q[1 - a]) <= inner[1 - a] && Math.abs(q[2]) <= inner[2]) { cell.n[j]++; cell.full[j] += core[i]; cell.mat[j] += solid[i]; }
       });
-      // A step passes when it and the step before are filled together (one voxel step can alias against a slightly
-      // tilted fit) and, for a post, its own wall ring is bare. The piece ends at the last passing step filled on its own.
+      // A step passes when it and the one before are filled with material together (aliasing against a slightly tilted
+      // fit) and a post's wall ring is bare. It is the piece's when at least BRIGHT_STEP of it is core (bright on the
+      // bright path, which a part's facet is not) or it is an end layer with no filled layer past it (a bright face
+      // against air reads below the bright cut). The piece ends at the last such step filled on its own.
       const steps = cells.map((c) => {
-        let j = 1, last = 0;
-        for (; j <= reach && c.n[j] > 0 && c.full[j - 1] + c.full[j] >= FILL * (c.n[j - 1] + c.n[j]) && c.ringFull[j] <= RING_SOLID * c.ring[j]; j++) {
-          if (c.full[j] >= FILL * c.n[j]) last = j;
+        const filled = (j) => c.n[j] > 0 && c.mat[j] >= FILL * c.n[j];
+        let last = 0;
+        for (let j = 1; j <= reach && c.n[j] > 0 && c.ringFull[j] <= RING_SOLID * c.ring[j] && c.mat[j - 1] + c.mat[j] >= FILL * (c.n[j - 1] + c.n[j]); j++) {
+          if (c.full[j] >= BRIGHT_STEP * c.n[j]) { if (filled(j)) last = j; continue; }
+          if (filled(j) && !filled(j + 1)) last = j;
+          break;
         }
         return last;
       });
@@ -316,7 +354,7 @@
     const ok = cands.filter((c) => c.edge || foundBy === 'bright');
     for (let grew = true; grew;) {
       grew = false;
-      for (const c of cands) if (!ok.includes(c) && ok.some((s) => onStep(c, s))) { ok.push(c); grew = true; }
+      for (const c of cands) if (!ok.includes(c) && ok.some((s) => onStep(c, s, ctx))) { ok.push(c); grew = true; }
     }
     // Extend the largest first; a later candidate mostly inside an extended piece is a fragment of it.
     const grown = [];
@@ -339,13 +377,15 @@
     const stage = 'Finding the holder', total = dims.nx + dims.ny + dims.nz;
     let k = 0;
     const tick = () => { if (onProgress) onProgress(stage, ++k, total); };
-    const stats = Seeds.grayStats(smoothed, solid);
+    const stats = Seeds.grayStats(smoothed, solid, dims);
     if (!stats) { if (onProgress) onProgress(stage, total, total); return { method: 'none', pieces: [] }; }
-    const nearEdge = Seeds.nearEdgeMask(outside, dims), ctx = { solid, outside, nearEdge, smoothed, dims, stats, voxelMm };
+    const nearEdge = Seeds.nearEdgeMask(outside, dims), ctx = { solid, material: solid, core: solid, outside, nearEdge, smoothed, dims, stats, voxelMm };
     const run = (mask) => { k = 0; return Seeds.sliceChains(mask, nearEdge, dims, tick); };
     const bright = Seeds.brightBody(smoothed, solid, nearEdge, dims, stats);
     if (bright) {
-      const pieces = accept(run(bright), ctx, 'bright');
+      const edge = (bright.peak + Seeds.airPeak(smoothed, solid, outside)) / 2, material = new Uint8Array(solid.length);
+      for (let i = 0; i < solid.length; i++) material[i] = solid[i] && smoothed[i] > edge ? 1 : 0;
+      const pieces = accept(run(bright.mask), { ...ctx, material, core: bright.mask }, 'bright');
       if (pieces.length) return { method: 'bright', pieces };
     }
     const pieces = accept(run(solid), ctx, 'shape');

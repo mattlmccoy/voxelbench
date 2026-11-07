@@ -76,8 +76,9 @@ test('a tape piece takes only solid whose local thickness is at most 2', () => {
 
 // findHolder on full scenes: smoothed and solid as buildBody makes them (sigma 1, cut at the midpoint of part and air).
 const P = require('../app/ct_pores.js');
+const Scenes = require('./holder_scenes.js');
 function detect(opts, onProgress) {
-  const s = S.makeHolderScene(opts), { dims, truth } = s;
+  const s = opts.gray ? opts : S.makeHolderScene(opts), { dims, truth } = s;
   const smoothed = P.gaussian(s.gray, dims, 1), cut = (truth.matrix_gray + truth.air_gray) / 2, solid = new Uint8Array(smoothed.length);
   for (let i = 0; i < solid.length; i++) solid[i] = smoothed[i] > cut && !s.outside[i] ? 1 : 0;
   const found = H.findHolder({ smoothed, solid, outside: s.outside, dims, voxelMm: s.voxelMm, onProgress });
@@ -118,8 +119,9 @@ test('tilted plates and a base slab are found as three plates', () => {
 
 test('a flat-faced cube on a post keeps every face', () => {
   const r = detect({ part: 'cube', holder: 'post' }), { nx, ny } = r.dims;
-  const [, partTotal] = count(r.holder, r.truth.part), [leak] = count(r.holder, r.truth.part);
-  assert.ok(leak <= 0.01 * partTotal, `takes ${leak}/${partTotal} of the cube`);
+  assert.ok(r.pieces.length > 0 && r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => p.kind).join());
+  assertCoverage(r);
+  const [, partTotal] = count(r.holder, r.truth.part);
   const c = [0, 0, 0];
   r.truth.part.forEach((v, i) => { if (v) { c[0] += i % nx; c[1] += Math.floor(i / nx) % ny; c[2] += Math.floor(i / (nx * ny)); } });
   c.forEach((_, k) => { c[k] /= partTotal; });
@@ -155,4 +157,35 @@ test('progress reaches its total', () => {
   assert.equal(stage, 'Finding the holder');
   assert.equal(k, total);
   assert.equal(total, 3 * 64, 'once per slice per direction');
+});
+
+test('a large post tilted 10 or 20 degrees is found', () => {
+  for (const tiltDeg of [10, 20]) {
+    const r = detect(Scenes.tiltedPostScene({ radius: 0.15, tiltDeg }));
+    assert.notEqual(r.method, 'none', `tilt ${tiltDeg}`);
+    assert.ok(r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => p.kind).join());
+    assertCoverage(r);
+  }
+});
+
+test('a flat round part on a stepped post keeps its voxels', () => {
+  const r = detect(Scenes.diskOnPostScene());
+  const [kept, total] = count(r.holder.map((v) => 1 - v), r.truth.part);
+  assert.ok(kept >= 0.99 * total, `keeps ${kept}/${total} of the disk (${r.pieces.map((p) => p.kind).join()})`);
+  const [hit, holderTotal] = count(r.holder, r.truth.holder);
+  assert.ok(hit >= 0.95 * holderTotal, `covers ${hit}/${holderTotal}`);
+});
+
+test('a bright holder with more voxels than the part is found by brightness', () => {
+  const r = detect({ holder: 'plates', holderGray: 'bright' });
+  const holderVoxels = r.truth.holder.reduce((a, v) => a + v, 0), partVoxels = r.truth.part.reduce((a, v) => a + v, 0);
+  assert.ok(holderVoxels > partVoxels, 'scene: holder outnumbers part');
+  assert.equal(r.method, 'bright');
+  assertCoverage(r);
+});
+
+test('plates at twice the resolution are still three plates', () => {
+  const r = detect({ size: 256, holder: 'plates' });
+  assert.deepEqual(r.pieces.map((p) => p.kind), ['plate', 'plate', 'plate']);
+  assertCoverage(r);
 });

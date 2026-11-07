@@ -11,6 +11,8 @@
   'use strict';
 
   const HIST_BINS = 1024;      // gray histogram resolution over the solid's own gray range
+  const DEEP = 3;              // voxels: gray statistics come from voxels this far inside the solid (past the smoothing
+                               // blur and the partial-volume voxel; the same depth as vb_holder's even-gray core)
   const BRIGHT_SIGMAS = 5;     // bright = beyond 5 part-spreads above the part's peak (Gaussian tail share ~3e-7)
   const BRIGHT_DOMINANT = 0.5; // the largest bright body holds at least this share of all bright voxels
   const BRIGHT_MIN_SHARE = 0.01; // and at least this share of the solid: a holder, not an inclusion
@@ -18,7 +20,8 @@
   const MIN_AREA = 12;         // pixels: a 2-D component smaller than a radius-2 disk has no measurable shape
   const DISK_ASPECT = 1.15;    // round: longest over shortest moment axis
   const DISK_FILL = 0.9;       // round: area over the disk of the same second moment
-  const DISK_EDGE_ALLOW = 1;   // voxels: farthest pixel at most the moment radius plus one voxel (a square's corner is 22 % out)
+  const DISK_EDGE_ALLOW = 1;   // voxels: farthest pixel at most the moment ellipse's long semi-axis plus one voxel (a
+                               // square's corner is 22 % out)
   const CLIPPED = 0.25;        // a component with more than this share of its outline on the scan edge is cut by the FOV, not round
   const BAR_ASPECT = 3;        // bar: length over width
   const BAR_FILL = 0.9;        // bar: area over the rectangle of the same second moments
@@ -35,27 +38,50 @@
   const MAX_POINTS = 1 << 21;  // fit points kept over all chains (voxels are sampled evenly past this)
 
   /** The part's main gray peak in the solid and its spread (a Gaussian sigma from the peak's lower half width; the
-      lower side is free of any brighter holder). null for an empty solid. */
-  function grayStats(smoothed, solid) {
+      lower side is free of any brighter holder): the histogram mode, or the lower of two separated populations.
+      Counted over voxels at least DEEP inside the solid (all solid when too few are), so partial-volume layers at
+      surfaces, which pile up as narrow peaks on a large flat plate, do not pose as a material. null for an empty solid. */
+  function grayStats(smoothed, solid, dims) {
+    const deep = P.boxErode(solid, dims, DEEP);
+    let all = 0, inner = 0;
+    for (let i = 0; i < solid.length; i++) { all += solid[i]; inner += deep[i] & solid[i]; }
+    if (!all) return null;
+    const use = inner >= BRIGHT_MIN_SHARE * all ? (i) => deep[i] & solid[i] : (i) => solid[i];
     let lo = Infinity, hi = -Infinity, count = 0;
-    for (let i = 0; i < solid.length; i++) if (solid[i]) { const g = smoothed[i]; if (g < lo) lo = g; if (g > hi) hi = g; count++; }
-    if (!count) return null;
+    for (let i = 0; i < solid.length; i++) if (use(i)) { const g = smoothed[i]; if (g < lo) lo = g; if (g > hi) hi = g; count++; }
     const width = Math.max((hi - lo) / HIST_BINS, 1e-6), hist = new Float64Array(HIST_BINS + 1);
-    for (let i = 0; i < solid.length; i++) if (solid[i]) hist[Math.floor((smoothed[i] - lo) / width)]++;
-    const soft = hist.map((_, b) => (hist[b - 1] || 0) / 4 + hist[b] / 2 + (hist[b + 1] || 0) / 4);
-    let mode = 0;
-    for (let b = 1; b < soft.length; b++) if (soft[b] > soft[mode]) mode = b;
-    let b = mode;
-    while (b > 0 && soft[b] > soft[mode] / 2) b--;
-    const spread = Math.max(width, ((mode - b) * width) / Math.sqrt(2 * Math.log(2)));
-    return { peak: lo + (mode + 0.5) * width, spread, lo, width, hist, count };
+    for (let i = 0; i < solid.length; i++) if (use(i)) hist[Math.floor((smoothed[i] - lo) / width)]++;
+    // A peak's spread is its lower half width (a brighter holder cannot reach that side) as a Gaussian sigma, on the
+    // histogram smoothed by half that sigma (refined a few times, the kernel's own width taken off), so a sparse,
+    // spiky histogram gives a stable peak and spread.
+    const smooth = (sk) => {
+      const r = Math.ceil(3 * sk), k = Array.from({ length: 2 * r + 1 }, (_, j) => Math.exp(-((j - r) ** 2) / (2 * sk * sk)));
+      return hist.map((_, b) => { let v = 0; for (let j = -r; j <= r; j++) v += (hist[b + j] || 0) * k[j + r]; return v; });
+    };
+    const peakOf = (g, from, to) => { let m = from; for (let b = from; b < to; b++) if (g[b] > g[m]) m = b; return m; };
+    const sigmaAt = (g, m, sk) => { let b = m; while (b > 0 && g[b] > g[m] / 2) b--; return Math.sqrt(Math.max(1, ((m - b) / Math.sqrt(2 * Math.log(2))) ** 2 - sk * sk)); };
+    let sk = 1, soft = smooth(sk), mode = peakOf(soft, 0, soft.length);
+    for (let it = 0; it < 3; it++) { sk = Math.max(1, sigmaAt(soft, mode, sk) / 2); soft = smooth(sk); mode = peakOf(soft, 0, soft.length); }
+    // A bright holder with more voxels than the part owns the mode. The part is then a separate population below it:
+    // its own peak more than BRIGHT_SIGMAS spreads down, with a valley under half its height in between, holding at
+    // least BRIGHT_MIN_SHARE of the solid. (A part's partial-volume tail rises toward its peak, so it has no valley.)
+    const below = mode - Math.ceil(BRIGHT_SIGMAS * sigmaAt(soft, mode, sk));
+    const low = below > 0 ? peakOf(soft, 0, below) : -1;
+    if (low >= 0) {
+      let valley = low, share = 0;
+      for (let b = low; b < mode; b++) if (soft[b] < soft[valley]) valley = b;
+      for (let b = 0; b <= valley; b++) share += hist[b];
+      if (soft[valley] < soft[low] / 2 && share >= BRIGHT_MIN_SHARE * count) mode = low;
+    }
+    const sigma = () => Math.max(1, sigmaAt(soft, mode, sk)) * width;
+    return { peak: lo + (mode + 0.5) * width, spread: sigma(), lo, width, hist, count };
   }
 
   /** Voxels within EDGE_REACH of the outside mask (the volume border is checked by coordinates). */
   const nearEdgeMask = (outside, dims) => P.boxDilate(outside, dims, EDGE_REACH);
   const nearBorder = (k, n) => k < EDGE_REACH || k >= n - EDGE_REACH;
 
-  /** The bright holder body, or null. Bright voxels are the solid above the midpoint of the part's peak and the
+  /** The bright holder body { mask, peak (the bright population's gray) }, or null. Bright voxels are the solid above the midpoint of the part's peak and the
       bright population's own peak; the largest connected body must hold most of them, be a real share of the solid
       and reach the scan edge (bright inclusions are many, small and inside the part). */
   function brightBody(smoothed, solid, nearEdge, dims, stats) {
@@ -77,7 +103,19 @@
       bright[i] = labels[i] === big ? 1 : 0;
       if (bright[i] && (nearEdge[i] || nearBorder(x, dims.nx) || nearBorder(y, dims.ny) || nearBorder(z, dims.nz))) edge = true;
     }
-    return edge ? bright : null;
+    return edge ? { mask: bright, peak: lo + (top + 0.5) * width } : null;
+  }
+
+  /** Air's gray: the mode of the smoothed gray over the reconstruction outside the solid. */
+  function airPeak(smoothed, solid, outside) {
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < solid.length; i++) if (!solid[i] && !outside[i]) { const g = smoothed[i]; if (g < lo) lo = g; if (g > hi) hi = g; }
+    if (!(hi >= lo)) return 0;
+    const width = Math.max((hi - lo) / HIST_BINS, 1e-6), hist = new Float64Array(HIST_BINS + 1);
+    for (let i = 0; i < solid.length; i++) if (!solid[i] && !outside[i]) hist[Math.floor((smoothed[i] - lo) / width)]++;
+    let mode = 0;
+    for (let b = 1; b < hist.length; b++) if (hist[b] > hist[mode]) mode = b;
+    return lo + (mode + 0.5) * width;
   }
 
   // Slice frames: direction d slices along axis d; (u, v) are the other two axes in order.
@@ -92,6 +130,7 @@
     const h = Math.sqrt(((cuu - cvv) / 2) ** 2 + cuv * cuv), l1 = (cuu + cvv) / 2 + h, l2 = Math.max(1e-9, (cuu + cvv) / 2 - h);
     c.angle = 0.5 * Math.atan2(2 * cuv, cuu - cvv);
     const R = Math.sqrt(2 * (l1 + l2));
+    c.semi = 2 * Math.sqrt(l1); // the long semi-axis of the ellipse with these moments (a tilted post's section)
     if (Math.sqrt(l1 / l2) <= DISK_ASPECT && c.n >= DISK_FILL * Math.PI * R * R && c.perimEdge <= CLIPPED * c.perim) { c.size = R; return 'disk'; }
     const L = Math.sqrt(12 * l1), W = Math.sqrt(12 * l2);
     if (L >= BAR_ASPECT * W && W >= BAR_MIN_WIDTH && c.n >= BAR_FILL * L * W) { c.size = W; return 'bar'; }
@@ -160,7 +199,7 @@
             m.set(p, (m.get(p) || 0) + 1);
           }
           cur.forEach((c) => {
-            if (c.kind === 'disk' && Math.sqrt(c.maxD2) > c.size + DISK_EDGE_ALLOW) c.kind = null;
+            if (c.kind === 'disk' && Math.sqrt(c.maxD2) > c.semi + DISK_EDGE_ALLOW) c.kind = null;
             if (!c.kind) return;
             c.slice = s; c.gid = comps.length; up.push(c.gid); comps.push(c);
           });
@@ -179,6 +218,26 @@
     return chains;
   }
 
+  /** A post's axis: the line through its per-slice disk centers (area-weighted), oriented along the slice normal. The
+      voxels of a tilted post form a sheared stack of disks, whose own principal axis leans away from the true one. */
+  function centerLine(g, d) {
+    const [ua, va] = FRAMES[d], at = (c) => { const p = [0, 0, 0]; p[d] = c.slice; p[ua] = c.mu; p[va] = c.mv; return p; };
+    let w = 0;
+    const mean = [0, 0, 0], ss = new Array(9).fill(0);
+    g.forEach((c) => { const p = at(c); w += c.n; for (let k = 0; k < 3; k++) mean[k] += c.n * p[k]; });
+    for (let k = 0; k < 3; k++) mean[k] /= w;
+    g.forEach((c) => { const p = at(c).map((v, k) => v - mean[k]); for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++) ss[3 * r + k] += c.n * p[r] * p[k]; });
+    // Power iteration from the slice normal: the centers spread along the axis (a one-slice spread is enough).
+    let v = [0, 0, 0];
+    v[d] = 1;
+    for (let it = 0; it < 50; it++) {
+      const m = [0, 1, 2].map((r) => ss[3 * r] * v[0] + ss[3 * r + 1] * v[1] + ss[3 * r + 2] * v[2]), len = Math.hypot(...m);
+      if (!len) break;
+      v = m.map((x) => x / len);
+    }
+    return v[d] < 0 ? v.map((x) => -x) : v;
+  }
+
   /** Comps grouped by chain; chains kept when they repeat over MIN_SLICES and keep a straight wall. */
   function gather(comps, find, d, { nx, ny }) {
     const groups = new Map();
@@ -191,10 +250,10 @@
       let k = 0;
       g.forEach((c) => (c.pts || []).forEach((i) => { points[k++] = i % nx; points[k++] = Math.floor(i / nx) % ny; points[k++] = Math.floor(i / (nx * ny)); }));
       if (!n) return;
-      out.push({ kind: g[0].kind === 'disk' ? 'post' : 'plate', dir: d, edge: g.some((c) => c.edge), voxels: g.reduce((a, c) => a + c.n, 0), points });
+      out.push({ kind: g[0].kind === 'disk' ? 'post' : 'plate', dir: d, edge: g.some((c) => c.edge), voxels: g.reduce((a, c) => a + c.n, 0), points, ...(g[0].kind === 'disk' ? { axis: centerLine(g, d) } : {}) });
     });
     return out;
   }
 
-  return { grayStats, nearEdgeMask, brightBody, sliceChains };
+  return { grayStats, nearEdgeMask, brightBody, airPeak, sliceChains };
 }));
