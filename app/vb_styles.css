@@ -114,6 +114,7 @@ input[type=range] { accent-color: var(--accent); }
 .setting input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0; }
 .setting .v { text-align: right; color: var(--accent); }
 .hint { margin: 0; color: var(--muted); font-size: 12px; }
+.hint.bad { color: var(--err); } /* a warning in a hint line (the holder warning) reads as one */
 .pickrow { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; align-items: center; margin: 4px 0; }
 .sampleform { display: grid; gap: 4px; margin-bottom: 8px; }
 .sampleform label { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; align-items: center; }
