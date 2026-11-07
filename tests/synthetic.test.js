@@ -158,11 +158,10 @@ test('holder scene parts rest on the holder, tape touches the part, and the opti
 
 test('a holder scene merges part and holder in the sample mask, as a real part resting flat does', () => {
   // The app's own body builder: smooth (sigma 1), threshold midway between matrix and air, open, keep the largest
-  // component, close and fill. Size 128 so the thin stem and plates (0.06 and 0.035 of the size) survive the opening.
+  // component, close and fill. Default size: the stem (0.06 of the size) and plates (0.06) are thick enough to survive the opening.
   const P = require('../app/ct_pores.js');
-  const n = 128, dims = { nx: n, ny: n, nz: n };
   for (const [holder, part] of [['post', 'blob'], ['plates', 'blob'], ['post', 'cube']]) {
-    const s = S.makeHolderScene({ size: n, holder, part });
+    const s = S.makeHolderScene({ holder, part }), n = Math.cbrt(s.gray.length), dims = { nx: n, ny: n, nz: n };
     const mid = (s.truth.matrix_gray + s.truth.air_gray) / 2;
     const { filled } = P.buildBody(s.gray, s.outside, dims, { ...P.DEFAULT_SETTINGS, sigma: 1, bodyThreshold: mid }, null);
     let nPart = 0, inPart = 0, nHolder = 0, inHolder = 0;

@@ -168,7 +168,7 @@
 
   // Holder scenes. A part rests on a post or in tilted plates. Sizes are ratios of the volume size. The part is built
   // first, so one seed gives one part whatever the holder, and truth carries disjoint masks for part, holder and tape.
-  const HOLDER_BRIGHT = 600, POST_CAP_R = 0.14, POST_CAP_H = 0.1, POST_STEM_R = 0.06, PLATE_T = 0.035, PLATE_TILTS = [25, 60];
+  const HOLDER_BRIGHT = 600, POST_CAP_R = 0.14, POST_CAP_H = 0.1, POST_STEM_R = 0.06, PLATE_T = 0.06, PLATE_TILTS = [25, 60];
   const CUBE_SIDE = 0.3, EDGE_SHIFT = 0.34, BLOB_PORES = 25, BLOB_PORE_R = [2, 4], INCLUSIONS = 30, INCLUSION_R = [1, 2];
   const FACET_DEPTH = 0.04, TAPE_NEAR = 2.8, TAPE_CLOSE = 1.8, TAPE_TOUCHES = 3, TAPE_FROM = 0.3;
 
@@ -276,7 +276,7 @@
       MATRIX_GRAY ('same') or MATRIX_GRAY + 600 ('bright'); outside the FOV circle (radius 0.47 size) gray is 0 and
       outside is 1. With tape, a thin shell lies just off the part; with inclusions, 30 bright spheres sit inside it;
       with touchEdge, part and holder sit off center so the part runs past the FOV. */
-  function makeHolderScene({ size = 96, voxelMm = 0.16, seed = 1, part = 'blob', holder = 'post', holderGray = 'same', tape = false, inclusions = false, touchEdge = false } = {}) {
+  function makeHolderScene({ size = 128, voxelMm = 0.16, seed = 1, part = 'blob', holder = 'post', holderGray = 'same', tape = false, inclusions = false, touchEdge = false } = {}) {
     const rnd = random(seed), noise = random(seed + 7919), n = size, c = (n - 1) / 2, FOV = 0.47 * n;
     const gauss = () => Math.sqrt(-2 * Math.log(1 - noise())) * Math.cos(2 * Math.PI * noise());
     const cx = c + (touchEdge ? EDGE_SHIFT * n : 0), cy = c, at = (x, y, z) => x + n * (y + n * z), N3 = n * n * n;
