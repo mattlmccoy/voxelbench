@@ -290,12 +290,12 @@
   }
 
   /** A post step not reaching the edge itself sits on an accepted step (coaxial and end to end, or across a gap that solid
-      fills: a chamfer, a seam) and holds something up past its far end. Else a round part centered on a post is one more step. */
+      fills no longer than the radius drop: a chamfer, a seam) and holds something up past its far end. Else a round part centered on a post is one more step. */
   function onStep(p, s, ctx) {
     if (p.kind !== 'post' || s.kind !== 'post' || angle(row(p, 0), row(s, 0)) > SAME_ANGLE) return false;
     const u = row(s, 0), d = sub(p.center, s.center), t = dot(d, u), off = Math.hypot(d[0] - t * u[0], d[1] - t * u[1], d[2] - t * u[2]);
     const gap = Math.abs(t) - p.half[0] - s.half[0], r = Math.max(Math.min(p.half[1], s.half[1]) - 1, Math.min(p.half[1], s.half[1]) / 2);
-    if (off > SAME_SIZE[0] + SAME_SIZE[1] * Math.max(p.half[1], s.half[1]) || (gap > STEP_GAP && cues({ kind: 'post', axes: s.axes, half: [gap / 2, r, r], center: s.center.map((v, k) => v + Math.sign(t) * (s.half[0] + gap / 2) * u[k]) }, ctx).fill < FILL)) return false;
+    if (off > SAME_SIZE[0] + SAME_SIZE[1] * Math.max(p.half[1], s.half[1]) || (gap > STEP_GAP && (gap > Math.abs(p.half[1] - s.half[1]) + STEP_GAP || cues({ kind: 'post', axes: s.axes, half: [gap / 2, r, r], center: s.center.map((v, k) => v + Math.sign(t) * (s.half[0] + gap / 2) * u[k]) }, ctx).fill < FILL))) return false;
     const away = Math.sign(dot(row(p, 0), d)) || 1, inner = Math.max(p.half[1] - 1, p.half[1] / 2);
     let n = 0, full = 0;
     visit(p, ctx.dims, [SUPPORT[0], 0, 0], (i, q) => {

@@ -79,6 +79,17 @@ function twoTierRoundScene({ size = 128, seed = 1 } = {}) {
   return buildScene({ size, holder, part, seed });
 }
 
+/** The stepped post of diskOnPostScene under a dense cube part (half 0.18 size, z 0.25 to 0.45 size) with a coaxial round
+    boss (radius `bossR` size, between the stem's and the cap's) to 0.55 size and a wide disk (radius 0.2 size) on it, all
+    part: the boss is a round step coaxial with the post, the cube fills the long gap down to the cap. */
+function bossOnCubeScene({ size = 128, seed = 1, bossR = 0.085 } = {}) {
+  const n = size, c = (n - 1) / 2, zs = Math.round(0.15 * n), zb = Math.round(0.25 * n), zc = Math.round(0.45 * n), zo = Math.round(0.55 * n), zt = Math.round(0.6 * n);
+  const r = (x, y) => Math.hypot(x - c, y - c);
+  const holder = (x, y, z) => (z < zs && r(x, y) <= 0.06 * n) || (z >= zs && z < zb && r(x, y) <= 0.11 * n);
+  const part = (x, y, z) => (z >= zb && z < zc && Math.abs(x - c) <= 0.18 * n && Math.abs(y - c) <= 0.18 * n) || (z >= zc && z < zo && r(x, y) <= bossR * n) || (z >= zo && z < zt && r(x, y) <= 0.2 * n);
+  return buildScene({ size, holder, part, seed });
+}
+
 /** A dense flat coupon (part, 0.5 size wide, `thickness` voxels thick) standing upright on a base slab (holder) at the
     bottom of the volume, all inside the field: the coupon reaches the scan edge only through the base once extended, as a
     stand's plate does, but it is the part. The base is a strip smaller than the coupon, or (wideBase) fills the field. */
@@ -189,4 +200,4 @@ function displaced(voxTri, voxelMm, pivotVox) {
   return { tri, truth: { R, t }, cadPoint: (vox) => D(vox.map((v) => v * voxelMm)), cadDir: (d) => mat(Rd, d) };
 }
 
-module.exports = { tiltedPostScene, diskOnPostScene, twoTierRoundScene, couponOnSlabScene, chamferPostScene, standScene, lathe, box, cross, mat, matT, norm, rotation, displaced };
+module.exports = { tiltedPostScene, diskOnPostScene, twoTierRoundScene, bossOnCubeScene, couponOnSlabScene, chamferPostScene, standScene, lathe, box, cross, mat, matT, norm, rotation, displaced };

@@ -168,6 +168,13 @@ test('a bright post of two printed parts meeting at a seam that reads below the 
   assertCoverage(r);
 });
 
+test('a round boss of the part coaxial with the post, far above it across the part, is not a post step', () => {
+  const r = detect(Scenes.bossOnCubeScene());
+  const [kept, total] = count(r.holder.map((v) => 1 - v), r.truth.part);
+  assert.ok(kept >= 0.99 * total, `keeps ${kept}/${total} of the part (${r.pieces.map((p) => `${p.kind} r${p.half[1].toFixed(1)}`).join()})`);
+  assertCoverage(r);
+});
+
 test('a dense coupon standing upright on a base slab keeps its voxels; the slab is still removed', () => {
   for (const opts of [{}, { wideBase: true, thickness: 6 }, { wideBase: true, thickness: 10 }]) {
     const r = detect(Scenes.couponOnSlabScene(opts)), what = `${JSON.stringify(opts)} (${r.pieces.map((p) => p.kind).join()})`;
