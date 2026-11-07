@@ -311,7 +311,35 @@ model; the page draws them, toggles pieces on click, and saves them to the sampl
   yourself before reporting.
 - [ ] **Step 6: Commit** `feat(holder): review overlay, piece list and saving with the sample`.
 
+### Task 7b: Several STLs per holder (amendment 2026-11-07 b)
+
+**Files:**
+- Modify: `app/vb_holderwire.js` (holderMessage, prepareHolder, holderKey), `app/vb_holderreview.js` (status, record),
+  the holder rail (STL choice becomes a multi-select), `app/ct_app.js` (state.holderStl -> state.holderStls)
+- Test: `tests/holderwire.test.js`, `tests/holderreview.test.js`
+
+**Interfaces:**
+- Consumes: `fitHolderStl`, `stlPiece`, `voxelizeMesh`, `stlHash` (Task 5b); the Task 6 worker STL path; the Task 7 rail.
+- Produces:
+  - Sample record `holder.stls = [{ name, hash }, ...]`; a record with the older single `holder.stl` reads as `[holder.stl]`.
+  - Page state `state.holderStls = [{ name, hash, triangles }, ...]` (loaded from the library's holders/).
+  - Worker: each chosen STL is handled independently with the Task 6 rules (saved piece with matching hash ->
+    re-voxelize; else seeds + fitHolderStl, accept only `fits`; missing / changed / poor fit reported per STL). Accepted
+    fits become separate `'stl'` pieces with unique ids (`stl1`, `stl2`, ... in choice order); detection runs only for
+    the parts no accepted STL covers (detected pieces overlapping an accepted STL piece by more than half their voxels
+    are dropped).
+  - Status: one line per STL using the Task 7 forms; the keep rule applies if ANY saved STL is not loaded.
+  - holderKey includes every chosen STL's name and hash, in order.
+
+- [ ] **Step 1: Write the failing tests:** `an older single holder.stl reads as a list of one`; `two STLs give two stl pieces with unique ids` (synthetic post split into cap STL and stem STL: both fit, ids stl1/stl2, cover >= 95 %, leak <= 1 %); `one STL fits and one does not` (post + a wrong STL: one piece, a "did not fit" line for the other, detection fills what is left); `the keep rule holds when one of two saved STLs is not loaded`; `holderKey changes when an STL is added, removed or reordered`.
+- [ ] **Step 2: Run** `npm test` - FAIL.
+- [ ] **Step 3: Implement** the list through record, page, worker and rail (checkbox list of the library's holders).
+- [ ] **Step 4: Run** `npm test` - PASS.
+- [ ] **Step 5: Browser check:** choose two STLs on the synthetic post scan (cap and stem as separate files in holders/), see two green pieces and two status lines; reopen keeps both; untick one and the mask rebuilds.
+- [ ] **Step 6: Commit** `feat(holder): several STLs per holder`.
+
 ### Task 8: Re-level scans leveled with the holder in
+
 
 **Files:**
 - Modify: `app/vb_orient.js` (pure helpers), `app/vb_orientrail.js` (`apply` stamps `holder_removed: true`),
