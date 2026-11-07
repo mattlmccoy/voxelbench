@@ -15,6 +15,7 @@ model; the page draws them, toggles pieces on click, and saves them to the sampl
 **Spec:** `docs/plans/2026-11-06-holder-removal-design.md` (approved by Matt 2026-11-06).
 
 ## Global Constraints
+- Holder STL files live only in the user library folder or `VOXELBENCH_LOCAL_DIR`, never in the repository.
 - No lab data in the repository: no scan numbers, sample names, private paths or real-scan fixtures in code or tests
   (`tests/hygiene.test.js`, `tools/banned.js`). Acceptance numbers live outside the repo in `VOXELBENCH_LOCAL_DIR`.
 - No constant tuned to one scan: every gray, size and count limit is derived from the scan (voxel size, part gray,
@@ -206,6 +207,36 @@ model; the page draws them, toggles pieces on click, and saves them to the sampl
 - [ ] **Step 4: Run** `npm test` — PASS.
 - [ ] **Step 5: Commit** `feat(holder): store pieces in native scan voxels, map into leveled frames`.
 
+### Task 5b: Holder STL fit (amendment 2026-11-07)
+
+**Files:**
+- Create: `app/vb_holderstl.js` (UMD, `root.VBHolderStl`)
+- Test: `tests/holderstl.test.js`
+
+**Interfaces:**
+- Consumes: `VBStl` (STL parsing), `VBAlign` (`preAlign`, `icp`, `fitTransform`), `findHolder` pieces (Task 3) as start
+  points, `holderMask` contact rule (Task 2), `piecesToNative`/`piecesFromNative` (Task 5).
+- Produces:
+  - `voxelizeMesh({ triangles: Float32Array /* mm */, pose: { R, t } /* mm -> grid voxels */, dims }) -> Uint8Array` -
+    inside by ray parity along x per (y, z) column.
+  - `fitHolderStl({ triangles, solid, dims, voxelMm, seeds: Piece[] }) -> { pose, rmsMm, nearShare }` - start from the
+    seeds' points when any, else `preAlign`'s scored starts; trimmed rigid ICP (no scale) against the solid's surface
+    points; `nearShare` = share of STL surface samples within one voxel of the scan surface.
+  - `stlPiece({ name, hash, pose }) -> Piece` with `kind: 'stl'`; `holderMask` accepts it (inside = voxelized mesh).
+  - Pose stored in native scan voxels; `piecesToNative`/`piecesFromNative` map `kind: 'stl'` poses (Ruling 1 frame rule).
+  - `stlHash(bytes) -> string` (FNV-1a over the bytes, as `vb_orient.js` `orientId`).
+
+- [ ] **Step 1: Write the failing tests** on synthetic scenes with a synthetic STL of the same holder (build triangles
+  for the stepped post and for the plates in the test): `a post STL fits the post scene` (pose within 1 voxel and 2 deg
+  of truth from a start 10 voxels and 15 deg off; holder cover >= 95 %, part leak <= 1 %); `a plates STL fits the plates
+  scene` (same limits); `the part touching the holder does not pull the fit` (disk part on the post: leak <= 1 %);
+  `a wrong STL reports a poor fit` (post STL on the plates scene: `nearShare` below the fit limit); `voxelizeMesh fills a
+  closed cube exactly` (a 10-voxel cube mesh gives 1000 voxels); `an STL pose survives native round trip`.
+- [ ] **Step 2: Run** `npm test` - FAIL (module missing).
+- [ ] **Step 3: Implement** `app/vb_holderstl.js` and the `'stl'` kind in `holderMask` and Task 5's converters.
+- [ ] **Step 4: Run** `npm test` - PASS.
+- [ ] **Step 5: Commit** `feat(holder): fit a holder STL with trimmed ICP`.
+
 ### Task 6: Worker wiring, cache, progress
 
 **Files:**
@@ -252,6 +283,11 @@ model; the page draws them, toggles pieces on click, and saves them to the sampl
 
 **Interfaces:**
 - Consumes: `state.holder` (Task 6), `App.saveSample`, `piecesToNative`.
+- Also (amendment): the Holder section offers "Detect automatically" or a holder from the library folder's `holders/`
+  (STL files; "Add holder STL..." copies one in). The choice saves with the sample as `holder.stl = { name, hash }`;
+  the worker receives the STL triangles and runs `fitHolderStl` before detection; a fit below the limit, a missing STL
+  or a changed hash falls back to detection and the status says which. Status forms add
+  `"holder STL <name> fitted (RMS 0.12 mm)"` and `"holder STL <name> did not fit; found by shape"`.
 - Produces:
   - `holderStatus(h: { method, pieces, givenBack, reviewed } | null, failed?: string) -> string` with exactly these
     forms: `"not run"`, `"no holder found"`, `"removal failed: <reason>"`, `"3 holder pieces, not reviewed"`,
@@ -324,6 +360,8 @@ model; the page draws them, toggles pieces on click, and saves them to the sampl
     thicknesses within 0.3 mm of `plates_mm`; envelope within 2 % of `envelope_cm3`; Dice ≥ 0.97 against
     `s6_b4_part.npy` over the overlapping grid; holder finding took ≤ 15 s (time `findHolder` alone).
   - `Sample 6 high-res agrees with the 32 s scan`: envelope within 2 % of the 32 s result (R1).
+  - (amendment) the same Sample 6 and Sample 4 checks repeated with their holder STLs
+    (`$VOXELBENCH_LOCAL_DIR/holder/stl/s6_holder.stl`, `post.stl`): `kind 'stl'` piece, same envelope and Dice limits.
   - `Sample 4 matches the Nov 5 part mask`: `method === 'bright'`; envelope within 2 %; Dice ≥ 0.97 against
     `s4_b4_part.npy`.
 - [ ] **Step 3: Run** `npm run test:local` without `VOXELBENCH_LOCAL_DIR` — all skipped; with it set — record the
