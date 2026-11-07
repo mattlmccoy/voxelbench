@@ -121,7 +121,7 @@ test('a post STL fits the post scene', () => {
   }
   const axis = stl.cadDir([0, 0, 1]), da = angleDeg(mat(r.fit.pose.R, axis), mat(stl.truth.R, axis));
   assert.ok(da <= 2, `axis off by ${da.toFixed(2)} deg`);
-  assert.ok(r.fit.nearShare >= HS.FIT_MIN_NEAR, `near share ${r.fit.nearShare}`);
+  assert.ok(r.fit.fits, `fit ${JSON.stringify({ ...r.fit, pose: undefined })}`);
   assertCoverage(r);
 });
 
@@ -160,16 +160,18 @@ test('a plates STL fits the plates scene (no seeds: pre-alignment starts)', () =
     const err = Math.hypot(...e.map((v, k) => v - along * y[k]));
     assert.ok(err <= 1, `plate face point off by ${err.toFixed(2)} voxels across y`);
   }
-  assert.ok(r.fit.nearShare >= HS.FIT_MIN_NEAR, `near share ${r.fit.nearShare}`);
+  assert.ok(r.fit.fits, `fit ${JSON.stringify({ ...r.fit, pose: undefined })}`);
   assertCoverage(r);
 });
 
+// The part does not pull the fit: STL samples pair to the scan, and the cap top hidden under the disk pairs with the
+// disk's underside in the same plane (the review saw this pass with trimming off too; trimming only bounds outliers).
 test('the part touching the holder does not pull the fit', () => {
   const scene = Scenes.diskOnPostScene(), n = scene.dims.nx, c = (n - 1) / 2;
   const zs = Math.round(0.15 * n) - 0.5, zb = Math.round(0.25 * n) - 0.5;
   const vox = lathe([[0, -10], [0.06 * n, -10], [0.06 * n, zs], [0.11 * n, zs], [0.11 * n, zb], [0, zb]], [c, c]);
   const r = fitScene(scene, displaced(vox, scene.voxelMm, [c, c, zb / 2]), { seeds: seedsOf(scene) });
-  assert.ok(r.fit.nearShare >= HS.FIT_MIN_NEAR, `near share ${r.fit.nearShare}`);
+  assert.ok(r.fit.fits, `fit ${JSON.stringify({ ...r.fit, pose: undefined })}`);
   assertCoverage(r);
 });
 
@@ -177,6 +179,7 @@ test('a wrong STL reports a poor fit', () => {
   const plates = S.makeHolderScene({ holder: 'plates' }), stl = postStl(S.makeHolderScene({ holder: 'post' }));
   const r = fitScene(plates, stl, { seeds: seedsOf(plates) });
   assert.ok(r.fit.nearShare < HS.FIT_MIN_NEAR, `near share ${r.fit.nearShare} for a post on plates`);
+  assert.equal(r.fit.fits, false);
 });
 
 test('an STL pose survives native round trip', () => {
@@ -203,4 +206,16 @@ test('stlHash is a stable content hash', () => {
   assert.match(a, /^[0-9a-f]{8}$/);
   assert.equal(a, HS.stlHash(new Uint8Array([1, 2, 3]).buffer));
   assert.notEqual(a, b);
+});
+
+test('a pose that leaves most of the STL outside the scan is a poor fit, even on the surface', () => {
+  const scene = S.makeHolderScene({ holder: 'plates' }), stl = platesStl(scene), { solid } = solidOf(scene);
+  const at = (pose) => HS.scoreFit({ triangles: stl.tri, pose, solid, outside: scene.outside, dims: scene.dims, voxelMm: scene.voxelMm });
+  const right = at(stl.truth);
+  assert.ok(right.fits && right.inFieldShare >= HS.MIN_IN_FIELD, JSON.stringify(right));
+  // Slid along y (the plates' own direction) until a sliver stays in the field: the few samples there lie on the plates.
+  const sliver = at({ R: stl.truth.R, t: stl.truth.t.map((v, k) => v + (k === 1 ? 110 : 0)) });
+  assert.ok(sliver.nearShare >= HS.FIT_MIN_NEAR, `the share alone would pass: ${JSON.stringify(sliver)}`);
+  assert.ok(sliver.inField > 0 && sliver.inField < right.inField && sliver.inFieldShare < HS.MIN_IN_FIELD, JSON.stringify(sliver));
+  assert.equal(sliver.fits, false);
 });

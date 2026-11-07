@@ -1,6 +1,8 @@
 /* Holder removal from the holder's own STL: the STL (mm) is aligned rigidly to the scan's solid surface (vb_align
-   pre-alignment, then trimmed ICP, so the part touching the holder is left out as outlier pairs), and every solid voxel
-   inside the aligned mesh is holder. A pose { R, t } maps STL mm to voxels as R·p + t: R is a rotation times voxels
+   pre-alignment, then trimmed ICP), and every solid voxel inside the aligned mesh is holder. The part touching the
+   holder does not pull the fit: only STL samples inside the field are paired, from the STL to the scan, and where the
+   part hides a holder face its samples pair with the part's face in the same plane; trimming bounds the outliers.
+   The fit is reported by scoreFit (near share and in-field coverage). A pose { R, t } maps STL mm to voxels as R·p + t: R is a rotation times voxels
    per mm (the fit itself is rigid; R carries only the unit), so one pose form serves the worker grid and native voxels.
    Grid volume index i = x + nx * (y + ny * z). */
 (function (root, factory) {
@@ -10,6 +12,7 @@
   'use strict';
 
   const FIT_MIN_NEAR = 0.6;  // a fit holds when this share of the in-field STL surface lies on the scanned surface
+  const MIN_IN_FIELD = 0.1;  // and at least this share of the whole STL surface lies in the scan's field (else a patch)
   const MAX_SURFACE_POINTS = 250000; // ICP targets: face points thinned evenly beyond this (as vb_align thins sources)
   const ROUNDS = 3;          // refits, each pairing only the STL samples inside the scan's field at the last pose
   const FIT_POINTS = 5000;   // STL samples per fit, spread evenly by area (the share's sampling error is about 1 %)
@@ -149,21 +152,11 @@
   /** Fit the holder STL (triangles in mm) to the solid's surface. seeds: holder pieces found by shape or brightness;
       when any, the surface inside them is first pre-aligned into the STL, else the whole surface is. Then trimmed
       rigid ICP against the whole surface, pairing the STL samples inside the scan's field. Returns { pose, rmsMm,
-      nearShare }: nearShare is the share of in-field STL samples within one voxel of the scan surface (0 when none). */
+      nearShare, inField, inFieldShare, fits } (see scoreFit); pose is null when nothing could be aligned. */
   function fitHolderStl({ triangles, solid, outside = null, dims, voxelMm, seeds = [] }) {
-    const { faces, points: scan } = scanSurface(solid, outside, dims);
-    const m = St.measurePoints(St.meshOf(triangles), { spacing: voxelMm }), all = Float64Array.from(m.points, (v) => v / voxelMm);
-    const none = { pose: null, rmsMm: Infinity, nearShare: 0 };
+    const { scan, all, sample, score } = prepare({ triangles, solid, outside, dims, voxelMm });
+    const none = { pose: null, rmsMm: Infinity, nearShare: 0, inField: 0, inFieldShare: 0, fits: false };
     if (scan.length < 3 * MIN_POINTS || all.length < 3 * MIN_POINTS) return none;
-    /** Area-even samples (voxel units) of the STL points inside the field at pose T, or of all of them without T. */
-    const sample = (T) => {
-      if (!T) return Cad.areaSample(all, m.weight, m.edge, FIT_POINTS);
-      const idx = [];
-      for (let k = 0; k < all.length / 3; k++) if (inField(outside, dims, ...place(T, all[3 * k], all[3 * k + 1], all[3 * k + 2]))) idx.push(k);
-      const p = new Float64Array(3 * idx.length), w = new Float32Array(idx.length), e = new Uint8Array(idx.length);
-      idx.forEach((k, j) => { p.set(all.subarray(3 * k, 3 * k + 3), 3 * j); w[j] = m.weight[k]; e[j] = m.edge[k]; });
-      return Cad.areaSample(p, w, e, FIT_POINTS);
-    };
     let target = scan;
     if (seeds.length) {
       const grown = seeds.map((s) => ({ ...s, half: s.half.map((h) => h + SEED_GROW) })), near = [];
@@ -192,14 +185,52 @@
         T = src.length >= 3 * MIN_POINTS ? A.icp(src, scan, { init: T, tol: TOL }) : null;
       }
       if (!T) continue;
-      src = sample(T);
-      let near = 0;
-      for (let k = 0; k < src.length; k += 3) if (nearFace(faces, dims, ...place(T, src[k], src[k + 1], src[k + 2]))) near++;
-      const share = src.length ? near / (src.length / 3) : 0;
-      if (share > best.nearShare) best = { pose: { R: T.R.map((v) => v / voxelMm), t: T.t.slice() }, rmsMm: T.rms * voxelMm, nearShare: share };
+      const fit = score(T);
+      if (better(fit, best)) best = { pose: { R: T.R.map((v) => v / voxelMm), t: T.t.slice() }, rmsMm: T.rms * voxelMm, ...fit };
     }
     return best;
   }
+
+  /** The scan surface and the STL's samples for a fit: sample(T) gives area-even samples (voxel units) of the STL
+      points inside the field at pose T (STL voxel units to grid voxels), or of all of them without T; score(T) rates
+      pose T (see scoreFit). */
+  function prepare({ triangles, solid, outside, dims, voxelMm }) {
+    const { faces, points: scan } = scanSurface(solid, outside, dims);
+    const m = St.measurePoints(St.meshOf(triangles), { spacing: voxelMm }), all = Float64Array.from(m.points, (v) => v / voxelMm);
+    let area = 0;
+    for (let k = 0; k < m.weight.length; k++) area += m.weight[k];
+    const inside = (T) => { // the STL points inside the field at T, and their share of the STL's area
+      const idx = [];
+      let a = 0;
+      for (let k = 0; k < all.length / 3; k++) if (inField(outside, dims, ...place(T, all[3 * k], all[3 * k + 1], all[3 * k + 2]))) { idx.push(k); a += m.weight[k]; }
+      return { idx, share: area > 0 ? a / area : 0 };
+    };
+    const sample = (T, idx = T && inside(T).idx) => {
+      if (!T) return Cad.areaSample(all, m.weight, m.edge, FIT_POINTS);
+      const p = new Float64Array(3 * idx.length), w = new Float32Array(idx.length), e = new Uint8Array(idx.length);
+      idx.forEach((k, j) => { p.set(all.subarray(3 * k, 3 * k + 3), 3 * j); w[j] = m.weight[k]; e[j] = m.edge[k]; });
+      return Cad.areaSample(p, w, e, FIT_POINTS);
+    };
+    const score = (T) => {
+      const { idx, share } = inside(T), src = sample(T, idx);
+      let near = 0;
+      for (let k = 0; k < src.length; k += 3) if (nearFace(faces, dims, ...place(T, src[k], src[k + 1], src[k + 2]))) near++;
+      const nearShare = src.length ? near / (src.length / 3) : 0;
+      return { nearShare, inField: idx.length, inFieldShare: share, fits: nearShare >= FIT_MIN_NEAR && share >= MIN_IN_FIELD };
+    };
+    return { scan, all, sample, score };
+  }
+
+  /** How well the STL (mm) sits on the scan at pose (STL mm to grid voxels, as fitHolderStl returns): { nearShare,
+      inField (STL measurement points, about one per voxel of surface, inside the scan's field; nearShare is counted on
+      an area-even sample of them), inFieldShare (the in-field share of the
+      STL's surface area), fits (nearShare at least FIT_MIN_NEAR on at least MIN_IN_FIELD of the surface) }. */
+  function scoreFit({ triangles, pose, solid, outside = null, dims, voxelMm }) {
+    return prepare({ triangles, solid, outside, dims, voxelMm }).score({ R: pose.R.map((v) => v * voxelMm), t: pose.t, s: 1 });
+  }
+
+  /** Whether fit a beats fit b: covering at least MIN_IN_FIELD of the STL comes first, then the higher near share. */
+  const better = (a, b) => (a.inFieldShare >= MIN_IN_FIELD) !== (b.inFieldShare >= MIN_IN_FIELD) ? a.inFieldShare >= MIN_IN_FIELD : a.nearShare > b.nearShare;
 
   /** The three half turns about the principal axes of points, through their centroid, as { R, t, s } transforms. */
   function halfTurns(points) {
@@ -212,8 +243,9 @@
     });
   }
 
-  /** A holder piece from a fitted STL. mask (the voxelized mesh on the grid, see voxelizeMesh) is runtime only and
-      never saved; with solid it also sets the piece's voxel count. */
+  /** A holder piece from a fitted STL, with id ''. The caller must assign an id unique among the scan's pieces before
+      saving or toggling it (holderMask's givenBack matches pieces by id). mask (the voxelized mesh on the grid, see
+      voxelizeMesh) is runtime only and never saved; with solid it also sets the piece's voxel count. */
   function stlPiece({ name, hash, pose, mask = null, solid = null, voxelMm = 0 }) {
     let voxels = 0;
     if (mask && solid) for (let i = 0; i < mask.length; i++) voxels += mask[i] & solid[i];
@@ -230,5 +262,5 @@
     return h.toString(16).padStart(8, '0');
   }
 
-  return { FIT_MIN_NEAR, voxelizeMesh, fitHolderStl, stlPiece, stlHash };
+  return { FIT_MIN_NEAR, MIN_IN_FIELD, voxelizeMesh, fitHolderStl, scoreFit, stlPiece, stlHash };
 }));
