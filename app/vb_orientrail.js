@@ -84,7 +84,7 @@
     busy = true; render();
     emit('statusText', 'Finding the part\'s axes from its sample mask');
     try {
-      const r = await App.callWorker('partMask', { settings: state.settings, crops: App.cropOutlines() });
+      const r = await App.callWorker('partMask', App.bodyArgs());
       const L = O.levelFromMask(r.mask, r.dims, r.bin);
       draft = { base: L.R, center: L.center, pts: O.surfacePoints(r.mask, r.dims, r.bin), bin: r.bin, ambiguous: L.ambiguous };
       for (const [, id] of SLIDERS) $(id).value = '0';

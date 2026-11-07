@@ -33,8 +33,9 @@
     return null;
   }
 
-  /** input = { pieces: Piece[] | null (null: find), givenBack: string[], voxelMm, onProgress?, method?, modules? }; modules
-      ({ holder, tape }) overrides single functions of the real modules (tests). Returns { holder: Uint8Array of voxels to cut, info }; solid is the
+  /** input = { pieces: Piece[] | null (null: find), givenBack: string[], voxelMm, onProgress?, method?, find?, modules? };
+      find (the holder STL fit, vb_holderwire.js) replaces findHolder and takes the same arguments; modules ({ holder,
+      tape }) overrides single functions of the real modules (tests). Returns { holder: Uint8Array of voxels to cut, info }; solid is the
       threshold mask before the crop, crop (or null) is applied to the warning test only. */
   function removeHolder({ smoothed, solid, outside, dims, crop }, input) {
     const mods = input.modules || {}, holderModule = { ...Holder, ...mods.holder }, tapeModule = { ...Tape, ...mods.tape };
@@ -42,7 +43,7 @@
     try {
       let pieces = input.pieces, method = input.method || 'given';
       if (!pieces) {
-        const found = holderModule.findHolder({ smoothed, solid, outside, dims, voxelMm: input.voxelMm, onProgress: input.onProgress });
+        const found = (input.find || holderModule.findHolder)({ smoothed, solid, outside, dims, voxelMm: input.voxelMm, onProgress: input.onProgress });
         const first = holderModule.holderMask({ solid, dims, pieces: found.pieces, givenBack: [] }).holder;
         const tape = tapeModule.findTape({ solid, holder: first, dims, voxelMm: input.voxelMm, firstId: found.pieces.length + 1 });
         pieces = found.pieces.concat(tape);

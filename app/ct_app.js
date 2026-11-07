@@ -1,7 +1,7 @@
 /* Shared state, loading, the worker, and the database. Drawing lives in ct_views.js, ct_model.js and ct_rail.js. */
 window.CTApp = (function () {
   'use strict';
-  const CT = window.CT, P = window.CTPores, R = window.CTRegions, V = window.VBStore, VB = window.VBVolume, O = window.VBOrient;
+  const CT = window.CT, P = window.CTPores, R = window.CTRegions, V = window.VBStore, VB = window.VBVolume, O = window.VBOrient, HW = window.VBHolderWire;
   const $ = (id) => document.getElementById(id);
   const READ_CONCURRENCY = 8;
   const ORIENT_HEADROOM = 1.5; // times the load budget, for a scan and its leveled copy together
@@ -31,6 +31,7 @@ window.CTApp = (function () {
     bodyMm3: null, airGray: null, regionStats: new Map(), referenceId: '', referenceDensity: NaN,
     main: 'XY', fill: 0.5, minVoidMm: 0, patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, zoneBaseline: 'auto',
     show: Object.fromEntries(LAYERS.map((l) => [l.id, true])),
+    holder: null, holderStl: null, holderWait: false, // the last model's holder; the chosen STL as loaded { name, hash, triangles }
   };
   let worker = null;
   const listeners = {};
@@ -144,7 +145,9 @@ window.CTApp = (function () {
   /** Saves fields of a scan's sample record (the open scan's unless folder is given), keeping its other fields. */
   function saveSample(changes, folder = state.folder) {
     const pending = state.unsaved.get(folder);
-    return saveRecord('samples', CT.sampleRecord(folder, state.samples, changes, pending && pending._collection === 'samples' ? pending : null));
+    const saved = saveRecord('samples', CT.sampleRecord(folder, state.samples, changes, pending && pending._collection === 'samples' ? pending : null));
+    if ('holder' in changes && folder === state.folder) holderChanged(); // the record above is already what sampleNow reads
+    return saved;
   }
 
   async function removeRecord(collection, id) {
@@ -288,7 +291,7 @@ window.CTApp = (function () {
     const label = stack.title || stack.folder; // a library scan's folder is its id; it is shown by its title
     if (worker) { worker.terminate(); worker = null; }
     for (const c of calls.values()) c.reject(new Error('Another scan was opened.')); calls.clear();
-    Object.assign(state, { slices: null, folder: null, stack, reader: null, scanInfo: null, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, sheetSaved: false });
+    Object.assign(state, { slices: null, folder: null, stack, reader: null, scanInfo: null, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, sheetSaved: false, holder: null, holderStl: null, holderWait: false });
     showPage('library'); // the loading progress shows there
     showError('');
     emit('samplesChanged');
@@ -398,6 +401,11 @@ window.CTApp = (function () {
 
   // ---------- worker ----------
   const cropOutlines = () => cropsOf(state.folder).map((c) => ({ plane: c.plane, points: c.points }));
+  // What every request that builds the sample mask carries: the saved holder (vb_holderwire.js) and the frame its native
+  // pieces map from (the loaded grid's binning, and the saved orientation when the scan is leveled).
+  const bodyArgs = () => ({ settings: state.settings, crops: cropOutlines(), holder: HW.holderMessage(sampleNow().holder || null, state.holderStl),
+    frame: { binFactor: state.binFactor, orient: state.orientation ? savedOrientation(state.folder) : null } });
+  const holderBar = (share) => { const bar = $('holderProgress'); bar.hidden = share === null; if (share !== null) bar.firstElementChild.style.width = `${100 * share}%`; };
 
   function startWorker() {
     try {
@@ -414,7 +422,7 @@ window.CTApp = (function () {
     setTimeout(() => {
       const b = P.binVolume(state.slices, state.dims, BIN, state.circle);
       state.binned = b.dims;
-      worker.postMessage({ type: 'volume', gray: b.gray, outside: b.outside, dims: b.dims, full: state.dims, bin: BIN, voxelMm: state.voxelMm, circle: state.circle, settings: state.settings, crops: cropOutlines() }, [b.gray.buffer, b.outside.buffer]);
+      worker.postMessage({ type: 'volume', gray: b.gray, outside: b.outside, dims: b.dims, full: state.dims, bin: BIN, voxelMm: state.voxelMm, circle: state.circle, ...bodyArgs() }, [b.gray.buffer, b.outside.buffer]);
     }, 30);
   }
 
@@ -426,21 +434,29 @@ window.CTApp = (function () {
     if (state.wall) { state.wall = null; emit('wallChanged'); } // it measured the old run's sample mask
     emit('poresChanged');
     emit('voidMeshesChanged');
-    worker.postMessage({ type: 'detect', settings: state.settings, crops: cropOutlines() });
+    worker.postMessage({ type: 'detect', ...bodyArgs() });
   }
 
   function updateModel() {
-    if (worker) worker.postMessage({ type: 'model', settings: state.settings, crops: cropOutlines() });
+    if (worker) worker.postMessage({ type: 'model', ...bodyArgs() });
   }
 
-  // Results describe the crop they ran with, so a new crop replaces them rather than leaving old voids over a new body.
-  function cropChanged() {
+  // Results describe the mask they ran with, so a new crop or holder replaces them rather than leaving old voids over a
+  // new body. A crop always changes the mask; a holder change only when the worker rebuilt it (a new model came back).
+  function maskChanged(what) {
     if (state.wall && state.wall.result) { state.wall = null; emit('wallChanged'); }
-    if (state.filler && state.filler.result) { state.filler = { busy: false, result: null, refused: 'The crop changed: run Find filler again.' }; emit('fillerChanged'); }
-    if (state.cad && state.cad.result) { state.cad.result = null; state.cad.stale = 'The crop changed: press Align or Refine fit again.'; emit('cadChanged'); }
-    updateModel();
+    if (state.filler && state.filler.result) { state.filler = { busy: false, result: null, refused: `The ${what} changed: run Find filler again.` }; emit('fillerChanged'); }
+    if (state.cad && state.cad.result) { state.cad.result = null; state.cad.stale = `The ${what} changed: press Align or Refine fit again.`; emit('cadChanged'); }
     if (state.porePhase === 'running') state.rerunAfterDetect = true;
     else if (state.pores) runDetect();
+  }
+  function cropChanged() { updateModel(); maskChanged('crop'); }
+  /** The saved holder (a piece given back or taken again) or the chosen STL changed: rebuild the mask and, when it did
+      change, the results on it. */
+  function holderChanged() {
+    if (!worker) return;
+    state.holderWait = true;
+    updateModel();
   }
 
   function requestVoidMeshes() {
@@ -490,14 +506,19 @@ window.CTApp = (function () {
 
   function onWorker({ data }) {
     if (data.type === 'status') emit('statusText', data.text);
+    else if (data.type === 'progress') { holderBar(data.share); emit('statusText', data.text); }
     else if (data.type === 'model') {
+      holderBar(null);
       state.model = data;
+      state.holder = data.holder;
       state.bodyMm3 = data.bodyMm3;
       state.airGray = data.airGray;
       state.regionStats = new Map();
       emit('modelChanged');
-      if (state.porePhase !== 'running') emit('statusText', 'Ready. Press Segment pores.');
-    } else if (data.type === 'modelDone') emit('changed');
+      emit('holderChanged');
+      if (state.porePhase !== 'running') emit('statusText', `${HW.holderLine(data.holder)} Ready. Press Segment pores.`);
+      if (state.holderWait) { state.holderWait = false; maskChanged('holder'); }
+    } else if (data.type === 'modelDone') { state.holderWait = false; emit('changed'); }
     else if (data.type === 'needSlices') sendSlices();
     else if (data.type === 'sliceDone') state.onSliceDone();
     else if (data.type === 'pores') {
@@ -553,6 +574,7 @@ window.CTApp = (function () {
       }
       emit('cadChanged');
     } else if (data.type === 'error') {
+      holderBar(null);
       // An error belongs to the step whose request failed (every waiting step when the request is unknown); the pore
       // step only when segmentation was running.
       const step = CT.errorStep(data.for), mine = (s) => step === null || step === s;
@@ -627,7 +649,7 @@ window.CTApp = (function () {
     const cad = state.cad;
     if (!worker || !cad || !cad.measure || cad.busy) return;
     cad.busy = true; cad.refused = null; state.cadSeq = (state.cadSeq || 0) + 1;
-    worker.postMessage({ type: 'cad', id: state.cadSeq, settings: state.settings, crops: cropOutlines(), points: cad.measure.points, normals: cad.measure.normals, edge: cad.measure.edge, weight: cad.measure.weight, pose,
+    worker.postMessage({ type: 'cad', id: state.cadSeq, ...bodyArgs(), points: cad.measure.points, normals: cad.measure.normals, edge: cad.measure.edge, weight: cad.measure.weight, pose,
       options: { scale: cad.scale, toleranceMm: cad.toleranceMm, rangeMm: cad.rangeMm } });
     emit('cadChanged');
   }
@@ -637,7 +659,7 @@ window.CTApp = (function () {
     if (!worker || (state.filler && state.filler.busy)) return;
     state.fillerSeq = (state.fillerSeq || 0) + 1;
     state.filler = { busy: true, result: null, refused: null };
-    worker.postMessage({ type: 'filler', id: state.fillerSeq, settings: state.settings, crops: cropOutlines(), k, minVoxels, threshold });
+    worker.postMessage({ type: 'filler', id: state.fillerSeq, ...bodyArgs(), k, minVoxels, threshold });
     emit('fillerChanged');
   }
 
@@ -654,9 +676,9 @@ window.CTApp = (function () {
     if (!worker || (state.wall && state.wall.busy)) return;
     state.wallSeq = (state.wallSeq || 0) + 1;
     state.wall = { busy: true, result: null };
-    worker.postMessage({ type: 'wall', id: state.wallSeq, settings: state.settings, crops: cropOutlines() });
+    worker.postMessage({ type: 'wall', id: state.wallSeq, ...bodyArgs() });
     emit('wallChanged');
   }
 
-  return { showPage, useStore, openReader, openFiles, sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, relative, hiddenMarks, orientLimit, cropOutlines, savedOrientation };
+  return { showPage, useStore, openReader, openFiles, sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, relative, hiddenMarks, orientLimit, cropOutlines, savedOrientation, bodyArgs, holderChanged };
 }());

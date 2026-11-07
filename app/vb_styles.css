@@ -67,6 +67,7 @@ input[type=range] { accent-color: var(--accent); }
 .empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; color: var(--muted); }
 .progress { height: 3px; background: var(--line-strong); }
 .progress div { height: 100%; width: 0; background: var(--accent); }
+.holderprogress { margin: -4px 0 8px; } /* under #poreStatus while the holder is found */
 
 .rail { grid-area: rail; position: relative; background: var(--panel); border-left: 1px solid var(--line); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
 .steps { overflow-y: auto; overflow-x: hidden; min-height: 0; }

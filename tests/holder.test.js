@@ -224,3 +224,31 @@ test('a doped half of a flat part on a bright post is not a bright holder', () =
   assert.ok(r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => p.kind).join());
   assertCoverage(r);
 });
+
+const W = require('../app/vb_holderwire.js');
+
+test('holderKey changes with a toggle and not otherwise', () => {
+  const post = { id: 'h1', kind: 'post', foundBy: 'shape', center: [40.5, 41, 12], axes: [0, 0, 1, 1, 0, 0, 0, 1, 0], half: [12, 6, 6], voxels: 900, mm3: 3.7 };
+  const tape = { id: 'h2', kind: 'tape', foundBy: 'shape', center: [40, 50, 30], axes: [1, 0, 0, 0, 1, 0, 0, 0, 1], half: [9, 4, 1], voxels: 80, mm3: 0.3 };
+  const saved = { pieces: [post, tape], givenBack: [], method: 'shape' };
+  const copy = JSON.parse(JSON.stringify(saved));
+  assert.equal(W.holderKey(copy), W.holderKey(saved), 'equal holders, equal keys');
+  assert.equal(W.holderKey({ ...saved, method: 'given' }), W.holderKey(saved), 'the method label does not change the mask');
+  const toggled = { ...saved, givenBack: ['h2'] };
+  assert.notEqual(W.holderKey(toggled), W.holderKey(saved), 'giving a piece back changes the key');
+  assert.equal(W.holderKey({ ...saved, givenBack: ['h2', 'h1'] }), W.holderKey({ ...saved, givenBack: ['h1', 'h2'] }), 'order of the given-back ids does not matter');
+  assert.notEqual(W.holderKey(null), W.holderKey(saved), 'no saved holder differs from a saved one');
+  assert.notEqual(W.holderKey({ ...saved, pieces: null }), W.holderKey(saved), 'find again differs from saved pieces');
+  const stl = { name: 'post holder', hash: '0badf00d', triangles: new Float32Array(9) };
+  assert.notEqual(W.holderKey({ ...saved, stl }), W.holderKey(saved), 'choosing an STL changes the key');
+  assert.notEqual(W.holderKey({ ...saved, stl: { ...stl, hash: '12345678' } }), W.holderKey({ ...saved, stl }), 'a changed STL changes the key');
+  assert.notEqual(W.holderKey({ ...saved, stl: { ...stl, triangles: null } }), W.holderKey({ ...saved, stl }), 'the STL arriving changes the key');
+  assert.equal(W.holderKey({ ...saved, pieces: [{ ...post, mask: new Uint8Array(4) }, tape] }), W.holderKey(saved), 'a runtime mask is not part of the key');
+  const reordered = { stl: null, method: 'shape', givenBack: [], pieces: [Object.fromEntries(Object.entries(post).reverse()), tape] };
+  assert.equal(W.holderKey(reordered), W.holderKey(saved), 'a record stored with its fields in another order is the same holder');
+});
+
+test('progressText reads stage, slice and total', () => {
+  assert.equal(W.progressText('Finding the holder', 120, 348), 'Finding the holder: slices 120 / 348');
+  assert.equal(W.progressText('Fitting the holder STL', 0, 0), 'Fitting the holder STL');
+});

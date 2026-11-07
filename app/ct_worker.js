@@ -1,24 +1,44 @@
 /* Runs pore detection off the page's main thread. The main thread sends the binned volume once, and sends full-
    resolution slices only when the smoothing changes; smoothed slices are kept here so threshold reruns are quick. */
-importScripts('ct_core.js', 'ct_pores.js', 'vb_calibration.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js', 'vb_connectivity.js', 'vb_align.js', 'vb_deviation.js', 'vb_cad.js', 'vb_filler.js', 'vb_wall.js', 'vb_masks.js');
-const P = self.CTPores, R = self.CTRegions, Z = self.CTZones, D = self.CTSheetData;
+importScripts('ct_core.js', 'ct_pores.js', 'vb_calibration.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js', 'vb_connectivity.js', 'vb_align.js', 'vb_deviation.js', 'vb_cad.js', 'vb_filler.js', 'vb_wall.js', 'vb_masks.js',
+  'vb_stl.js', 'vb_holderseeds.js', 'vb_holder.js', 'vb_holdertape.js', 'vb_holderremoval.js', 'vb_holderframe.js', 'vb_holderstl.js', 'vb_holderwire.js');
+const P = self.CTPores, R = self.CTRegions, Z = self.CTZones, D = self.CTSheetData, HW = self.VBHolderWire;
 const MODEL_DOWNSAMPLE = 2;
 const COARSE_STEP = 2; // binned voxels per coarse cell: 4 full voxels, about 0.16 mm at 40 um
 const MESH_FACTOR = 2; // full voxels per cell of the 3D void surfaces, about 0.08 mm at 40 um
-let vol = null, body = null, bodyKey = '', smoothed = null, smoothedSigma = null, pending = null, pores = null, smoother = null;
+let vol = null, body = null, bodyKey = '', bodyAlias = '', smoothed = null, smoothedSigma = null, pending = null, pores = null, smoother = null;
 const ORIENTATION_RETRY_BELOW = 0.5, ORIENTATION_STEP = 8; // Dice under which the cross-check tries other orientations; slices sampled
 let poreCoarse = null; // detectPores' coarse result: its interior minus edge zone is where pore voxels are counted
 let coarse = null, voidShare = null, zoneReady = null, airGray = null, patchLabels = null, solidGray = null;
+// The holder: the frame its saved pieces are in ({ binFactor, orient }, sent with each request), and the last mask
+// build's result (buildBody's holder info on the grid, plus given and the STL report).
+let frame = { binFactor: 1, orient: null }, holder = null;
+const HOLDER_SPANS = { [HW.FIND_STAGE]: [0, 0.7], [HW.FIT_STAGE]: [0.7, 1] }, FIND_ONLY = { [HW.FIND_STAGE]: [0, 1] };
 
 const say = (text) => postMessage({ type: 'status', text });
 
-function ensureBody(settings, crops) {
-  const key = JSON.stringify([settings.sigma, settings.bodyThreshold, settings.closeRadius, settings.closeShape, crops.map((c) => [c.plane, c.points])]);
+const scale = () => ({ bin: vol.bin, binFactor: frame.binFactor });
+
+/** The sample mask without the holder, rebuilt when the settings, crops or saved holder change; a rebuilt mask drops
+    every result made on the old one. data.holder is the page's request holder (vb_holderwire.js), data.frame its frame.
+    A request whose saved holder is the one this mask was built with (the page saved what it was sent) is the same mask. */
+function ensureBody({ settings, crops, holder: request = null, frame: f }) {
+  if (f) frame = f;
+  const base = JSON.stringify([settings.sigma, settings.bodyThreshold, settings.closeRadius, settings.closeShape, crops.map((c) => [c.plane, c.points])]);
+  const key = base + HW.holderKey(request);
+  if (body && key === bodyAlias) bodyKey = key;
   if (key === bodyKey && body) return false;
   say('Building the sample mask');
   const crop = P.cropMask(crops, vol.dims, vol.bin);
-  body = P.buildBody(vol.gray, vol.outside, vol.dims, settings, crop);
+  const fitting = !!(request && request.stl && request.stl.triangles), share = HW.progressTracker(fitting ? HOLDER_SPANS : FIND_ONLY);
+  const onProgress = (stage, k, total) => { const s = share(stage, k, total); if (s !== null) postMessage({ type: 'progress', text: HW.progressText(stage, k, total), share: s }); };
+  const prep = HW.prepareHolder({ holder: request, scale: scale(), orient: frame.orient, dims: vol.dims, voxelMm: vol.bin * vol.voxelMm, onProgress });
+  body = P.buildBody(vol.gray, vol.outside, vol.dims, settings, crop, prep.input);
+  holder = { ...body.holder, given: prep.given, stl: prep.report };
+  holder.native = self.VBHolderFrame.piecesToNative(holder.pieces, scale(), frame.orient);
   bodyKey = key;
+  bodyAlias = base + HW.holderKey({ pieces: holder.native, givenBack: holder.givenBack, stl: request ? request.stl : null });
+  poreCoarse = null; coarse = null; voidShare = null; zoneReady = null; patchLabels = null; solidGray = null; airGray = null; pores = null;
   return true;
 }
 
@@ -29,7 +49,11 @@ function sendModel() {
   const { positions, indices } = P.surfaceNets(small.mask, small.dims);
   for (let i = 0; i < positions.length; i++) positions[i] *= vol.bin * MODEL_DOWNSAMPLE;
   airGray = R.estimateAirGray(vol.gray, vol.outside, body.filled);
-  postMessage({ type: 'model', positions, indices, bodyMm3: filled * (vol.bin * vol.voxelMm) ** 3, airGray }, [positions.buffer, indices.buffer]);
+  // The holder for the page: pieces in native scan voxels (as saved), labels on the worker's grid (piece index + 1).
+  const h = holder, labels = h.labels.slice();
+  const out = { method: h.method, given: h.given, pieces: h.native, givenBack: h.givenBack,
+    labels, labelsDims: vol.dims, labelsBin: vol.bin, removedVoxels: h.removedVoxels, warning: h.warning, stl: h.stl };
+  postMessage({ type: 'model', positions, indices, bodyMm3: filled * (vol.bin * vol.voxelMm) ** 3, airGray, holder: out }, [positions.buffer, indices.buffer, labels.buffer]);
 }
 
 function finishDetect({ settings }) {
@@ -92,7 +116,8 @@ const SHEET = { minColumnMm: 1.5, openMm: 0.5, sliceShare: 0.02, surfaceEdgesMm:
 function variantSummary(settings, crops, rejected) {
   const crop = P.cropMask(crops, vol.dims, vol.bin);
   const sameBody = settings.bodyThreshold === pores.settings.bodyThreshold;
-  const b = sameBody ? body : P.buildBody(vol.gray, vol.outside, vol.dims, settings, crop);
+  // Another mask threshold: the same holder pieces (with their runtime STL masks) cut from the new solid, never found again.
+  const b = sameBody ? body : P.buildBody(vol.gray, vol.outside, vol.dims, settings, crop, { pieces: holder.pieces, givenBack: holder.givenBack, method: holder.method, voxelMm: vol.bin * vol.voxelMm });
   let filled = 0;
   for (let i = 0; i < b.filled.length; i++) filled += b.filled[i];
   const c = P.detectPores(vol.gray, vol.outside, vol.dims, b, settings, { bin: vol.bin, voxelMm: vol.voxelMm });
@@ -177,14 +202,14 @@ onmessage = ({ data }) => {
   try {
     if (data.type === 'volume') {
       vol = data;
-      body = null; smoothed = null; smoothedSigma = null; pores = null; coarse = null; zoneReady = null; patchLabels = null;
-      ensureBody(data.settings, data.crops);
+      body = null; smoothed = null; smoothedSigma = null; pores = null; coarse = null; zoneReady = null; patchLabels = null; holder = null;
+      ensureBody(data);
       sendModel();
     } else if (data.type === 'model') {
-      if (ensureBody(data.settings, data.crops)) sendModel();
+      if (ensureBody(data)) sendModel();
       postMessage({ type: 'modelDone' });
     } else if (data.type === 'detect') {
-      if (ensureBody(data.settings, data.crops)) sendModel();
+      if (ensureBody(data)) sendModel();
       if (smoothedSigma === data.settings.fineSigma && smoothed) { finishDetect(data); return; }
       pending = data;
       smoothed = new Array(vol.full.nz);
@@ -208,18 +233,18 @@ onmessage = ({ data }) => {
     } else if (data.type === 'sheet') {
       sendSheet(data);
     } else if (data.type === 'wall') {
-      if (ensureBody(data.settings, data.crops)) sendModel();
+      if (ensureBody(data)) sendModel();
       postMessage({ type: 'wall', id: data.id, ...self.VBWall.wallReport(body.filled, vol.dims, vol.bin, vol.voxelMm) });
     } else if (data.type === 'partMask') {
       // The sample mask, for leveling the part; a copy, so the worker keeps its own.
-      if (ensureBody(data.settings, data.crops)) sendModel();
+      if (ensureBody(data)) sendModel();
       const mask = body.filled.slice();
       postMessage({ type: 'partMask', id: data.id, mask, dims: vol.dims, bin: vol.bin }, [mask.buffer]);
     } else if (data.type === 'regionRuns' || data.type === 'crosscheck') {
       if (!pores || !poreCoarse) throw new Error('Segment pores first: the cross-check compares against that segmentation.');
       postMessage({ type: data.type, id: data.id, ...crosscheck(data) });
     } else if (data.type === 'filler') {
-      if (ensureBody(data.settings, data.crops)) sendModel();
+      if (ensureBody(data)) sendModel();
       if (!smoothed || smoothedSigma !== data.settings.fineSigma || smoothed.length !== vol.full.nz || !smoothed[vol.full.nz - 1]) {
         postMessage({ type: 'filler', id: data.id, refused: 'Segment pores first: the filler analysis reads the smoothed slices that step makes.' });
         return;
@@ -228,7 +253,7 @@ onmessage = ({ data }) => {
         poreThreshold: data.settings.poreThreshold, k: data.k, minVoxels: data.minVoxels, threshold: data.threshold });
       postMessage({ type: 'filler', id: data.id, ...r }, r.nn_mm ? [r.nn_mm.buffer] : []);
     } else if (data.type === 'cad') {
-      if (ensureBody(data.settings, data.crops)) sendModel();
+      if (ensureBody(data)) sendModel();
       const r = self.VBCad.compareToCad({ gray: vol.gray, filled: body.filled, dims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm, circle: vol.circle, airGray,
         poreThreshold: data.settings.poreThreshold, points: data.points, normals: data.normals, edge: data.edge || null, weight: data.weight || null, pose: data.pose || null, ...data.options });
       const { points, normals, edge, weight, ...out } = r;
