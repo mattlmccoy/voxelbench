@@ -161,6 +161,7 @@ function plateMatch(r, threshold, want) {
   const solid = r.body.smoothed.map((g, i) => (g > threshold && !r.vol.outside[i] ? 1 : 0)), touch = touching(r);
   const all = r.info.pieces.filter((p) => p.kind === 'plate').map((p) => ({ id: p.id, touches: touch.has(p.id), mm: +(nov5Thickness(p, solid, r.vol.dims) * r.voxelMm).toFixed(2) }));
   const got = all.filter((p) => p.touches).map((p) => p.mm);
+  if (!Array.isArray(want) || !want.length) return { ok: false, plates: all, want, worstMm: null, why: 'expected.json lists no touching plates' };
   let best = Infinity;
   const pick = (k, used, worst) => {
     if (k === want.length) { best = Math.min(best, worst); return; }
@@ -192,7 +193,7 @@ test('Sample 6 (32 s) matches the Nov 5 part mask', { skip: why('s6_32s', 's6_b4
   s6 = { envelopeCm3: r.envelopeCm3 };
   assert.equal(r.info.method, 'shape', 'found by shape');
   checks();
-  assert.ok(plates.ok, `the plates touching the part within ${LIMITS.plateMm} mm of ${e.plates_touching_mm} (Nov 5 rule): found ${JSON.stringify(plates.plates)}`);
+  assert.ok(plates.ok, `the plates touching the part within ${LIMITS.plateMm} mm of ${e.plates_touching_mm} (Nov 5 rule): ${plates.why || `found ${JSON.stringify(plates.plates)}`}`);
 });
 
 // Agreement with the 32 s scan is informative (Matt, 11-07): the high-res scan keeps an artifact strip in the last slices

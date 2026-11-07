@@ -150,7 +150,13 @@ test('a bright post only a few part spreads above the part, with a shallow valle
 test('a bright post 3.4 part spreads above the part goes the bright path; it is covered outside its contact layer', () => {
   // At this contrast the post's one-voxel layer against the part reads like the part (partial volume), so coverage is
   // judged on the holder outside that layer; nothing of the part may be taken.
-  const r = detect(Scenes.chamferPostScene({ holderGray: 36 })), { nx, ny } = r.dims, plane = nx * ny, t = r.truth;
+  const scene = Scenes.chamferPostScene({ holderGray: 36 }), Seeds = require('../app/vb_holderseeds.js');
+  const sm = P.gaussian(scene.gray, scene.dims, 1), cut = (scene.truth.matrix_gray + scene.truth.air_gray) / 2;
+  const st = Seeds.grayStats(sm, Uint8Array.from(sm, (v, i) => (v > cut && !scene.outside[i] ? 1 : 0)), scene.dims), pops = Seeds.brightPopulations(st);
+  assert.equal(pops.length, 1, 'one resolved population above the part');
+  const spreads = (pops[0].peak - st.peak) / st.spread;
+  assert.ok(spreads > 3 && spreads < 4, `scene: ${spreads.toFixed(2)} spreads`);
+  const r = detect(scene), { nx, ny } = r.dims, plane = nx * ny, t = r.truth;
   assert.equal(r.method, 'bright');
   assert.ok(r.pieces.every((p) => p.kind === 'post'), r.pieces.map((p) => p.kind).join());
   const contact = (i) => [1, -1, nx, -nx, plane, -plane].some((d) => t.part[i + d]);
