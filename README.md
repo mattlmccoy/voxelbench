@@ -83,9 +83,9 @@ status and the VoxelBench version.
 3. For a real scan, press **Open a .VOX file…** for a Rigaku scan, or **Open a folder of slices…** (on the library
    page, or under **File ▾** in the studio) and pick a folder of single-page, uncompressed 16-bit TIFF slices with
    the voxel size in the resolution tags.
-4. Crop out holders or packaging (step 1), segment pores (step 2), map zones (step 3), export (step 4), and
-   calibrate density from phantoms (step 5, optional), compare to CAD (step 6, optional), and analyze filler and
-   fibers (step 7, optional, after step 2).
+4. Check the holder VoxelBench removed and crop out packaging (step 1; see Holder removal below), segment pores
+   (step 2), map zones (step 3), export (step 4), and calibrate density from phantoms (step 5, optional), compare to
+   CAD (step 6, optional), and analyze filler and fibers (step 7, optional, after step 2).
 
 Scans larger than the memory budget (1.2 GB; 0.6 GB in Safari) load block-mean binned, and the page says so before
 reading. Add `?budget=<GB>` to the address to change the budget. The zoomed XY view of a binned scan shows the
@@ -93,6 +93,38 @@ native slice under the binned results.
 
 Serve the page over http (the hosted page, or `npx serve dist` after `node tools/build_static.js`); a page opened
 straight from a file cannot start the analysis worker.
+
+## Holder removal
+
+Every sample-mask build finds the holder (plates, a round post, tape) and cuts it from the mask. The pieces show in
+green in the views and are listed under step 1 > **Holder**.
+
+- **Review:** check the green pieces. Click one with the review tool (**Reject pores**), or press **Give back** in the
+  list, to give it back to the part; click again to take it as holder again. Press **Accept** to save the review with
+  the sample; reopening the scan uses the reviewed pieces.
+- **Holder STLs:** put the holder's STL files in the library's `VoxelBench/holders/` folder, or press **Add holder
+  STL…** (it copies the file there). A holder printed as several parts has one STL per part; tick each one used and
+  each is fitted on its own, with detection covering what none of them fits. The files stay in your library folder.
+- **Leveled scans:** a scan leveled before holder removal opens in scan axes once, is leveled again from the
+  holder-free mask, and says so in a one-time note. Marks drawn in the old leveling stay saved but cannot be shown in
+  the new one.
+- A note gives the holder's share of the solid when the holder is larger than the part. A warning says the part may
+  have been taken only when removal took most of the solid or split it, and a piece found on weaker evidence (it
+  reached the scan edge only through another piece, or is a post step holding something up) was removed.
+
+Known limits:
+
+- A round boss on top of a round post of the same gray, on the same axis, can be taken as one more post step, often
+  with no warning. Tick the post's STL, or give the piece back.
+- A small part on a large stand: stand pieces that reach the scan edge only through another piece are left in the
+  mask as proposals ("found but not removed"); click them to remove them.
+- Artifact slices at the ends of the scan can stay in the mask as part. Crop them out (step 1) until the scan's
+  cone-beam end slices are handled.
+- Tape is found as solid at most 2 analysis voxels thick, so a part's own fins that thin can be taken as tape. Give
+  those pieces back.
+- In a leveled scan the holder is found again on the leveled grid, which keeps only 2 mm of air around the part, so
+  only stubs of a stand are left to fit: pieces there can cut into the part where it rests, or leave some of the
+  stand. Check the green pieces in a leveled scan closely.
 
 ## Scan library
 
