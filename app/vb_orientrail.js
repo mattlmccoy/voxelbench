@@ -4,7 +4,8 @@
    sample and reopens the scan, which is then rebuilt in the part's frame (ct_app.js loadStack); Back to scan axes
    removes it. A scan leveled before holder removal (its orientation lacks holder_removed) opens in scan axes once and is
    leveled again here from the holder-free mask (keeping its flips and turns when the axes stayed close), then reopened
-   with a one-time note.
+   with a one-time note. Both levelings save the scan-axes holder with the sample (carryHolder), so the leveled build
+   uses it instead of finding the holder again on a grid that keeps only stubs of it.
    The math is in vb_orient.js. */
 (function (App) {
   'use strict';
@@ -23,6 +24,14 @@
     return { R, center: draft.center, ...O.gridForPoints({ R, center: draft.center }, draft.pts, draft.bin, margin()) };
   }
   const margin = () => Math.round(MARGIN_MM / state.voxelMm);
+  /** The scan-axes holder to save with a leveling ({ holder: record }, or {}): the leveled grid keeps only the part plus
+      MARGIN_MM, too little of a stand to find it again, so the leveled build uses these pieces (vb_holderreview.js
+      carriedRecord: not reviewed; never over a saved review, which maps into the new frame as it is). Call it with the
+      open scan's state current: after an await, only once the load token and folder are checked. */
+  function carryHolder() {
+    const record = !state.holderError && !state.holderWait && window.VBHolderReview.carriedRecord(state.holder, App.sampleNow().holder || null);
+    return record ? { holder: record } : {};
+  }
   /** The part's axes from the worker's sample mask (holder removed), with its surface points for the leveled grid. */
   async function partAxes() {
     const r = await App.callWorker('partMask', App.bodyArgs());
@@ -118,7 +127,7 @@
   function apply() {
     if (!draft) return;
     const orient = current();
-    App.saveSample({ orientation: { ...O.toNative(orient, state.binFactor), angles_deg: angles(), holder_removed: true, method: 'principal axes of the sample mask, then nudged', made_at: new Date().toISOString() } });
+    App.saveSample({ orientation: { ...O.toNative(orient, state.binFactor), angles_deg: angles(), holder_removed: true, method: 'principal axes of the sample mask, then nudged', made_at: new Date().toISOString() }, ...carryHolder() });
     draft = null;
     App.loadStack(state.stack);
   }
@@ -139,7 +148,7 @@
       const { R, kept } = O.matchTurns(a.R, from.R);
       const orient = { R, center: a.center, ...O.gridForPoints({ R, center: a.center }, a.pts, a.bin, margin()) };
       const text = O.relevelNote(O.axisChange(from.R, R), from, { failed, turnsKept: kept });
-      App.saveSample({ orientation: O.releveled(from, O.toNative(orient, state.binFactor), new Date().toISOString()), replaced_frames: O.withReplaced(App.sampleNow().replaced_frames, O.orientId(from)) }, folder);
+      App.saveSample({ orientation: O.releveled(from, O.toNative(orient, state.binFactor), new Date().toISOString()), replaced_frames: O.withReplaced(App.sampleNow().replaced_frames, O.orientId(from)), ...carryHolder() }, folder);
       const reopened = App.loadStack(stack);
       relevelShown = { token: state.loadToken, text }; // loadStack took its token synchronously
       await reopened;
