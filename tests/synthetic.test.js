@@ -155,3 +155,26 @@ test('holder scene parts rest on the holder, tape touches the part, and the opti
   assert.ok(rimOf(edge.truth.part) > 20 && rimOf(mid.truth.part) === 0, `${rimOf(edge.truth.part)} ${rimOf(mid.truth.part)}`);
   assert.ok(edge.outside.some((v, i) => v && edge.gray[i] === 0));
 });
+
+test('a holder scene merges part and holder in the sample mask, as a real part resting flat does', () => {
+  // The app's own body builder: smooth (sigma 1), threshold midway between matrix and air, open, keep the largest
+  // component, close and fill. Size 128 so the thin stem and plates (0.06 and 0.035 of the size) survive the opening.
+  const P = require('../app/ct_pores.js');
+  const n = 128, dims = { nx: n, ny: n, nz: n };
+  for (const [holder, part] of [['post', 'blob'], ['plates', 'blob'], ['post', 'cube']]) {
+    const s = S.makeHolderScene({ size: n, holder, part });
+    const mid = (s.truth.matrix_gray + s.truth.air_gray) / 2;
+    const { filled } = P.buildBody(s.gray, s.outside, dims, { ...P.DEFAULT_SETTINGS, sigma: 1, bodyThreshold: mid }, null);
+    let nPart = 0, inPart = 0, nHolder = 0, inHolder = 0;
+    for (let i = 0; i < filled.length; i++) { nPart += s.truth.part[i]; nHolder += s.truth.holder[i]; if (filled[i]) { inPart += s.truth.part[i]; inHolder += s.truth.holder[i]; } }
+    assert.ok(inPart >= 0.95 * nPart && inHolder >= 0.95 * nHolder, `${holder} ${part}: part ${inPart}/${nPart}, holder ${inHolder}/${nHolder}`);
+  }
+});
+
+test('the tape truth never marks voxels outside the scan', () => {
+  const s = S.makeHolderScene({ size: 64, tape: true, touchEdge: true });
+  let tape = 0, out = 0;
+  for (let i = 0; i < s.outside.length; i++) if (s.truth.tape[i]) { tape++; out += s.outside[i]; }
+  assert.ok(tape > 100);
+  assert.equal(out, 0);
+});

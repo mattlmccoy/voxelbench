@@ -170,7 +170,7 @@
   // first, so one seed gives one part whatever the holder, and truth carries disjoint masks for part, holder and tape.
   const HOLDER_BRIGHT = 600, POST_CAP_R = 0.14, POST_CAP_H = 0.1, POST_STEM_R = 0.06, PLATE_T = 0.035, PLATE_TILTS = [25, 60];
   const CUBE_SIDE = 0.3, EDGE_SHIFT = 0.34, BLOB_PORES = 25, BLOB_PORE_R = [2, 4], INCLUSIONS = 30, INCLUSION_R = [1, 2];
-  const TAPE_NEAR = 2.8, TAPE_CLOSE = 1.8, TAPE_TOUCHES = 3, TAPE_FROM = 0.3;
+  const FACET_DEPTH = 0.04, TAPE_NEAR = 2.8, TAPE_CLOSE = 1.8, TAPE_TOUCHES = 3, TAPE_FROM = 0.3;
 
   /** Offsets within radius r, for stamping a ball around a voxel. */
   function ballOffsets(r) {
@@ -180,7 +180,7 @@
   }
 
   /** The part mask (lumpy 'blob' of 3 ellipsoids or flat 'cube'), cut to the FOV, with its lowest voxel on slice zb. */
-  function holderScenePart({ rnd, n, cx, cy, fov, part, zb }) {
+  function holderScenePart({ rnd, n, cx, cy, fov, part, zb, flat }) {
     const lumps = [[-0.05, 0, 0.12, 0.16, 0.12, 0.12], [0.06, 0.05, 0.14, 0.12, 0.14, 0.14], [0, -0.06, 0.11, 0.13, 0.13, 0.11]].map((b) => {
       const j = () => (rnd() - 0.5) * 0.04 * n;
       return { x: cx + b[0] * n + j(), y: cy + b[1] * n + j(), z: b[2] * n + j(), a: (b[3] + rnd() * 0.02) * n, b: (b[4] + rnd() * 0.02) * n, h: (b[5] + rnd() * 0.02) * n };
@@ -197,21 +197,18 @@
       return m;
     };
     const lowest = (m) => { const i = m.indexOf(1); return i < 0 ? n : Math.floor(i / (n * n)); };
-    return raster(2 * zb - lowest(raster(zb))); // a whole-voxel move, so the mask keeps its shape
+    const low = flat ? zb - Math.round(FACET_DEPTH * n) : zb; // a flat-bottom blob starts below zb and is cut there
+    const m = raster(2 * low - lowest(raster(low))); // a whole-voxel move, so the mask keeps its shape
+    if (flat) m.fill(0, 0, zb * n * n);
+    return m;
   }
 
   /** Stepped post on the z axis through (cx, cy): a cap just under the part, a stem down to slice 0. Plates: a base
       slab and two plates tilted 25 and 60 degrees whose top faces touch the part, running out to the FOV edge. */
-  function holderSceneHolder({ n, cx, cy, fov, partMask, zb, holder }) {
+  function holderSceneHolder({ n, cx, cy, fov, partMask, zb, holder, planes }) {
     const mask = new Uint8Array(n * n * n), pieces = [], t = Math.max(2, PLATE_T * n);
     if (holder === 'none') return { mask, pieces };
     const capH = Math.max(2, Math.round(POST_CAP_H * n)), capR = POST_CAP_R * n, stemR = POST_STEM_R * n;
-    const planes = PLATE_TILTS.map((deg, k) => {
-      const a = (deg * Math.PI) / 180, nx = (k ? -1 : 1) * Math.sin(a), nz = Math.cos(a);
-      let d = Infinity; // the plane n.p = d just touches the part from below
-      for (let z = 0, i = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++, i++) if (partMask[i]) d = Math.min(d, nx * x + nz * z);
-      return { nx, nz, d, deg };
-    });
     for (let z = 0, i = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++, i++) {
       if (!fov[i] || partMask[i]) continue;
       const r = Math.hypot(x - cx, y - cy);
@@ -223,7 +220,17 @@
     else pieces.push({ kind: 'plate', thicknessVox: t, tiltDeg: 0 }, ...planes.map((p) => ({ kind: 'plate', thicknessVox: t, tiltDeg: p.deg })));
     return { mask, pieces };
   }
-  const onPlate = (p, x, z, t) => { const s = p.nx * x + p.nz * z; return s > p.d - t && s < p.d + 0.5; };
+  const onPlate = (p, x, z, t) => { const s = p.nx * x + p.nz * z; return s > p.d - t && s < p.d; };
+
+  /** The two plate planes n.p = d (n up and toward the part), d set depth voxels inside the volume's lowest reach along n. */
+  function holderScenePlanes(vol, n, depth) {
+    return PLATE_TILTS.map((deg, k) => {
+      const a = (deg * Math.PI) / 180, nx = (k ? -1 : 1) * Math.sin(a), nz = Math.cos(a);
+      let d = Infinity;
+      for (let z = 0, i = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++, i++) if (vol[i]) d = Math.min(d, nx * x + nz * z);
+      return { nx, nz, d: d + depth, deg };
+    });
+  }
 
   /** Spheres inside the part (all six axis points of radius r + margin in the part) clear of each other. */
   function holderSceneBalls({ rnd, n, at, partMask, count, radius, margin, avoid = [] }) {
@@ -276,11 +283,18 @@
     const fov = new Uint8Array(N3), outside = new Uint8Array(N3);
     for (let z = 0, i = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++, i++) { fov[i] = Math.hypot(x - c, y - c) <= FOV ? 1 : 0; outside[i] = 1 - fov[i]; }
     const zb = Math.round((holder === 'plates' ? 0.3 : 0.25) * n);
-    const partMask = holderScenePart({ rnd, n, cx, cy, fov, part, zb });
+    const blobFlat = part === 'blob' && holder !== 'none';
+    let partMask = holderScenePart({ rnd, n, cx, cy, fov, part, zb, flat: blobFlat && holder === 'post' });
+    // Plates: a blob is cut by each plate's plane so its underside lies flat on the plate; a cube only touches an edge.
+    const planes = holder === 'plates' ? holderScenePlanes(partMask, n, blobFlat ? FACET_DEPTH * n : 0) : [];
+    if (blobFlat && holder === 'plates') {
+      partMask = partMask.map((v, i) => { if (!v) return 0; const x = i % n, z = Math.floor(i / (n * n)); return planes.every((p) => p.nx * x + p.nz * z >= p.d) ? 1 : 0; });
+    }
     const pores = part === 'blob' ? holderSceneBalls({ rnd, n, at, partMask, count: BLOB_PORES, radius: BLOB_PORE_R, margin: 2 }) : [];
     const bright = inclusions ? holderSceneBalls({ rnd, n, at, partMask, count: INCLUSIONS, radius: INCLUSION_R, margin: 1, avoid: pores }) : [];
-    const { mask: holderMask, pieces } = holderSceneHolder({ n, cx, cy, fov, partMask, zb, holder });
+    const { mask: holderMask, pieces } = holderSceneHolder({ n, cx, cy, fov, partMask, zb, holder, planes });
     const tapeMask = tape ? holderSceneTape({ rnd, n, at, partMask, holderMask, cx, cy }) : new Uint8Array(N3);
+    for (let i = 0; i < N3; i++) tapeMask[i] &= fov[i]; // the scan cannot show tape beyond the FOV
     const gray = new Float32Array(N3), hGray = MATRIX_GRAY + (holderGray === 'bright' ? HOLDER_BRIGHT : 0);
     for (let i = 0; i < N3; i++) gray[i] = AIR_GRAY;
     const paint = (balls, value) => {
