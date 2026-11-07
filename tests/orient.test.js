@@ -189,3 +189,58 @@ test('the paced resample (pausing between slices) gives the same leveled scan an
   assert.deepEqual(paced.map((s) => [...s]), whole.map((s) => [...s]));
   assert.deepEqual(done[done.length - 1], [orient.dims.nz, orient.dims.nz]);
 });
+
+// Re-leveling (holder removal, Task 8): an orientation found before the holder was cut from the mask is redone once.
+test('an orientation from before holder removal needs re-leveling', () => {
+  const o = { R: [1, 0, 0, 0, 1, 0, 0, 0, 1], center: [1, 2, 3], origin: [0, 0, 0], dims: { nx: 4, ny: 4, nz: 4 } };
+  assert.equal(O.needsRelevel(o), true);
+  assert.equal(O.needsRelevel({ ...o, holder_removed: false }), true);
+  assert.equal(O.needsRelevel({ ...o, holder_removed: true }), false);
+  assert.equal(O.needsRelevel(null), false); // scan axes: nothing to redo
+});
+
+test('axisChange measures how far the axes moved', () => {
+  const I = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  const c = O.axisChange(I, rotX(3 * deg)); // a 3 degree tilt about the long axis moves up, not long
+  close(c.up_deg, 3, 1e-6, 'up'); close(c.long_deg, 0, 1e-6, 'long');
+  const s = O.axisChange(I, O.flip(rotX(3 * deg))); // sign-free: an axis reversed has not moved
+  close(s.up_deg, 3, 1e-6, 'up, flipped'); close(s.long_deg, 0, 1e-6, 'long, flipped');
+  close(O.axisChange(I, rotZ(10 * deg)).long_deg, 10, 1e-6, 'long turned 10');
+});
+
+test('a re-level keeps the flips and quarter turns of the old leveling', () => {
+  const old = O.turn(O.flip(O.nudge(T, { rx: 2, ry: -1, rz: 4 }))); // a leveling turned and flipped by hand
+  const fresh = O.nudge(T, { rx: 0.5, ry: 0.5, rz: -1 }); // the principal axes again, a little off
+  const m = O.matchTurns(fresh, old);
+  close(det(m), 1, 1e-12, 'proper rotation');
+  for (let r = 0; r < 3; r++) assert.ok(dot(row(m, r), row(old, r)) > Math.cos(10 * deg), `row ${r} follows the old leveling`);
+  // the same axes as fresh, only reordered and signed
+  for (let r = 0; r < 3; r++) assert.ok([0, 1, 2].some((k) => Math.abs(Math.abs(dot(row(m, r), row(fresh, k))) - 1) < 1e-12), `row ${r} is an axis of fresh`);
+  assert.deepEqual(O.matchTurns(fresh, fresh), fresh);
+});
+
+test('when the holder had swung the old axes far off, a re-level keeps the default axes, not the old turns', () => {
+  const fresh = O.levelFromMask(boxMask(), DIMS, 1).R;
+  const old = O.turn(O.nudge(fresh, { rx: 0, ry: 60, rz: 0 })); // turned by hand, but 60 degrees off about y
+  assert.deepEqual(O.matchTurns(fresh, old), fresh);
+  const near = O.turn(O.nudge(fresh, { rx: 0, ry: 20, rz: 0 })); // 20 degrees off: the turn is kept
+  assert.deepEqual(O.matchTurns(fresh, near), O.turn(fresh));
+});
+
+test('the re-leveled orientation says it was found without the holder and what it replaced', () => {
+  const old = { R: [1, 0, 0, 0, 1, 0, 0, 0, 1], center: [1, 2, 3], origin: [0, 0, 0], dims: { nx: 4, ny: 4, nz: 4 }, angles_deg: { rx: 2, ry: 0, rz: -1 }, method: 'principal axes of the sample mask, then nudged', made_at: '2026-10-30T12:00:00.000Z' };
+  const fresh = { R: rotX(3 * deg), center: [1.5, 2, 3], origin: [-1, 0, 0], dims: { nx: 5, ny: 4, nz: 4 } };
+  const r = O.releveled(old, fresh, '2026-11-07T09:00:00.000Z');
+  assert.deepEqual(r, { ...fresh, angles_deg: { rx: 0, ry: 0, rz: 0 }, holder_removed: true,
+    method: 'principal axes of the holder-free sample mask (re-leveled automatically)', made_at: '2026-11-07T09:00:00.000Z',
+    replaced: { made_at: '2026-10-30T12:00:00.000Z', angles_deg: { rx: 2, ry: 0, rz: -1 } } });
+  assert.equal(O.needsRelevel(r), false); // exactly once
+});
+
+test('the re-level note names the angles and the old date, and a failed holder search', () => {
+  const old = { made_at: '2026-10-30T12:00:00.000Z' };
+  assert.equal(O.relevelNote({ up_deg: 3.14, long_deg: 1.36 }, old, null),
+    'Re-leveled without the holder: the up axis moved 3.1°, the long axis 1.4°. Slider nudges from 2026-10-30 were dropped.');
+  assert.equal(O.relevelNote({ up_deg: 0.04, long_deg: 0 }, {}, 'no post found'),
+    'Re-leveled without the holder: the up axis moved 0.0°, the long axis 0.0°. Slider nudges from the earlier leveling were dropped. Holder detection failed (no post found), so the axes come from the sample mask as built.');
+});

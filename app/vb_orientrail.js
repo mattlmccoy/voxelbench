@@ -2,7 +2,10 @@
    worker and takes the part's axes from it (long axis x, thinnest z); the sliders, Flip over and Turn 90° adjust them
    while three small previews show the leveled scan through the part's center. Apply saves the orientation with the
    sample and reopens the scan, which is then rebuilt in the part's frame (ct_app.js loadStack); Back to scan axes
-   removes it. The math is in vb_orient.js. */
+   removes it. A scan leveled before holder removal (its orientation lacks holder_removed) opens in scan axes once and is
+   leveled again here from the holder-free mask (keeping its flips and turns when the axes stayed close), then reopened
+   with a one-time note.
+   The math is in vb_orient.js. */
 (function (App) {
   'use strict';
   const O = window.VBOrient, CT = window.CT;
@@ -11,12 +14,20 @@
   const SLIDERS = [['rx', 'orientRx'], ['ry', 'orientRy'], ['rz', 'orientRz']];
   let draft = null; // { base, center, pts, bin, ambiguous } while leveling
   let busy = false, frame = 0;
+  let relevelNote = null; // { token, text }: the one-time note for the scan reopened after an automatic re-level
 
   const angles = () => Object.fromEntries(SLIDERS.map(([k, id]) => [k, Number($(id).value)]));
   /** The orientation the sliders describe, with its grid around the part. */
   function current() {
     const R = O.nudge(draft.base, angles());
-    return { R, center: draft.center, ...O.gridForPoints({ R, center: draft.center }, draft.pts, draft.bin, Math.round(MARGIN_MM / state.voxelMm)) };
+    return { R, center: draft.center, ...O.gridForPoints({ R, center: draft.center }, draft.pts, draft.bin, margin()) };
+  }
+  const margin = () => Math.round(MARGIN_MM / state.voxelMm);
+  /** The part's axes from the worker's sample mask (holder removed), with its surface points for the leveled grid. */
+  async function partAxes() {
+    const r = await App.callWorker('partMask', App.bodyArgs());
+    const L = O.levelFromMask(r.mask, r.dims, r.bin);
+    return { R: L.R, center: L.center, ambiguous: L.ambiguous, pts: O.surfacePoints(r.mask, r.dims, r.bin), bin: r.bin };
   }
 
   // While leveling, the rail widens (VBSkin.levelingRailWidth) and html.leveling puts the three previews side by side,
@@ -37,9 +48,9 @@
   }
 
   function render() {
-    const leveled = Boolean(state.orientation), hidden = state.folder ? App.hiddenMarks(state.folder) : 0;
+    const leveled = Boolean(state.orientation), hidden = state.folder ? App.hiddenMarks(state.folder) : 0, waiting = Boolean(state.relevel);
     $('orientState').textContent = leveled ? 'leveled' : 'scan axes';
-    $('orientLevel').disabled = !state.folder || !state.model || busy || leveled;
+    $('orientLevel').disabled = !state.folder || !state.model || busy || leveled || waiting;
     $('orientLevel').hidden = leveled || Boolean(draft); // the editor below replaces it while leveling
     $('orientReset').hidden = !leveled;
     $('orientReset').disabled = busy;
@@ -48,7 +59,9 @@
     const d = state.dims, mm = (n) => (n * state.voxelMm).toFixed(1);
     const parts = [];
     if (leveled) parts.push(`Leveled in the part's frame: x is the long axis, z the thinnest direction (up). The leveled scan is ${mm(d.nx)} × ${mm(d.ny)} × ${mm(d.nz)} mm with ${MARGIN_MM} mm of air around the part; everything outside the original scan reads gray 0. Saved with the sample, so reopening the scan levels it again.`);
-    else if (state.folder && !draft) parts.push('A part scanned at an angle can be leveled: its long axis to x, its thinnest direction to z (up), so depth, sections and wall thickness follow the part. The part\'s axes come from its sample mask.');
+    if (relevelNote && relevelNote.token === state.loadToken) parts.push(relevelNote.text);
+    if (waiting) parts.push('This scan was leveled with the holder still in its sample mask. It opened in scan axes and is leveled again without the holder once the mask is built.');
+    else if (!leveled && state.folder && !draft) parts.push('A part scanned at an angle can be leveled: its long axis to x, its thinnest direction to z (up), so depth, sections and wall thickness follow the part. The part\'s axes come from its sample mask.');
     if (hidden) parts.push(`${hidden} mark${hidden === 1 ? ' was' : 's were'} drawn with the scan in another orientation; ${hidden === 1 ? 'it is hidden here and comes' : 'they are hidden here and come'} back in that orientation.`);
     if (parts.length) $('orientNote').textContent = parts.join(' ');
   }
@@ -84,9 +97,8 @@
     busy = true; render();
     emit('statusText', 'Finding the part\'s axes from its sample mask');
     try {
-      const r = await App.callWorker('partMask', App.bodyArgs());
-      const L = O.levelFromMask(r.mask, r.dims, r.bin);
-      draft = { base: L.R, center: L.center, pts: O.surfacePoints(r.mask, r.dims, r.bin), bin: r.bin, ambiguous: L.ambiguous };
+      const a = await partAxes();
+      draft = { base: a.R, center: a.center, pts: a.pts, bin: a.bin, ambiguous: a.ambiguous };
       for (const [, id] of SLIDERS) $(id).value = '0';
       $('orientBox').open = true; // the previews are inside it
       $('orientNote').textContent = 'Preview: the side and end views should show the part lying flat, its top face up. Nudge with the sliders, Flip over if it is upside down, Turn 90° if its long side runs the wrong way. Apply rebuilds the scan in this frame and restarts the analysis.';
@@ -103,9 +115,41 @@
   function apply() {
     if (!draft) return;
     const orient = current();
-    App.saveSample({ orientation: { ...O.toNative(orient, state.binFactor), angles_deg: angles(), method: 'principal axes of the sample mask, then nudged', made_at: new Date().toISOString() } });
+    App.saveSample({ orientation: { ...O.toNative(orient, state.binFactor), angles_deg: angles(), holder_removed: true, method: 'principal axes of the sample mask, then nudged', made_at: new Date().toISOString() } });
     draft = null;
     App.loadStack(state.stack);
+  }
+
+  /** The automatic re-level, on the first model of a scan opened in scan axes for it (ct_app.js loadStack sets
+      state.relevel = { from, token }): the same axes as Level the part, turned and flipped as the old leveling was (O.matchTurns),
+      saved with the old one's date and angles, then the scan is reopened leveled. Another scan opened meanwhile ends it. */
+  async function relevel() {
+    const job = state.relevel;
+    if (!job || job.token !== state.loadToken || !state.model || !state.holder) return;
+    state.relevel = null; // once per load
+    const { from, token } = job, folder = state.folder, stack = state.stack, failed = state.holder.failed || null;
+    busy = true; render();
+    emit('statusText', 'Leveling the part again, without the holder');
+    try {
+      const a = await partAxes();
+      if (token !== state.loadToken || folder !== state.folder) return;
+      const R = O.matchTurns(a.R, from.R);
+      const orient = { R, center: a.center, ...O.gridForPoints({ R, center: a.center }, a.pts, a.bin, margin()) };
+      const text = O.relevelNote(O.axisChange(from.R, R), from, failed);
+      App.saveSample({ orientation: O.releveled(from, O.toNative(orient, state.binFactor), new Date().toISOString()) }, folder);
+      const reopened = App.loadStack(stack);
+      relevelNote = { token: state.loadToken, text }; // loadStack took its token synchronously
+      await reopened;
+      if (relevelNote.token !== state.loadToken) return;
+      App.projectNote(text);
+      $('orientBox').open = true;
+      render();
+    } catch (e) {
+      if (token === state.loadToken) emit('statusText', `Could not level the part again without the holder (${e.message}). It stays in scan axes; reopening the scan tries again.`);
+    } finally {
+      busy = false;
+      if (token === state.loadToken) render();
+    }
   }
 
   function reset() {
@@ -126,6 +170,7 @@
     $('orientZero').addEventListener('click', () => { for (const [, id] of SLIDERS) $(id).value = '0'; preview(); });
     for (const [, id] of SLIDERS) $(id).addEventListener('input', preview);
   });
-  on('loaded', () => { draft = null; render(); });
+  on('loaded', () => { draft = null; if (relevelNote && relevelNote.token !== state.loadToken) relevelNote = null; render(); });
+  on('modelChanged', relevel);
   for (const e of ['modelChanged', 'recordsChanged', 'samplesChanged']) on(e, render);
 }(window.CTApp));

@@ -292,20 +292,22 @@ window.CTApp = (function () {
     const label = stack.title || stack.folder; // a library scan's folder is its id; it is shown by its title
     if (worker) { worker.terminate(); worker = null; }
     for (const c of calls.values()) c.reject(new Error('Another scan was opened.')); calls.clear();
-    Object.assign(state, { slices: null, folder: null, stack, reader: null, scanInfo: null, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, sheetSaved: false, holder: null, holderStl: null, holderWait: false, holderError: null });
+    Object.assign(state, { slices: null, folder: null, stack, reader: null, scanInfo: null, orientation: null, orientId: null, draft: null, loading: stack.folder, model: null, pores: null, runs: null, rejected: new Set(), rejectedVoxels: [], selected: null, bodyMm3: null, airGray: null, solidGray: null, porePhase: 'idle', regionStats: new Map(), patches: null, patchLabels: null, patchGrid: null, voidMeshes: null, zones: null, zoneLabels: {}, zoneThreshold: null, sheetSaved: false, holder: null, holderStl: null, holderWait: false, holderError: null, relevel: null });
     showPage('library'); // the loading progress shows there
     showError('');
     emit('samplesChanged');
     const bar = $('progressBar');
     bar.hidden = false;
     // The first slice sets the shape; the binning factor is chosen, and said, before the rest is read.
-    let shape, f, slices, nativeMid = null, saved = null, orient = null, dims, circle, n, parse, sliceName, scanInfo = null, source;
+    let shape, f, slices, nativeMid = null, saved = null, relevelFrom = null, orient = null, dims, circle, n, parse, sliceName, scanInfo = null, source;
     try {
       source = await openReader(stack);
       ({ count: n, read: parse, name: sliceName } = source);
       scanInfo = await readScanInfo(stack, source);
       shape = await parse(0);
       saved = savedOrientation(stack.folder);
+      // Leveled before holder removal: open in scan axes; vb_orientrail.js levels it again from the holder-free mask.
+      if (O.needsRelevel(saved)) { relevelFrom = saved; saved = null; }
       f = saved ? O.planOrientedBinning({ width: shape.width, height: shape.height, depth: n }, saved.dims, orientLimit())
         : VB.planBinning({ width: shape.width, height: shape.height, depth: n }, VB.budgetBytes(navigator.userAgent, location.search));
       const groups = Math.floor(n / f), mid = Math.floor(n / 2);
@@ -364,6 +366,7 @@ window.CTApp = (function () {
     state.circle = circle; // null for a leveled scan: there, gray 0 marks outside the scan
     state.orientation = orient;
     state.orientId = O.orientId(saved);
+    state.relevel = relevelFrom ? { from: relevelFrom, token } : null;
     state.cursor = { x: state.dims.nx >> 1, y: state.dims.ny >> 1, z: state.dims.nz >> 1 };
     const auto = CT.autoWindow(slices, state.dims, WINDOW_SAMPLE_STEP);
     state.autoWindow = { low: auto.low, high: auto.high };
@@ -693,5 +696,5 @@ window.CTApp = (function () {
     emit('wallChanged');
   }
 
-  return { showPage, useStore, openReader, openFiles, sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, relative, hiddenMarks, orientLimit, cropOutlines, savedOrientation, bodyArgs, holderChanged, beforeFirstMask };
+  return { showPage, useStore, openReader, openFiles, sampleNow, openDemo, callWorker, requestWall, requestFiller, requestCad, saveSample, state, on, off, emit, start, $, BIN, LAYERS, ZONE_COLOR, saveRecord, removeRecord, annotationsOf, regionsOf, cropsOf, newId, loadStack, runDetect, updateModel, cropChanged, requestVoidMeshes, requestSheet, requestZones, setMain, toggleReject, statsOf, renderSaveState, markDirty, regionLabels, zoneColor, zoneTitle, readNative, provenance, calibration, relative, hiddenMarks, orientLimit, cropOutlines, savedOrientation, bodyArgs, holderChanged, beforeFirstMask, projectNote };
 }());

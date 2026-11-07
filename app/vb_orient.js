@@ -180,5 +180,40 @@
     throw new Error('Too large even at 4× binning with the leveled copy.');
   }
 
-  return { levelFromMask, nudge, flip, turn, gridFor, surfacePoints, gridForPoints, resample, resamplePaced, resampleSlice, samplePlane, onGrid, toNative, orientId, sameFrame, fits, planOrientedBinning };
+  // ---------- re-leveling without the holder ----------
+  // An orientation saved before the holder was cut from the sample mask was found with the holder in it; the scan opens
+  // in scan axes once, is leveled again from the holder-free mask (vb_orientrail.js), and the new one is stamped.
+  /** True when a saved orientation was found before holder removal (it lacks holder_removed: true). */
+  const needsRelevel = (o) => Boolean(o) && o.holder_removed !== true;
+  const KEEP_TURNS_DEG = 45; // half a quarter turn: past it the old flips and turns no longer pick out a side
+  const angleDeg = (a, b) => Math.acos(Math.min(1, Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))) * 180 / Math.PI;
+  /** How far the up (z) and long (x) axes moved between two orientations, sign-free (0 to 90 degrees). */
+  const axisChange = (Rold, Rnew) => ({ up_deg: angleDeg(Rold.slice(6, 9), Rnew.slice(6, 9)), long_deg: angleDeg(Rold.slice(0, 3), Rnew.slice(0, 3)) });
+  /** R after the Flip over and Turn 90° (of the eight) that bring it closest to Rold, so a re-level keeps them; R
+      itself when even the closest is more than KEEP_TURNS_DEG off (the old axes were wrong, so its turns mean nothing). */
+  function matchTurns(R, Rold) {
+    let best = R, score = -Infinity;
+    for (const start of [R, flip(R)]) {
+      let c = start;
+      for (let k = 0; k < 4; k++, c = turn(c)) {
+        let s = 0;
+        for (let i = 0; i < 9; i++) s += c[i] * Rold[i];
+        if (s > score + 1e-12) { score = s; best = c; }
+      }
+    }
+    // score is the trace of the turn between best and Rold, 1 + 2 cos(angle)
+    return score >= 1 + 2 * Math.cos(KEEP_TURNS_DEG * Math.PI / 180) ? best : R;
+  }
+  const RELEVEL_METHOD = 'principal axes of the holder-free sample mask (re-leveled automatically)';
+  /** The orientation to save after a re-level: fresh (native voxels), unnudged, stamped, naming the one it replaced. */
+  const releveled = (old, fresh, now) => ({ ...fresh, angles_deg: { rx: 0, ry: 0, rz: 0 }, holder_removed: true, method: RELEVEL_METHOD, made_at: now,
+    replaced: { made_at: old.made_at || null, angles_deg: old.angles_deg || null } });
+  /** The one-time note after a re-level; failed is the holder search's failure message, or null. */
+  function relevelNote({ up_deg, long_deg }, old, failed) {
+    const when = old.made_at ? `from ${String(old.made_at).slice(0, 10)}` : 'from the earlier leveling';
+    return `Re-leveled without the holder: the up axis moved ${up_deg.toFixed(1)}°, the long axis ${long_deg.toFixed(1)}°. Slider nudges ${when} were dropped.${failed ? ` Holder detection failed (${failed}), so the axes come from the sample mask as built.` : ''}`;
+  }
+
+  return { levelFromMask, nudge, flip, turn, gridFor, surfacePoints, gridForPoints, resample, resamplePaced, resampleSlice, samplePlane, onGrid, toNative, orientId, sameFrame, fits, planOrientedBinning,
+    needsRelevel, axisChange, matchTurns, releveled, relevelNote };
 }));
