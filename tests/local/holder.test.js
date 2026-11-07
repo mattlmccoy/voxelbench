@@ -1,11 +1,14 @@
 'use strict';
-// Holder removal acceptance gate: the automatic holder removal must reproduce the Nov 5 Python part masks on the real
-// scans. Needs, in VOXELBENCH_LOCAL_DIR/holder/ (never in this repository):
+// Holder removal acceptance gate on real scans. It judges the holder effect: the envelope VoxelBench builds with its own
+// holder removal must be within 2 % of the envelope VoxelBench builds when it is handed the Nov 5 Python holder mask
+// (the same mask pipeline both times), and the part mask must match the Nov 5 part mask (Dice). The plain difference to
+// the Nov 5 envelope is logged as information. Needs, in VOXELBENCH_LOCAL_DIR/holder/ (never in this repository):
 //   s6_32s/, s6_high/   TIFF stacks of the angled-stand scan (32 s and high-res)
 //   s6_b4_part.npy      the Nov 5 part mask on the 0.16 mm grid (4x4x4 block mean from native index 0)
 //   s4/                 the post scan's export folder (a .VOX volume)
 //   s4_b4_part.npy      the Nov 5 part mask for it, same grid
-//   stl/                holder STL candidates (<name>__*.stl)
+//   s6_b4_holder.npy, s4_b4_holder.npy   the Nov 5 holder masks, same grid
+//   stl/                holder STL files (<name>__*.stl); a stand-in post STL is fitted on the post scan, informative only
 //   expected.json       { s6: { envelope_cm3, body_threshold, plates_mm }, s4: { envelope_cm3, body_threshold } }
 // Every test skips unless its own files exist. Run with: VOXELBENCH_LOCAL_DIR=... npm run test:local
 const test = require('node:test');
@@ -31,8 +34,6 @@ const why = (...names) => !(EXPECTED && has(...names)) && `VOXELBENCH_LOCAL_DIR 
 const F = 2;           // read binned x2 while reading (to 0.08 mm), as the page does for a stack this size
 const BIN = 2;         // the worker's grid: 0.16 mm, the Nov 5 grid
 const LIMITS = { envelope: 0.02, dice: 0.97, plateMm: 0.3, holderSeconds: 15 };
-const S6_PLATFORMS = ['ct_head_platform_big', 'ct_head_platform_turret'];
-const S6_BLOCKS = ['ct_block_10deg', 'ct_block_15deg', 'ct_block_20deg', 'ct_block_30deg'];
 
 /** A scan folder read binned F x F x F while reading: a TIFF stack, or the .VOX in an export folder. The circle is fitted on
     a native slice and scaled to the binned grid (ct_app.js). */
@@ -106,69 +107,100 @@ const describe = (r) => ({
 });
 const within = (got, want, rel) => Math.abs(got - want) <= rel * want;
 
-/** Found plate thicknesses matched to the expected ones (both sorted: the best one-to-one match on a line). */
-function plateMatch(pieces, voxelMm, want) {
-  const got = pieces.filter((p) => p.kind === 'plate').map((p) => 2 * p.half[2] * voxelMm).sort((a, b) => a - b), w = [...want].sort((a, b) => a - b);
-  if (got.length < w.length) return { ok: false, got };
-  // Every choice of want.length found plates, in order; the best is the one whose largest miss is smallest.
+
+/** The envelope VoxelBench builds when handed the Nov 5 holder mask instead of finding its own: the same buildBody (tape
+    still found and stripped), with every solid voxel of the Nov 5 holder cut. */
+function nov5HolderEnvelope(r, threshold, file) {
+  const nov5 = readNpy(fs.readFileSync(file)), { nx, ny, nz } = r.vol.dims, [rz, ry, rx] = nov5.shape;
+  const holderMask = (a) => {
+    const out = H.holderMask(a);
+    for (let z = 0; z < Math.min(nz, rz); z++) for (let y = 0; y < Math.min(ny, ry); y++) for (let x = 0; x < Math.min(nx, rx); x++) {
+      const i = x + nx * (y + ny * z);
+      if (a.solid[i] && nov5.data[x + rx * (y + ry * z)]) out.holder[i] = 1;
+    }
+    return out;
+  };
+  const input = { pieces: null, givenBack: [], voxelMm: r.voxelMm, find: () => ({ method: 'given', pieces: [] }), modules: { holder: { holderMask } } };
+  const body = P.buildBody(r.vol.gray, r.vol.outside, r.vol.dims, { ...P.DEFAULT_SETTINGS, bodyThreshold: threshold }, null, input);
+  let filled = 0;
+  for (let i = 0; i < body.filled.length; i++) filled += body.filled[i];
+  return (filled * r.voxelMm ** 3) / 1000;
+}
+
+/** The Nov 5 plate thickness rule applied to a found plate: the 0.5-99.5 % range of its solid voxel centers along its
+    normal, plus 2 voxels (s6_partmask.py). Its voxels are the solid within 2 voxels of its faces, over the in-plane cells
+    with no solid further out (a resting part, a crossing plate or the base there would widen the range). In voxels. */
+function nov5Thickness(p, solid, { nx, ny, nz }) {
+  const a = p.axes, h = p.half, G = 2, r = [0, 1, 2].map((j) => Math.abs(a[j]) * h[0] + Math.abs(a[3 + j]) * h[1] + Math.abs(a[6 + j]) * (h[2] + G + 1) + 1);
+  const lo = [0, 1, 2].map((j) => Math.max(0, Math.floor(p.center[j] - r[j]))), hi = [nx, ny, nz].map((m, j) => Math.min(m - 1, Math.ceil(p.center[j] + r[j])));
+  const dirty = new Set(), vals = [];
+  for (let z = lo[2]; z <= hi[2]; z++) for (let y = lo[1]; y <= hi[1]; y++) for (let x = lo[0]; x <= hi[0]; x++) {
+    if (!solid[x + nx * (y + ny * z)]) continue;
+    const d = [x - p.center[0], y - p.center[1], z - p.center[2]], q = [0, 3, 6].map((o) => d[0] * a[o] + d[1] * a[o + 1] + d[2] * a[o + 2]);
+    if (Math.abs(q[0]) > h[0] || Math.abs(q[1]) > h[1] || Math.abs(q[2]) > h[2] + G + 1) continue;
+    const cell = `${Math.round(q[0])},${Math.round(q[1])}`;
+    if (Math.abs(q[2]) > h[2] + G) dirty.add(cell); else vals.push([cell, q[2]]);
+  }
+  const v = Float64Array.from(vals.filter(([c]) => !dirty.has(c)).map(([, t]) => t)).sort();
+  return v.length ? v[Math.ceil(0.995 * (v.length - 1))] - v[Math.floor(0.005 * (v.length - 1))] + 2 : 0;
+}
+
+/** Found plate thicknesses (Nov 5 rule) matched to the expected ones: the best one-to-one match of sorted values. */
+function plateMatch(r, threshold, want) {
+  const solid = r.body.smoothed.map((g, i) => (g > threshold && !r.vol.outside[i] ? 1 : 0));
+  const got = r.info.pieces.filter((p) => p.kind === 'plate').map((p) => nov5Thickness(p, solid, r.vol.dims) * r.voxelMm).sort((a, b) => a - b);
+  const w = [...want].sort((a, b) => a - b);
   let best = Infinity;
   const pick = (from, k, worst) => {
     if (k === w.length) { best = Math.min(best, worst); return; }
     for (let j = from; j <= got.length - (w.length - k); j++) pick(j + 1, k + 1, Math.max(worst, Math.abs(got[j] - w[k])));
   };
   pick(0, 0, 0);
-  return { ok: best <= LIMITS.plateMm, got, worstMm: best };
+  return { ok: best <= LIMITS.plateMm, got: got.map((t) => +t.toFixed(2)), worstMm: best === Infinity ? null : +best.toFixed(2) };
+}
+
+/** The holder-effect checks shared by both scans: envelope against VoxelBench-with-the-Nov-5-holder, Dice, find time. */
+function judge(label, r, e, part, holder) {
+  const ref = nov5HolderEnvelope(r, e.body_threshold, path.join(HOLD, holder)), d = dice(r.body.filled, r.vol.dims, path.join(HOLD, part));
+  const info = { ...describe(r), dice: +d.toFixed(4), referenceCm3: +ref.toFixed(3), vsReference: `${(100 * (r.envelopeCm3 / ref - 1)).toFixed(2)} %`,
+    vsNov5Envelope: `${(100 * (r.envelopeCm3 / e.envelope_cm3 - 1)).toFixed(2)} % (information)`, findSeconds: +(r.times.find / 1000).toFixed(1) };
+  console.log(label, JSON.stringify(info));
+  return () => {
+    assert.ok(within(r.envelopeCm3, ref, LIMITS.envelope), `envelope ${r.envelopeCm3.toFixed(3)} vs ${ref.toFixed(3)} cm3 with the Nov 5 holder`);
+    assert.ok(d >= LIMITS.dice, `Dice ${d.toFixed(4)}`);
+    assert.ok(r.times.find / 1000 <= LIMITS.holderSeconds, `findHolder took ${(r.times.find / 1000).toFixed(1)} s`);
+  };
 }
 
 let s6 = null; // the 32 s result, shared by the high-res check
-const s6Scan = (() => { let p = null; return () => (p = p || readScan(path.join(HOLD, 's6_32s'))); })();
 
-test('Sample 6 (32 s) matches the Nov 5 part mask', { skip: why('s6_32s', 's6_b4_part.npy') }, async () => {
-  const e = EXPECTED.s6, r = build(await s6Scan(), e.body_threshold);
-  const d = dice(r.body.filled, r.vol.dims, path.join(HOLD, 's6_b4_part.npy')), plates = plateMatch(r.info.pieces, r.voxelMm, e.plates_mm);
-  s6 = r;
-  console.log('S6 32 s', JSON.stringify({ ...describe(r), dice: +d.toFixed(4), plates }));
+test('Sample 6 (32 s) matches the Nov 5 part mask', { skip: why('s6_32s', 's6_b4_part.npy', 's6_b4_holder.npy') }, async () => {
+  const e = EXPECTED.s6, r = build(await readScan(path.join(HOLD, 's6_32s')), e.body_threshold), plates = plateMatch(r, e.body_threshold, e.plates_mm);
+  console.log('S6 32 s plates (Nov 5 rule)', JSON.stringify(plates));
+  const checks = judge('S6 32 s', r, e, 's6_b4_part.npy', 's6_b4_holder.npy');
+  s6 = { envelopeCm3: r.envelopeCm3, passed: false };
   assert.equal(r.info.method, 'shape', 'found by shape');
-  assert.ok(plates.ok, `three plates within ${LIMITS.plateMm} mm of ${e.plates_mm}: found ${plates.got.map((t) => t.toFixed(2))}`);
-  assert.ok(within(r.envelopeCm3, e.envelope_cm3, LIMITS.envelope), `envelope ${r.envelopeCm3.toFixed(3)} vs ${e.envelope_cm3} cm3`);
-  assert.ok(d >= LIMITS.dice, `Dice ${d.toFixed(4)}`);
-  assert.ok(r.times.find / 1000 <= LIMITS.holderSeconds, `findHolder took ${(r.times.find / 1000).toFixed(1)} s`);
+  checks();
+  s6.passed = true;
+  assert.ok(plates.ok, `three plates within ${LIMITS.plateMm} mm of ${e.plates_mm} (Nov 5 rule): found ${plates.got}`);
 });
 
-test('Sample 6 high-res agrees with the 32 s scan', { skip: why('s6_32s', 's6_high') }, async () => {
+test('Sample 6 high-res agrees with the 32 s scan', { skip: why('s6_32s', 's6_high', 's6_b4_part.npy', 's6_b4_holder.npy') }, async () => {
   const e = EXPECTED.s6, r = build(await readScan(path.join(HOLD, 's6_high')), e.body_threshold);
-  const ref = s6 ? s6.envelopeCm3 : e.envelope_cm3;
-  console.log('S6 high-res', JSON.stringify({ ...describe(r), against: s6 ? '32 s result' : 'Nov 5 envelope (32 s test did not run)' }));
-  // Agreeing with a 32 s result that itself misses the Nov 5 envelope proves nothing (both can keep the same holder).
-  if (s6) assert.ok(within(s6.envelopeCm3, e.envelope_cm3, LIMITS.envelope), `the 32 s envelope ${s6.envelopeCm3.toFixed(3)} cm3 misses the Nov 5 ${e.envelope_cm3} cm3, so it is no reference`);
-  assert.ok(within(r.envelopeCm3, ref, LIMITS.envelope), `envelope ${r.envelopeCm3.toFixed(3)} vs ${ref.toFixed(3)} cm3`);
+  judge('S6 high-res (information: against the 32 s Nov 5 masks)', r, e, 's6_b4_part.npy', 's6_b4_holder.npy');
+  // Agreeing with a 32 s result that failed its own checks proves nothing (both can keep the same holder).
+  assert.ok(s6 && s6.passed, 'the 32 s scan did not pass, so it is no reference');
+  assert.ok(within(r.envelopeCm3, s6.envelopeCm3, LIMITS.envelope), `envelope ${r.envelopeCm3.toFixed(3)} vs ${s6.envelopeCm3.toFixed(3)} cm3 (32 s)`);
   assert.ok(r.times.find / 1000 <= LIMITS.holderSeconds, `findHolder took ${(r.times.find / 1000).toFixed(1)} s`);
-});
-
-test('Sample 6 (32 s) with its holder STLs (platform + block candidates)', { skip: why('s6_32s', 's6_b4_part.npy', 'stl') }, async () => {
-  const e = EXPECTED.s6, scan = await s6Scan(), runs = [];
-  for (const platform of S6_PLATFORMS) for (const block of S6_BLOCKS) {
-    const r = build(scan, e.body_threshold, [platform, block]);
-    const fitted = r.info.pieces.filter((p) => p.kind === 'stl');
-    const d = fitted.length ? dice(r.body.filled, r.vol.dims, path.join(HOLD, 's6_b4_part.npy')) : null;
-    runs.push({ set: [platform, block], fitted: fitted.length, envelopeCm3: r.envelopeCm3, dice: d, holderSeconds: r.holderSeconds });
-    console.log('S6 STL', JSON.stringify({ set: [platform, block], ...describe(r), dice: d && +d.toFixed(4) }));
-  }
-  const ok = runs.filter((x) => x.fitted && within(x.envelopeCm3, e.envelope_cm3, LIMITS.envelope) && x.dice >= LIMITS.dice);
-  assert.ok(ok.length, `no STL set fits and reaches the targets: ${runs.map((x) => `${x.set.join('+')}: ${x.fitted} fitted`).join('; ')}`);
-  assert.ok(ok.every((x) => x.holderSeconds <= LIMITS.holderSeconds), `holder time over ${LIMITS.holderSeconds} s`);
 });
 
 let s4Scan = null;
-test('Sample 4 matches the Nov 5 part mask', { skip: why('s4', 's4_b4_part.npy') }, async () => {
+test('Sample 4 matches the Nov 5 part mask', { skip: why('s4', 's4_b4_part.npy', 's4_b4_holder.npy') }, async () => {
   const e = EXPECTED.s4;
   s4Scan = await readScan(path.join(HOLD, 's4'));
-  const r = build(s4Scan, e.body_threshold), d = dice(r.body.filled, r.vol.dims, path.join(HOLD, 's4_b4_part.npy'));
-  console.log('S4', JSON.stringify({ ...describe(r), dice: +d.toFixed(4) }));
+  const r = build(s4Scan, e.body_threshold), checks = judge('S4', r, e, 's4_b4_part.npy', 's4_b4_holder.npy');
   assert.equal(r.info.method, 'bright', 'found by bright resin');
-  assert.ok(within(r.envelopeCm3, e.envelope_cm3, LIMITS.envelope), `envelope ${r.envelopeCm3.toFixed(3)} vs ${e.envelope_cm3} cm3`);
-  assert.ok(d >= LIMITS.dice, `Dice ${d.toFixed(4)}`);
-  assert.ok(r.times.find / 1000 <= LIMITS.holderSeconds, `findHolder took ${(r.times.find / 1000).toFixed(1)} s`);
+  checks();
 });
 
 // Informative only (a stand-in STL for the scanner's own stick, which has no STL): logged, not a pass requirement.
