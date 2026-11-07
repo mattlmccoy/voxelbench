@@ -9,7 +9,8 @@
 }(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const FOUND_BY = { bright: 'found by bright resin', shape: 'found by shape', given: 'found earlier' };
+  const FOUND_BY = { bright: 'found by bright resin', shape: 'found by shape', given: 'found earlier',
+    covered: 'detection added nothing (the other holder STLs cover every piece it found)' };
   const detected = (method) => FOUND_BY[method] || 'nothing found by detection';
   const pct = (v) => `${Math.round(100 * v)} %`;
   const mm = (v) => `${v.toFixed(1)} mm`;
@@ -80,8 +81,8 @@
   function reviewBlock(h) {
     if (!h) return 'The holder has not been found yet.';
     if (h.keep) {
-      const gone = (h.stls || []).filter((r) => r.outcome === 'missing').map((r) => r.name);
-      const which = gone.length > 1 ? `The holder STLs ${gone.join(', ')} are` : `The holder STL ${gone.join('')} is`;
+      const gone = (h.stls || []).filter((r) => r.outcome === 'missing' && r.name).map((r) => r.name);
+      const which = gone.length > 1 ? `The holder STLs ${gone.join(', ')} are` : gone.length ? `The holder STL ${gone[0]} is` : 'A saved holder STL is';
       return `${which} not loaded; the saved review is kept and applies when ${gone.length > 1 ? 'they load' : 'it loads'}. Add the STL to the library's holders to review again.`;
     }
     if (h.failed) return `Holder removal failed: ${h.failed}`;

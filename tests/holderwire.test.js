@@ -199,7 +199,8 @@ test('two STLs give two stl pieces with unique ids', () => {
   assert.equal(out.method, 'stl');
   assert.deepEqual(out.pieces.map((p) => [p.id, p.kind, p.name]), [['stl1', 'stl', 'stem'], ['stl2', 'stl', 'cap']], 'the detected pieces both cover are dropped');
   assert.deepEqual(r.reports.map((x) => [x.name, x.outcome]), [['stem', 'fitted'], ['cap', 'fitted']]);
-  assert.deepEqual(progress.filter((a) => a[0] === FIT), [[FIT, 0, 2], [FIT, 1, 2]]);
+  // The stem's fit from both pieces fails; it is tried again from the stem piece alone (the bar moves on each try).
+  assert.deepEqual(progress.filter((a) => a[0] === FIT), [[FIT, 0, 2], [FIT, 0.5, 2], [FIT, 1, 2]]);
   assert.equal(W.progressText(FIT, 1, 2), 'Fitting the holder STL 2 / 2');
   assertCovers(scene, ctx.solid, out.pieces);
 });
@@ -233,7 +234,7 @@ test('the keep rule holds when one of two saved STLs is not loaded', () => {
   assert.deepEqual(out.pieces.map((p) => p.id), ['stl1'], 'the loaded STL at its saved pose; the detected piece it covers dropped');
   assert.deepEqual(r.reports.map((x) => [x.name, x.outcome]), [['base', 'reused'], ['top', 'missing']]);
   const h = { method: out.method, given: false, pieces: out.pieces, givenBack: [], stls: r.reports, keep: r.keep, warning: null };
-  assert.deepEqual(Rv.methodLines(h), ['holder STL base, fitted earlier', 'holder STL top not loaded; found by shape']);
+  assert.deepEqual(Rv.methodLines(h), ['holder STL base, fitted earlier', 'holder STL top not loaded; detection added nothing (the other holder STLs cover every piece it found)'], 'the base covers the only detected piece');
   assert.match(Rv.reviewBlock(h), /top is not loaded; the saved review is kept/);
   assert.equal(Rv.holderRecord(h, []), null, 'no pieces are saved over the kept review');
   const none = W.prepareHolder({ holder: { ...holder, stls: holder.stls.map((s) => ({ ...s, triangles: null })) }, ...frame, modules });
@@ -249,4 +250,58 @@ test('holderKey changes when an STL is added, removed or reordered', () => {
   assert.notEqual(key([a, b]), key([b, a]), 'reordered');
   assert.notEqual(key([a, b]), key([a, { ...b, triangles: null }]), 'one arriving');
   assert.equal(key([a, b]), key([{ ...a }, { ...b }]), 'the same choice');
+});
+
+// Fix round 1: the fit cost is bounded, the scan surface is shared, and the status says what detection added.
+const boxMm = (h) => Float32Array.from(Scenes.box([0, 0, 0], [1, 0, 0], [0, 1, 0], [h, h, h]));
+const sized = (id, voxels, x) => ({ ...post(id, [x, 6, 7]), voxels });
+
+test('a wrong STL among many detected pieces runs a bounded number of fits, sharing one scan surface', () => {
+  // A 1.486 mm box is about 100 voxels of 0.32 mm. Seeds alone are tried only within a scale-free volume window of the
+  // STL, the closest in volume first, at most MAX_RETRIES of them.
+  const pieces = [sized('h1', 100, 2), sized('h2', 90, 4), sized('h3', 110, 6), sized('h4', 120, 8), sized('h5', 5000, 10), sized('h6', 2, 12), sized('h7', 80, 13), sized('h8', 60, 14)];
+  const calls = [], progress = [];
+  const modules = { holder: { findHolder: () => ({ method: 'shape', pieces }) }, stl: { fitHolderStl: (a) => { calls.push(a); return { pose, rmsMm: 0.9, nearShare: 0.2, inField: 400, inFieldShare: 0.5, fits: false }; } } };
+  const r = W.prepareHolder({ holder: { pieces: null, givenBack: [], method: null, stls: [{ name: 'wrong', hash: 'w', triangles: boxMm(0.743) }] }, ...frame, modules });
+  const out = r.input.find({ ...ctx, onProgress: (...a) => progress.push(a) });
+  assert.equal(out.pieces.length, pieces.length, 'nothing accepted: the detection result');
+  assert.equal(calls.length, 1 + W.MAX_RETRIES, 'all seeds once, then at most MAX_RETRIES alone');
+  assert.deepEqual(calls[0].seeds.map((p) => p.id), pieces.map((p) => p.id));
+  assert.deepEqual(calls.slice(1).map((c) => c.seeds.map((p) => p.id)), [['h1'], ['h3']], 'the seeds closest in volume to the STL');
+  assert.ok(calls.every((c) => c.cache && c.cache === calls[0].cache), 'one cache per build: the scan surface is found once');
+  assert.deepEqual(progress.filter((a) => a[0] === FIT).map((a) => a[1]), [0, 1 / 3, 2 / 3], 'the bar moves on each try');
+});
+
+test('an STL that does not fit says when the other STLs left detection nothing to add', () => {
+  const good = boxMm(1), bad = boxMm(2);
+  const modules = { holder: { findHolder: () => found }, stl: { fitHolderStl: (a) => ({ pose, rmsMm: 0.1, nearShare: a.triangles === good ? 0.8 : 0.2, inField: 9, inFieldShare: 0.6, fits: a.triangles === good }), voxelizeMesh: () => new Uint8Array(4096).fill(1) } };
+  const stls = [{ name: 'base', hash: 'b', triangles: good }, { name: 'wrong', hash: 'w', triangles: bad }, { name: 'gone', hash: 'g', triangles: null }];
+  const r = W.prepareHolder({ holder: { pieces: null, givenBack: [], method: null, stls }, ...frame, modules });
+  const out = r.input.find(ctx);
+  assert.deepEqual(out.pieces.map((p) => p.id), ['stl1'], 'the base covers the only detected piece');
+  assert.deepEqual(r.reports.map((x) => x.fallback), [undefined, 'covered', 'covered']);
+  assert.deepEqual(Rv.methodLines({ method: out.method, pieces: out.pieces, stls: r.reports }).slice(1), [
+    'holder STL wrong did not fit; detection added nothing (the other holder STLs cover every piece it found)',
+    'holder STL gone not loaded; detection added nothing (the other holder STLs cover every piece it found)']);
+});
+
+test('a saved STL piece whose STL is not in the list is named as not loaded', () => {
+  const saved = { pieces: [{ ...stlNative('aa'), name: 'base' }], givenBack: [], method: 'stl', stls: [] };
+  const r = W.prepareHolder({ holder: saved, ...frame });
+  assert.ok(r.keep, 'the saved review is kept');
+  assert.deepEqual(r.reports, [{ name: 'base', hash: 'aa', outcome: 'missing' }]);
+  assert.match(Rv.reviewBlock({ method: 'shape', pieces: [], stls: r.reports, keep: r.keep }), /^The holder STL base is not loaded/);
+  assert.match(Rv.reviewBlock({ method: 'shape', pieces: [], stls: [], keep: r.keep }), /^A saved holder STL is not loaded/, 'never a blank name');
+});
+
+test('a chosen STL changed since the review is refitted even when the review used no piece of it', () => {
+  const record = { pieces: [post('h1', [5, 6, 7])], given_back: ['h1'], method: 'shape', reviewed_at: 'x', stls: [{ name: 'top', hash: 'old' }] };
+  const msg = W.holderMessage(record, [{ name: 'top', hash: 'new', triangles }]);
+  assert.deepEqual(msg.stls, [{ name: 'top', hash: 'new', triangles, was: 'old' }], 'the request says the file changed');
+  const modules = { holder: { findHolder: () => found }, stl: { fitHolderStl: () => ({ pose, rmsMm: 0.1, nearShare: 0.8, inField: 9, inFieldShare: 0.6, fits: true }), voxelizeMesh: () => new Uint8Array(4096).fill(1) } };
+  const r = W.prepareHolder({ holder: msg, ...frame, modules });
+  assert.equal(r.given, false, 'not the saved review');
+  r.input.find(ctx);
+  assert.deepEqual([r.reports[0].outcome, r.reports[0].changedFrom], ['fitted', 'old']);
+  assert.match(Rv.methodLines({ method: 'stl', pieces: [], stls: r.reports })[0], /^holder STL top changed since the review; refitted, review cleared/);
 });

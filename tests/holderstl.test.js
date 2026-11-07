@@ -169,3 +169,15 @@ test('a pose that leaves most of the STL outside the scan is a poor fit, even on
   assert.ok(sliver.inField > 0 && sliver.inField < right.inField && sliver.inFieldShare < HS.MIN_IN_FIELD, JSON.stringify(sliver));
   assert.equal(sliver.fits, false);
 });
+
+test('a fit cache shares the scan surface across fits and gives the same fit', () => {
+  const scene = S.makeHolderScene({ size: 64, holder: 'post' }), stl = postStl(scene), { solid } = solidOf(scene);
+  const args = { triangles: stl.tri, solid, outside: scene.outside, dims: scene.dims, voxelMm: scene.voxelMm, seeds: seedsOf(scene) };
+  const cache = {}, plain = HS.fitHolderStl(args), first = HS.fitHolderStl({ ...args, cache });
+  const surface = cache.surface;
+  assert.ok(surface && surface.faces && surface.points, 'the scan surface is kept');
+  const second = HS.fitHolderStl({ ...args, seeds: args.seeds.slice(0, 1), cache });
+  assert.equal(cache.surface, surface, 'and not found again');
+  assert.deepEqual(first, plain, 'the cached fit is the fit');
+  assert.deepEqual(second, HS.fitHolderStl({ ...args, seeds: args.seeds.slice(0, 1) }));
+});
