@@ -149,3 +149,21 @@ Unit tests (CI) use synthetic scans (`VBSynthetic.makeScan`), with no lab number
 The exact seed tests and their limits (bar shape, disk repeat length, minimum cluster size, fill and gray-spread
 limits), each derived from the scan (voxel size, part gray, noise) and pinned by the synthetic tests; where the piece
 list sits in the rail; the overlay color.
+
+## Amendment 2026-11-07: fit the holder's STL first (Matt, poll)
+Matt has STL files for both holders (the angled SLA holder and the post). When a holder STL is chosen, it is the
+primary method; shape detection (above) is the fallback when none is chosen; tape is always stripped.
+- **Holder library.** Holder STLs live in the user's VoxelBench library folder (`holders/`), never in the repo. The
+  scan's Holder section offers "Detect automatically" or one of the library's holders; the choice is saved with the
+  sample, so scans on the same holder pick it once.
+- **Fit.** The STL (mm) is aligned to the scan's solid surface with the existing rigid alignment (`vb_align.js`:
+  pre-alignment, then trimmed ICP so the part touching the holder is treated as outliers). The start pose comes from
+  the detected pieces when shape or brightness detection finds any (align the STL to those points first), else from
+  the pre-alignment's scored starting poses. No scaling.
+- **Removal.** Every solid voxel inside the aligned, closed STL is holder (voxelized by ray parity per grid column),
+  with the same one-voxel contact rule as fitted pieces. The STL holder is one piece of kind `'stl'`, toggled like any
+  other piece; its saved form is the holder's library name, a content hash of the STL, and the pose in native scan
+  voxels, so reopening rebuilds it without refitting. A missing or changed STL falls back to detection and says so.
+- **Fit quality is reported:** the trimmed RMS distance (mm) and the share of STL surface points within one voxel of
+  the scan surface. Below a set share, the status reads "holder STL did not fit" and detection runs instead.
+- **Acceptance adds:** Samples 6 and 4 with their STLs reach the same Nov 5 targets (envelope within 2 %, Dice ≥ 0.97).
