@@ -73,3 +73,86 @@ test('a tape piece takes only solid whose local thickness is at most 2', () => {
   assert.equal(H.insidePiece(whole, 10, 10, 10), true);
   assert.equal(H.insidePiece(whole, 10, 10, 21), false);
 });
+
+// findHolder on full scenes: smoothed and solid as buildBody makes them (sigma 1, cut at the midpoint of part and air).
+const P = require('../app/ct_pores.js');
+function detect(opts, onProgress) {
+  const s = S.makeHolderScene(opts), { dims, truth } = s;
+  const smoothed = P.gaussian(s.gray, dims, 1), cut = (truth.matrix_gray + truth.air_gray) / 2, solid = new Uint8Array(smoothed.length);
+  for (let i = 0; i < solid.length; i++) solid[i] = smoothed[i] > cut && !s.outside[i] ? 1 : 0;
+  const found = H.findHolder({ smoothed, solid, outside: s.outside, dims, voxelMm: s.voxelMm, onProgress });
+  const { holder } = H.holderMask({ solid, dims, pieces: found.pieces, givenBack: [] });
+  return { ...found, holder, truth, dims };
+}
+function assertCoverage({ holder, truth, pieces }) {
+  const [hit, total] = count(holder, truth.holder), [leak, partTotal] = count(holder, truth.part);
+  const kinds = pieces.map((p) => p.kind).join(',');
+  assert.ok(hit >= 0.95 * total, `covers ${hit}/${total} (${kinds})`);
+  assert.ok(leak <= 0.01 * partTotal, `takes ${leak}/${partTotal} of the part (${kinds})`);
+}
+
+test('a bright post is found by brightness', () => {
+  const r = detect({ holder: 'post', holderGray: 'bright' });
+  assert.equal(r.method, 'bright');
+  assert.ok(r.pieces.length >= 1 && r.pieces.length <= 2 && r.pieces.every((p) => p.kind === 'post' && p.foundBy === 'bright'), r.pieces.map((p) => p.kind).join());
+  assertCoverage(r);
+});
+
+test('a post at part gray is found by shape', () => {
+  const r = detect({ holder: 'post', holderGray: 'same' });
+  assert.equal(r.method, 'shape');
+  assert.ok(r.pieces.length >= 1 && r.pieces.every((p) => p.kind === 'post' && p.foundBy === 'shape'), r.pieces.map((p) => p.kind).join());
+  assertCoverage(r);
+  assert.deepEqual(r.pieces.map((p) => p.id), r.pieces.map((_, k) => 'h' + (k + 1)));
+  assert.ok(r.pieces.every((p, k) => k === 0 || r.pieces[k - 1].voxels >= p.voxels), 'ids in order of size');
+});
+
+test('tilted plates and a base slab are found as three plates', () => {
+  const r = detect({ holder: 'plates' });
+  assert.equal(r.method, 'shape');
+  assert.deepEqual(r.pieces.map((p) => p.kind), ['plate', 'plate', 'plate']);
+  const t = r.truth.pieces[0].thicknessVox;
+  for (const p of r.pieces) assert.ok(Math.abs(2 * p.half[2] - t) <= 1, `thickness ${2 * p.half[2]} vs ${t}`);
+  assertCoverage(r);
+});
+
+test('a flat-faced cube on a post keeps every face', () => {
+  const r = detect({ part: 'cube', holder: 'post' }), { nx, ny } = r.dims;
+  const [, partTotal] = count(r.holder, r.truth.part), [leak] = count(r.holder, r.truth.part);
+  assert.ok(leak <= 0.01 * partTotal, `takes ${leak}/${partTotal} of the cube`);
+  const c = [0, 0, 0];
+  r.truth.part.forEach((v, i) => { if (v) { c[0] += i % nx; c[1] += Math.floor(i / nx) % ny; c[2] += Math.floor(i / (nx * ny)); } });
+  c.forEach((_, k) => { c[k] /= partTotal; });
+  for (const p of r.pieces) {
+    const q = [0, 3, 6].map((o) => (c[0] - p.center[0]) * p.axes[o] + (c[1] - p.center[1]) * p.axes[o + 1] + (c[2] - p.center[2]) * p.axes[o + 2]);
+    assert.ok(q.some((v, k) => Math.abs(v) > p.half[k]), `${p.id} (${p.kind}) box holds the cube's center`);
+  }
+});
+
+test('no holder, no pieces', () => {
+  const r = detect({ holder: 'none' });
+  assert.equal(r.method, 'none');
+  assert.equal(r.pieces.length, 0);
+});
+
+test('a part running off the scan edge is not a holder', () => {
+  const r = detect({ holder: 'none', touchEdge: true });
+  assert.equal(r.pieces.length, 0, r.pieces.map((p) => p.kind).join());
+});
+
+test('bright inclusions are not a bright holder', () => {
+  const none = detect({ holder: 'none', inclusions: true });
+  assert.equal(none.pieces.length, 0, none.pieces.map((p) => p.kind).join());
+  const post = detect({ holder: 'post', holderGray: 'same', inclusions: true });
+  assert.equal(post.method, 'shape');
+});
+
+test('progress reaches its total', () => {
+  const calls = [];
+  detect({ size: 64, holder: 'post' }, (stage, k, total) => calls.push([stage, k, total]));
+  assert.ok(calls.length > 0);
+  const [stage, k, total] = calls[calls.length - 1];
+  assert.equal(stage, 'Finding the holder');
+  assert.equal(k, total);
+  assert.equal(total, 3 * 64, 'once per slice per direction');
+});
