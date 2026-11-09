@@ -403,8 +403,8 @@ window.CTApp = (function () {
       const savedGrid = saved.bin_factor || 1;
       if (saved.rejected_voxels) state.rejectedVoxels = CT.toGrid({ voxels: saved.rejected_voxels, bin_factor: savedGrid }, state.binFactor).voxels;
       if (saved.zones && saved.zones.labels) state.zoneLabels = { ...saved.zones.labels };
-      // Zone assignments belong to the baseline they were made with; version 10 runs used the end baseline.
-      if (saved.zones) { state.zoneBaseline = saved.zones.method || 'ends'; $('zoneBaseline').value = state.zoneBaseline; }
+      // Zone assignments belong to the baseline they were made with.
+      if (saved.zones) { state.zoneBaseline = window.VBLibrary.restoredZoneBaseline(saved.zones.method); $('zoneBaseline').value = state.zoneBaseline; }
       emit('poresChanged');
       if (savedGrid !== state.binFactor) { const text = `The saved run was made at ${CT.gridText(savedGrid)}; this scan is loaded at ${CT.gridText(state.binFactor)}. Regions and rejections were moved to this grid; settings in voxels (smoothing, closing, margin, neck) keep their saved values.`; emit('statusText', text); projectNote(text); }
     } catch (e) {

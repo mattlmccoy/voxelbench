@@ -1,8 +1,8 @@
 /* Files for analysis outside the page: pore and annotation tables, region reports, and a NumPy label volume. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_calibration.js'), require('./ct_core.js'));
-  else root.CTExport = factory(root.VBCalibration, root.CT);
-}(typeof self !== 'undefined' ? self : this, function (C, C2) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./vb_calibration.js'), require('./ct_core.js'), require('./ct_zones.js'));
+  else root.CTExport = factory(root.VBCalibration, root.CT, root.CTZones);
+}(typeof self !== 'undefined' ? self : this, function (C, C2, Z) {
   'use strict';
 
   const CHUNK_ROWS = 1500;
@@ -61,7 +61,7 @@
       `# Gray-value zones for ${sample.folder} (${describe(sample)})`,
       ...provenanceRows(provenance),
       ...calibrationRows(calibration),
-      `# Zones segmented on gray value (bulk attenuation), not composition. High-gray threshold: gray offset ${zones.threshold} relative to ${zones.method === 'ends' ? `the pore-free ends of the ${zones.axis} axis at equal depth` : 'the median of all pore-free solid at equal depth'}.`,
+      `# Zones segmented on gray value (bulk attenuation), not composition. High-gray threshold: gray offset ${zones.threshold} relative to ${Z.baselineText(zones.method, zones.axis)}.`,
       row(['zone', 'assigned_label', 'volume_mm3', 'porosity_percent', 'matrix_gray_mean', 'median_gray_offset', 'matrix_equivalent_density_g_cm3', 'matrix_equivalent_density_extrapolated']),
       ...zones.stats.map((s) => row([zoneName(s.zone, labels), (labels.find((l) => l.id === assigned[s.zone]) || {}).label || 'unassigned', s.volume_mm3, s.void_percent, s.solid_gray_mean, s.excess_median, eq(s.solid_gray_mean) && eq(s.solid_gray_mean).value, eq(s.solid_gray_mean) && eq(s.solid_gray_mean).extrapolated])),
     ].join('\n') + '\n';

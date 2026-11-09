@@ -472,11 +472,17 @@
     return { settings: { ...defaults }, zoneBaseline: 'auto' };
   }
 
+  /** The zone baseline a saved run reopens with: the one its zones were drawn against (version 10 runs used the ends).
+      Gray as-is is no menu choice; only the automatic baseline reaches it, so such a run reopens on automatic. */
+  function restoredZoneBaseline(method) {
+    return method === 'asis' ? 'auto' : method || 'ends';
+  }
+
   /** Whether this library scan is the one already open in the studio (read, not still loading): Analyze then goes back
       to it with its analysis rather than reading the whole scan again. */
   function isOpenScan(id, store, open) {
     return Boolean(open.stack) && open.folder === id && !open.loading && open.stack.store === store;
   }
 
-  return { scanOpenState, isOpenScan, libraryRows, refreshSummaries, makeFramedRender, sameStamp, matchImport, projectFolders, remapProject, sharedTargets, actionTargets, batchBytes, bytesText, driveCard, driveSummary, refusalMessage, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
+  return { scanOpenState, restoredZoneBaseline, isOpenScan, libraryRows, refreshSummaries, makeFramedRender, sameStamp, matchImport, projectFolders, remapProject, sharedTargets, actionTargets, batchBytes, bytesText, driveCard, driveSummary, refusalMessage, NOT_RECORDED, makeRecordSaver, overviewFacts, voxRowRange, scanId, INDEX_VERSION, emptyIndex, needsRead, findIndexed, checkIndex, mergeIndex, dedupeScans, cardFacts, filterScans, parseTags, scanFolders, stampOf, rescan, makeRescanner, grayWindow };
 }));

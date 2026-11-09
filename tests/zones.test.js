@@ -328,3 +328,43 @@ test('the one-group refusal says which baseline was used, how deep the deepest d
   assert.doesNotMatch(ends.refused, /dip none/);
   assert.match(ends.refused, /\d+(\.\d)?% of the part/);
 });
+
+// Two materials layered by depth with no shading: a darker skin over a brighter core. The skin thickens from lo to
+// lo + 10 voxels along x and the edge is blurred as a scanner blurs it, so the share of each material changes gradually
+// with depth; a baseline taken at equal depth then follows the material and smears the two groups into one. (lo is set
+// in the middle of a range where the outcome holds, not at its edge.)
+function skinned({ skin = 1700, core = 2100, lo = 4 } = {}) {
+  const body = bodyOf();
+  const depth = Z.distanceInside(body, dims);
+  const sharp = block((x, y, z) => (!body[at(x, y, z)] ? 0 : depth[at(x, y, z)] < lo + (10 * x) / dims.nx ? skin : core));
+  const w = Float32Array.from(body), a = P.gaussian(sharp, dims, 1.5), b = P.gaussian(w, dims, 1.5);
+  const gray = block((x, y, z) => (body[at(x, y, z)] ? a[at(x, y, z)] / b[at(x, y, z)] : 700));
+  return { gray, voids: new Uint8Array(gray.length), body, dims, airGray: 700, voxelMm: 0.16 };
+}
+const SKIN_SETTINGS = { ...ZONE_SETTINGS, sigma: 3 };
+
+test('on auto, a brighter core under a darker skin gets zones from gray as-is when the depth-corrected gray shows one group', () => {
+  const m = skinned();
+  assert.match(Z.draftZones({ ...m, settings: SKIN_SETTINGS }).refused, /one group/, 'the ends baseline erases the layers');
+  const out = Z.draftZones({ ...m, settings: { ...SKIN_SETTINGS, baseline: 'auto' } });
+  assert.equal(out.refused, null);
+  assert.equal(out.method, 'asis');
+  assert.equal(out.zones[at(30, 20, 20)], Z.ZONE.BRIGHT, 'the core');
+  assert.notEqual(out.zones[at(30, 20, 4)], Z.ZONE.BRIGHT, 'the skin');
+  assert.match(Z.baselineText(out.method, out.axis), /without depth correction/);
+});
+
+test('gray as-is is refused when its brighter group lies nearer the surface, where shading puts it, and the refusal says so', () => {
+  const out = Z.draftZones({ ...skinned({ skin: 2100, core: 1700, lo: 5 }), settings: { ...SKIN_SETTINGS, baseline: 'auto' } });
+  assert.match(out.refused, /one group/);
+  assert.match(out.refused, /without depth correction/);
+  assert.match(out.refused, /nearer the surface/);
+});
+
+test('a chosen baseline never falls back to gray as-is', () => {
+  for (const baseline of ['ends', 'whole']) {
+    const ready = Z.prepareZones({ ...skinned(), settings: { ...SKIN_SETTINGS, baseline } });
+    assert.equal(ready.method, baseline);
+    assert.equal(ready.asIs, undefined, baseline);
+  }
+});

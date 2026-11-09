@@ -22,6 +22,7 @@
   // baseline: 'ends' takes the pore-free ends of the long axis at each depth (version 10's method); 'whole' the median
   // of all pore-free solid; 'auto' (default) the ends when they qualify, else the whole part. The whole-part median
   // includes any high-gray zone, which can merge two gray groups into one (it does on Sample 2), so ends come first.
+  // When both show one group, auto tries gray as-is ('asis', one median for every depth; see prepareZones).
   const DEFAULT_ZONE_SETTINGS = { sigma: 3, endShare: 0.16, voidFree: 0.005, voidSigma: 6, lowDrop: 0.08, baseline: 'auto' };
   const DEPTH_BIN_MM = 0.5;
   const SKIN_MM = 0.5; // gray falls toward any surface, so a dark zone must have a core deeper than this
@@ -192,8 +193,31 @@
       removes the scanner's shading from surface to center. refused says why no baseline exists. */
   function prepareZones(input) {
     if (input.settings.baseline !== 'auto') return prepareWith(input);
-    const ends = prepareWith({ ...input, settings: { ...input.settings, baseline: 'ends' } });
-    return ends.refused ? prepareWith({ ...input, settings: { ...input.settings, baseline: 'whole' } }) : ends;
+    const using = (baseline) => prepareWith({ ...input, settings: { ...input.settings, baseline } });
+    const ends = using('ends');
+    const corrected = ends.refused ? using('whole') : ends;
+    if (corrected.refused || automaticThreshold(corrected) !== null) return corrected;
+    // The correction takes gray against depth as shading, so a part whose materials are layered by depth loses its
+    // groups to it. Gray as-is keeps them, but shading (beam hardening) also brightens the surface, so as-is groups
+    // count only when the brighter one lies no nearer the surface than the darker.
+    const asIs = using('asis');
+    if (asIs.refused) return corrected;
+    const threshold = automaticThreshold(asIs);
+    if (threshold === null) return { ...corrected, asIs: 'one group too' };
+    if (brightNearerSurface(asIs, threshold)) return { ...corrected, asIs: 'two groups, but the brighter one lies nearer the surface, where shading puts it' };
+    return asIs;
+  }
+
+  function automaticThreshold(ready) {
+    const counts = histogramCounts(ready.excess, ready.depth, ready.w);
+    return ready.method === 'ends' ? dipInHistogram(counts) : valleyBetweenGroups(counts);
+  }
+
+  /** Whether the voxels above the threshold lie, at the median, nearer the surface than those below it. */
+  function brightNearerSurface({ excess, depth, w }, threshold) {
+    const bright = [], dark = [];
+    for (let i = 0; i < excess.length; i++) if (w[i] >= MOSTLY_SOLID && depth[i] >= INNER_DEPTH_MM) (excess[i] > threshold ? bright : dark).push(depth[i]);
+    return medianOf(bright) < medianOf(dark);
   }
 
   function prepareWith({ gray, voids, weight, scanDepth, body, dims, airGray, voxelMm, settings }) {
@@ -208,7 +232,7 @@
     let bodyCount = 0;
     for (let i = 0; i < n; i++) { voidTop[i] = body[i] ? voids[i] : 0; bodyF[i] = body[i] ? 1 : 0; bodyCount += body[i] ? 1 : 0; }
     const vs = P.gaussian(voidTop, dims, settings.voidSigma), bs = P.gaussian(bodyF, dims, settings.voidSigma);
-    const method = settings.baseline === 'ends' ? 'ends' : 'whole';
+    const method = ['ends', 'asis'].includes(settings.baseline) ? settings.baseline : 'whole';
     const share = settings.endShare * (hi - lo + 1);
     const bins = [];
     let endCount = 0;
@@ -227,11 +251,12 @@
     }
     if (endCount < MIN_END_SHARE * bodyCount) {
       const edge = scanEdgeMm > 0 ? ` The outer ${scanEdgeMm} mm of the reconstruction reads dark and is left out.` : '';
-      if (method === 'whole') return { refused: `No baseline: less than ${(100 * MIN_END_SHARE).toFixed(0)}% of the body is pore-free solid (${(100 * endCount / bodyCount).toFixed(1)}%).${edge} Outline regions by hand with Draw region instead.`, method, scanEdgeMm };
+      if (method !== 'ends') return { refused: `No baseline: less than ${(100 * MIN_END_SHARE).toFixed(0)}% of the body is pore-free solid (${(100 * endCount / bodyCount).toFixed(1)}%).${edge} Outline regions by hand with Draw region instead.`, method, scanEdgeMm };
       return { method, scanEdgeMm, refused: `No baseline: the two ends of the part along its long axis are not pore-free (${(100 * endCount / bodyCount).toFixed(1)}% of the body qualifies, ${(100 * MIN_END_SHARE).toFixed(0)}% needed).${edge} Outline regions by hand with Draw region instead.` };
     }
     const mids = [], base = [];
-    bins.forEach((list, b) => { if (list.length >= 50) { mids.push((b + 0.5) * DEPTH_BIN_MM); base.push(medianOf(list)); } });
+    if (method === 'asis') { mids.push(0); base.push(medianOf(bins.flat())); } // one gray for every depth
+    else bins.forEach((list, b) => { if (list.length >= 50) { mids.push((b + 0.5) * DEPTH_BIN_MM); base.push(medianOf(list)); } });
     const baseAt = (d) => {
       if (d <= mids[0]) return base[0];
       for (let k = 1; k < mids.length; k++) if (d <= mids[k]) return base[k - 1] + ((d - mids[k - 1]) / (mids[k] - mids[k - 1])) * (base[k] - base[k - 1]);
@@ -307,10 +332,6 @@
     return raw;
   }
 
-  function findDip(excess, depth, w) {
-    return dipInHistogram(histogramCounts(excess, depth, w));
-  }
-
   /** The gray-offset histogram the zone threshold is chosen from, as volume per bin. */
   function offsetHistogram(ready, voxelMm) {
     const counts = histogramCounts(ready.excess, ready.depth, ready.w);
@@ -320,17 +341,18 @@
   /** The one-group refusal with what it rests on: the baseline used, the deepest dip found against DIP_RATIO, and how
       much of the part served as baseline, so a scan with one material can be told from a weak second group. */
   function oneGroupText(ready, counts) {
-    const ratio = ready.method === 'whole' ? groupsDip(counts).deepest : (endsDip(counts) || {}).ratio;
+    const ratio = ready.method === 'ends' ? (endsDip(counts) || {}).ratio : groupsDip(counts).deepest;
     const dip = ratio == null ? 'no second peak after the baseline group' : `deepest dip ${ratio.toFixed(2)} of the smaller peak (${DIP_RATIO} or lower needed)`;
     const share = ready.baseShare == null ? '' : ` ${(100 * ready.baseShare).toFixed(1)}% of the part was baseline.`;
-    return `Gray shows one group here, not two, so no zones are drawn. Baseline: ${baselineText(ready.method, ready.axis)}; ${dip}.${share} Outline regions by hand with Draw region instead.`;
+    const asIs = ready.asIs ? ` Gray without depth correction showed ${ready.asIs}.` : '';
+    return `Gray shows one group here, not two, so no zones are drawn. Baseline: ${baselineText(ready.method, ready.axis)}; ${dip}.${share}${asIs} Outline regions by hand with Draw region instead.`;
   }
 
   function finishZones(ready, { gray, voids, scanDepth, body, dims, voxelMm, settings }) {
     const { excess, depth, w } = ready, edgeMm = ready.scanEdgeMm != null ? ready.scanEdgeMm : SCAN_EDGE_MM;
     let threshold = settings.threshold;
     if (threshold === undefined) {
-      threshold = ready.method === 'whole' ? valleyBetweenGroups(histogramCounts(excess, depth, w)) : findDip(excess, depth, w);
+      threshold = automaticThreshold(ready);
       if (threshold === null) return { refused: oneGroupText(ready, histogramCounts(excess, depth, w)), zones: null };
     }
     const n = gray.length;
@@ -540,7 +562,11 @@
   }
 
   /** One phrase for what the gray offset is measured against, used in the page, the sheet and the CSV. */
-  const baselineText = (method, axis) => (method === 'ends' ? `the pore-free ends of the ${axis} axis at equal depth below the surface` : 'the median of all pore-free solid at equal depth below the surface');
+  const baselineText = (method, axis) => {
+    if (method === 'ends') return `the pore-free ends of the ${axis} axis at equal depth below the surface`;
+    if (method === 'asis') return 'the median of all pore-free solid, without depth correction (corrected gray showed one group; the brighter group lies deeper, which surface shading cannot cause)';
+    return 'the median of all pore-free solid at equal depth below the surface';
+  };
 
   return { ZONE, ZONE_NAMES, MAX_DRAWN, zoneName, baselineText, DEFAULT_PATCH_SETTINGS, DEFAULT_ZONE_SETTINGS, distanceInside, findPatches, scanEdgeBand, prepareZones, finishZones, draftZones, oneGroupText, dipInHistogram, valleyBetweenGroups, offsetHistogram, voidSizeMasks, paintZones, zoneTotals, voidPercentByZone, voidFractions, coarsenSolid, prepareCoarse, voidClassMasks };
 }));

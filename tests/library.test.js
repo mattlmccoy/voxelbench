@@ -716,3 +716,10 @@ test('opening a scan starts from the default settings and the automatic zone bas
   assert.notEqual(s.settings, defaults, 'a copy: changing one scan\'s settings must not change the defaults');
   assert.equal(s.zoneBaseline, 'auto');
 });
+
+test('a saved run reopens on the zone baseline it was drawn with; gray as-is came from the automatic choice', () => {
+  assert.equal(L.restoredZoneBaseline('ends'), 'ends');
+  assert.equal(L.restoredZoneBaseline('whole'), 'whole');
+  assert.equal(L.restoredZoneBaseline('asis'), 'auto');
+  assert.equal(L.restoredZoneBaseline(undefined), 'ends');
+});

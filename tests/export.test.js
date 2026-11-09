@@ -198,3 +198,10 @@ test('batchCsv: one row per scan with porosity, open/closed and which settings w
   assert.equal(cell(1, 'porosity_percent'), '5.25'); assert.equal(cell(1, 'open_percent'), '4.5'); assert.equal(cell(1, 'settings'), 'saved run');
   assert.equal(cell(2, 'error'), 'out of memory'); assert.equal(cell(2, 'porosity_percent'), '');
 });
+
+test('zoneCsv names the baseline the zones were drawn against, including gray as-is', () => {
+  const ctx = { sample: { folder: 'S2', name: 'S2' } };
+  const head = (method) => E.zoneCsv({ threshold: -0.005, axis: 'x', method, stats: [] }, {}, ctx).split('\n').find((l) => l.includes('High-gray threshold'));
+  assert.match(head('asis'), /without depth correction/);
+  assert.match(head('ends'), /pore-free ends of the x axis/);
+});
