@@ -522,6 +522,11 @@ window.CTApp = (function () {
   function onWorker({ data }) {
     if (data.type === 'status') emit('statusText', data.text);
     else if (data.type === 'progress') { holderBar(data.share); emit('statusText', data.text); }
+    else if (data.type === 'figureFrame') emit('figureFrame', data);
+    else if (data.type === 'figureNeed') {
+      const g = window.VBFigure.sliceGrid(state.slices, state.dims, data.box, data.s);
+      worker.postMessage({ type: 'figureGrid', id: data.id, ...g }, [g.gray.buffer, g.outside.buffer]);
+    }
     else if (data.type === 'model') {
       holderBar(null);
       state.model = data;
@@ -570,7 +575,7 @@ window.CTApp = (function () {
       if (!data.refused) state.zoneThreshold = data.threshold;
       emit('statusText', data.refused ? 'Zone segmentation failed' : 'Zones segmented');
       emit('poresChanged');
-    } else if (data.type === 'regionRuns' || data.type === 'crosscheck' || data.type === 'partMask') {
+    } else if (data.type === 'regionRuns' || data.type === 'crosscheck' || data.type === 'partMask' || data.type === 'figure' || data.type === 'figureTurn') {
       const call = calls.get(data.id);
       if (call) { calls.delete(data.id); call.resolve(data); }
     } else if (data.type === 'wall') {
@@ -604,7 +609,7 @@ window.CTApp = (function () {
       if (mine('pores') && state.porePhase === 'running') { state.porePhase = 'error'; emit('statusText', data.message); emit('poresChanged'); }
       if (mine('sheet') && state.onSheetError) { state.onSheetError(new Error(data.message)); state.onSheet = null; state.onSheetError = null; } // the export would wait forever
       if (step === 'zones') emit('statusText', `Zones: ${data.message}`);
-      if (step === 'crosscheck' || step === 'orient') { for (const c of calls.values()) c.reject(new Error(data.message)); calls.clear(); }
+      if (step === 'crosscheck' || step === 'orient' || step === 'figure') { for (const c of calls.values()) c.reject(new Error(data.message)); calls.clear(); }
     }
   }
 
@@ -637,6 +642,7 @@ window.CTApp = (function () {
     dense: () => window.VBSynthetic.makeScan({ denseBand: true, voxelMm: 0.1 }),
     phantoms: () => window.VBSynthetic.makeScan({ phantoms: true }),
     filler: () => window.VBSynthetic.makeScan({ filler: true }),
+    doped: () => window.VBSynthetic.makeScan({ doped: true, voxelMm: 0.08, size: 200 }),
     cad: () => { state.cadDemo = { name: 'synthetic_part.stl', buffer: window.VBSynthetic.partStl() }; return window.VBSynthetic.makePart({ scale: 0.97, bendMm: 0.12 }); },
   };
 
@@ -655,6 +661,7 @@ window.CTApp = (function () {
     $('saveProject').addEventListener('click', saveProject);
     $('trySynthetic').addEventListener('click', () => openDemo('scan'));
     $('trySyntheticDense').addEventListener('click', () => openDemo('dense'));
+    $('trySyntheticDoped').addEventListener('click', () => openDemo('doped'));
     $('trySyntheticPhantoms').addEventListener('click', () => openDemo('phantoms'));
     $('trySyntheticFiller').addEventListener('click', () => openDemo('filler'));
     $('trySyntheticCad').addEventListener('click', () => openDemo('cad'));

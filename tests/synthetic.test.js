@@ -177,3 +177,10 @@ test('the tape truth never marks voxels outside the scan', () => {
   assert.ok(tape > 100);
   assert.equal(out, 0);
 });
+
+test('the doped-core scan: a lens 14 % denser than the base material at the top of a shorter cylinder, with clumps', () => {
+  const d = S.makeScan({ doped: true, voxelMm: 0.08, size: 200 });
+  assert.equal(d.files[0].webkitRelativePath.split('/')[0], 'synthetic_doped');
+  assert.equal(d.truth.doped.relative, 1.14);
+  assert.ok(d.truth.doped.clumps > 0);
+});

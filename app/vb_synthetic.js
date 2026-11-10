@@ -15,6 +15,9 @@
   // With a dense band: matrix gray raised by this share of (matrix - air) over the middle 30 % of the length.
   // Its pores stay in the middle, so the two ends are pore-free and serve as the zone baseline.
   const DENSE_GAIN = 0.1, DENSE_BAND = [0.35, 0.65], PORE_BAND = [0.3, 0.7];
+  // With a doped core: the cylinder runs from 0.2 to 0.85 of the length (z 0 on top); a lens at its top reads DOPED_REL of the dense base material (air 0, base 1),
+  // with a porous crust on its top and clusters of mid-density clumps inside it; the pores sit in the lens.
+  const DOPED_REL = 1.14, CRUST_REL = 0.62, CLUMP_REL = 0.6, CLUMP_RADIUS = 4, CLUMP_CLUSTERS = 5, DOPED_TOP = 0.2, DOPED_DEPTH = 0.3, DOPED_BOTTOM = 0.85, CRUST_VOX = 4;
   const RODS = [{ name: 'Rod A (0.50 g/cm³)', density_g_cm3: 0.5, angle: Math.PI / 4 }, { name: 'Rod B (1.40 g/cm³)', density_g_cm3: 1.4, angle: (5 * Math.PI) / 4 }];
 
   // mulberry32: a small seeded generator, so a seed always gives the same scan.
@@ -31,7 +34,7 @@
   /** Scan of size^3 voxels: cylinder along z of radius 0.3 size, pores of radius 3 to 8 voxels inside it, FOV radius
       0.47 size. With filler, bright spheres and fibers fill part of the matrix (truth.filler). With a dense band, the
       matrix between 0.35 and 0.65 of the length (z) reads DENSE_GAIN brighter, a zone for step 3 (truth.dense_band). */
-  function makeScan({ size = 160, voxelMm = 0.04, seed = 1, phantoms = false, filler = false, denseBand = false } = {}) {
+  function makeScan({ size = 160, voxelMm = 0.04, seed = 1, phantoms = false, filler = false, denseBand = false, doped = false } = {}) {
     const rnd = random(seed);
     const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
     const c = (size - 1) / 2, R = 0.3 * size, FOV = 0.47 * size;
@@ -41,12 +44,25 @@
     const pores = [];
     for (let tries = 0; pores.length < PORES && tries < 20000; tries++) {
       const r = RADIUS[0] + rnd() * (RADIUS[1] - RADIUS[0]);
-      const p = { x: c + (rnd() * 2 - 1) * (R - r - 3), y: c + (rnd() * 2 - 1) * (R - r - 3), z: denseBand ? (PORE_BAND[0] + rnd() * (PORE_BAND[1] - PORE_BAND[0])) * size : r + 4 + rnd() * (size - 2 * r - 9), r };
+      const p = { x: c + (rnd() * 2 - 1) * (R - r - 3), y: c + (rnd() * 2 - 1) * (R - r - 3), z: denseBand ? (PORE_BAND[0] + rnd() * (PORE_BAND[1] - PORE_BAND[0])) * size : doped ? DOPED_TOP * size + CRUST_VOX + r + 3 + rnd() * (DOPED_DEPTH * size - CRUST_VOX - 2 * r - 6) : r + 4 + rnd() * (size - 2 * r - 9), r };
+      if (doped && Math.hypot(p.x - c, p.y - c) > 0.7 * R - r - 2) continue;
       if (Math.hypot(p.x - c, p.y - c) > R - r - 3) continue;
       if (pores.some((q) => Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) < p.r + q.r + 3)) continue;
       pores.push(p);
     }
     const items = filler ? placeFiller(random(seed + 1000), { c, R, size }, pores) : [];
+    const rel = (v) => AIR_GRAY + v * (MATRIX_GRAY - AIR_GRAY);
+    const top = DOPED_TOP * size, inLens = (x, y, z) => Math.hypot(x - c, y - c) <= 0.7 * R && z >= top && z < top + DOPED_DEPTH * size;
+    const clumps = [];
+    if (doped) {
+      const r2 = random(seed + 2000);
+      for (let k = 0, tries = 0; k < CLUMP_CLUSTERS && tries < 2000; tries++) {
+        const a = r2() * 2 * Math.PI, rr = r2() * 0.5 * R, x = c + rr * Math.cos(a), y = c + rr * Math.sin(a), z = top + CRUST_VOX + 7 + r2() * (DOPED_DEPTH * size - CRUST_VOX - 16);
+        const three = [[0, 0, 0], [8, 2, 1], [2, 8, -1]].map(([dx, dy, dz]) => ({ x: x + dx, y: y + dy, z: z + dz }));
+        if (three.some((q) => pores.some((p) => Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z) < p.r + CLUMP_RADIUS + 3) || clumps.some((o) => Math.hypot(q.x - o.x, q.y - o.y, q.z - o.z) < 2 * CLUMP_RADIUS + 3))) continue;
+        clumps.push(...three); k++;
+      }
+    }
     let body = 0, open = 0, bright = 0;
     const DENSE_GRAY = Math.round(MATRIX_GRAY + DENSE_GAIN * (MATRIX_GRAY - AIR_GRAY));
     const dense = (z) => denseBand && z >= DENSE_BAND[0] * size && z < DENSE_BAND[1] * size;
@@ -57,13 +73,16 @@
       const nearItems = items.filter((f) => Math.abs(z - f.z) <= f.reach);
       for (let y = 0, i = 0; y < size; y++) {
         for (let x = 0; x < size; x++, i++) {
-          const inside = Math.hypot(x - c, y - c) <= R;
+          const inside = Math.hypot(x - c, y - c) <= R && (!doped || (z >= DOPED_TOP * size && z < DOPED_BOTTOM * size));
           const pore = inside && near.some((p) => (x - p.x) ** 2 + (y - p.y) ** 2 + (z - p.z) ** 2 <= p.r * p.r);
           if (inside) { body++; if (pore) open++; }
           const rod = rods.find((r) => Math.hypot(x - r.center.x, y - r.center.y) <= r.radius);
           const filled = inside && !pore && nearItems.some((f) => f.contains(x, y, z));
           if (filled) bright++;
-          const mean = filled ? FILLER_GRAY : inside && !pore ? (dense(z) ? DENSE_GRAY : MATRIX_GRAY) : rod ? AIR_GRAY + GRAY_PER_DENSITY * rod.density_g_cm3 : AIR_GRAY;
+          let mean = filled ? FILLER_GRAY : inside && !pore ? (dense(z) ? DENSE_GRAY : MATRIX_GRAY) : rod ? AIR_GRAY + GRAY_PER_DENSITY * rod.density_g_cm3 : AIR_GRAY;
+          if (doped && inside && !pore && inLens(x, y, z)) {
+            mean = z < top + CRUST_VOX ? rel(CRUST_REL) : clumps.some((q) => (x - q.x) ** 2 + (y - q.y) ** 2 + (z - q.z) ** 2 <= CLUMP_RADIUS ** 2) ? rel(CLUMP_REL) : rel(DOPED_REL);
+          }
           const gray = Math.max(1, Math.round(mean + NOISE_SD * gauss()));
           s[i] = Math.hypot(x - c, y - c) <= FOV ? gray : 0;
         }
@@ -71,7 +90,7 @@
       slices.push(s);
     }
     // Each variant is its own sample, so records drawn on one (a crop, phantoms) do not appear on another.
-    const folder = phantoms ? 'synthetic_phantoms' : filler ? 'synthetic_filler' : denseBand ? 'synthetic_dense_band' : 'synthetic_scan';
+    const folder = phantoms ? 'synthetic_phantoms' : filler ? 'synthetic_filler' : denseBand ? 'synthetic_dense_band' : doped ? 'synthetic_doped' : 'synthetic_scan';
     const files = slices.map((s, z) => {
       const name = `synthetic_${String(z + 1).padStart(3, '0')}.tif`;
       return { name, webkitRelativePath: `${folder}/${name}`, arrayBuffer: async () => CT.writeTiff(size, size, s, voxelMm) };
@@ -79,6 +98,7 @@
     return { files, truth: { porosity_percent: (100 * open) / body, pore_count: pores.length, pores: pores.map((p) => ({ ...p })), matrix_gray: MATRIX_GRAY, air_gray: AIR_GRAY,
       ...(phantoms ? { phantoms: rods, matrix_density: (MATRIX_GRAY - AIR_GRAY) / GRAY_PER_DENSITY } : {}),
       ...(denseBand ? { dense_band: { z_from: Math.ceil(DENSE_BAND[0] * size), z_to: Math.ceil(DENSE_BAND[1] * size) - 1, gray: DENSE_GRAY } } : {}),
+      ...(doped ? { doped: { relative: DOPED_REL, clumps: clumps.length, crust_voxels: CRUST_VOX, depth: DOPED_DEPTH * size } } : {}),
       ...(filler ? { filler: { spheres: items.filter((f) => f.kind === 'sphere').length, fibers: items.filter((f) => f.kind === 'fiber').length, volume_percent: (100 * bright) / body, gray: FILLER_GRAY } } : {}) } };
   }
 

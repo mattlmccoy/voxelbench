@@ -73,8 +73,8 @@ test('with every required step done there is no next step', () => {
 });
 
 test('more analyses: zones, CAD, filler, walls and Dragonfly, each mapped to its section', () => {
-  assert.deepEqual(C.MORE.map((m) => m.id), ['zones', 'cad', 'filler', 'walls', 'dragonfly']);
-  assert.deepEqual(C.MORE.map((m) => [m.section, m.label]), [['step3', 'zones'], ['step6', 'CAD'], ['step7', 'filler'], ['step8', 'walls'], ['step4', 'Dragonfly']]);
+  assert.deepEqual(C.MORE.map((m) => m.id), ['zones', 'cad', 'filler', 'walls', 'figure', 'dragonfly']);
+  assert.deepEqual(C.MORE.map((m) => [m.section, m.label]), [['step3', 'zones'], ['step6', 'CAD'], ['step7', 'filler'], ['step8', 'walls'], ['step9', '3D figure'], ['step4', 'Dragonfly']]);
   assert.equal(C.MORE.find((m) => m.id === 'dragonfly').anchor, 'dfPanel');
 });
 

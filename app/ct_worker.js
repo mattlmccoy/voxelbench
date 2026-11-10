@@ -1,7 +1,7 @@
 /* Runs pore detection off the page's main thread. The main thread sends the binned volume once, and sends full-
    resolution slices only when the smoothing changes; smoothed slices are kept here so threshold reruns are quick. */
 importScripts('ct_core.js', 'ct_pores.js', 'vb_calibration.js', 'ct_regions.js', 'ct_zones.js', 'ct_sheetdata.js', 'vb_connectivity.js', 'vb_align.js', 'vb_deviation.js', 'vb_cad.js', 'vb_filler.js', 'vb_wall.js', 'vb_masks.js',
-  'vb_stl.js', 'vb_holderseeds.js', 'vb_holderguard.js', 'vb_holderfit.js', 'vb_holder.js', 'vb_holdertape.js', 'vb_holderremoval.js', 'vb_holderframe.js', 'vb_holderstl.js', 'vb_holderwire.js');
+  'vb_stl.js', 'vb_holderseeds.js', 'vb_holderguard.js', 'vb_holderfit.js', 'vb_holder.js', 'vb_holdertape.js', 'vb_holderremoval.js', 'vb_holderframe.js', 'vb_holderstl.js', 'vb_holderwire.js', 'vb_figure.js');
 const P = self.CTPores, R = self.CTRegions, Z = self.CTZones, D = self.CTSheetData, HW = self.VBHolderWire;
 const MODEL_DOWNSAMPLE = 2;
 const COARSE_STEP = 2; // binned voxels per coarse cell: 4 full voxels, about 0.16 mm at 40 um
@@ -202,6 +202,97 @@ function sendZones({ threshold, regions, labelIds, baseline }) {
   postMessage({ type: 'zones', refused: null, map: painted, dims: coarse.dims, factor: coarse.factor, threshold: draft.threshold, axis: draft.axis, baseline: draft.baseline, method: draft.method, stats }, [painted.buffer]);
 }
 
+// ---------- 3D figures (vb_figure.js): the phase label volume on a grid of about 80 µm, a cutaway and a see-through view.
+let figurePending = null; // a figure waiting for the page's finer gray grid
+function sendFigure(data) {
+  const F = self.VBFigure, baseMm = vol.bin * vol.voxelMm;
+  if (airGray === null) airGray = R.estimateAirGray(vol.gray, vol.outside, body.filled);
+  const box = F.boundsOf(body.filled, vol.dims, Math.ceil(2 / baseMm));
+  if (!box) throw new Error('The sample mask is empty: there is no part to draw.');
+  const span = { nx: box.x1 - box.x0 + 1, ny: box.y1 - box.y0 + 1, nz: box.z1 - box.z0 + 1 };
+  // The loaded grid is finer than the worker's: ask the page for a block mean of its slices at about 80 µm.
+  const fine = F.planFactor(vol.voxelMm, { nx: span.nx * vol.bin, ny: span.ny * vol.bin, nz: span.nz * vol.bin });
+  if (fine < vol.bin) {
+    const lbox = { x0: box.x0 * vol.bin, y0: box.y0 * vol.bin, z0: box.z0 * vol.bin, x1: Math.min(vol.full.nx - 1, (box.x1 + 1) * vol.bin - 1), y1: Math.min(vol.full.ny - 1, (box.y1 + 1) * vol.bin - 1), z1: Math.min(vol.full.nz - 1, (box.z1 + 1) * vol.bin - 1) };
+    figurePending = { data, box: lbox, s: fine };
+    say('3D figure: reading the slices at the figure grid');
+    postMessage({ type: 'figureNeed', id: data.id, box: lbox, s: fine });
+    return;
+  }
+  const s = F.planFactor(baseMm, span);
+  const grid = F.blockGrid({ gray: vol.gray, envelope: body.filled, outside: vol.outside, dims: vol.dims, box, s });
+  const zMm = new Float32Array(grid.dims.nz);
+  for (let z = 0; z < zMm.length; z++) zMm[z] = (box.z0 + (z + 0.5) * s) * baseMm;
+  finishFigure(data, grid, baseMm * s, zMm, s * vol.bin);
+}
+
+function figureGrid({ gray, outside, dims }) {
+  const F = self.VBFigure, { data, box, s } = figurePending;
+  figurePending = null;
+  const envelope = F.maskOnGrid(body.filled, vol.dims, vol.bin, box, s, dims);
+  const zMm = new Float32Array(dims.nz);
+  for (let z = 0; z < zMm.length; z++) zMm[z] = (box.z0 + (z + 0.5) * s) * vol.voxelMm;
+  finishFigure(data, { gray, envelope, outside, dims }, vol.voxelMm * s, zMm, s);
+}
+
+function finishFigure({ id, options }, grid, cellMm, zMm, factor) {
+  const F = self.VBFigure, baseMm = vol.bin * vol.voxelMm, s = factor;
+  const r = F.classify({ gray: grid.gray, envelope: grid.envelope, outside: grid.outside, dims: grid.dims, cellMm, airGray, denseGray: options.denseGray,
+    zMm: options.coneBand === false ? null : zMm, scanMm: vol.dims.nz * baseMm, options: options.classify || {}, progress: (t) => say(`3D figure: ${t}`) });
+  say('3D figure: enclosed gas');
+  const open = F.closePores(r.labels, grid.dims);
+  const stats = F.figureStats({ labels: r.labels, rho: r.rho, cellMm, openVoxels: open, baseDensity: options.baseDensity, dopedMassFactor: options.dopedMassFactor });
+  say('3D figure: rendering');
+  const frame = F.toFigureFrame(r.labels, grid.dims, { fieldAxis: options.fieldAxis, upIsLowZ: options.upIsLowZ !== false });
+  const R3 = F.rotate(frame.labels, frame.dims, F.VIEW.az);
+  const cutView = F.opaque(F.cutQuarter(R3.labels, R3.dims).labels, R3.dims);
+  const cb = F.maskBox(cutView.mask, cutView.width, cutView.height, 10);
+  const cut = F.toRGBA(cutView.rgb, cutView.width, cb);
+  const cutLabels = new Uint8Array(cut.width * cut.height);
+  for (let y = 0; y < cut.height; y++) cutLabels.set(cutView.labels.subarray((y + cb.y0) * cutView.width + cb.x0, (y + cb.y0) * cutView.width + cb.x1), y * cut.width);
+  const anchors = F.anchors(cutLabels, cut.width, cut.height, cellMm);
+  const see = F.xray(R3.labels, R3.dims);
+  const xb = F.maskBox(see.mask, see.width, see.height, 12) || { x0: 0, y0: 0, x1: see.width, y1: see.height };
+  const xr = F.toRGBA(see.rgb, see.width, xb);
+  const half = F.halve(frame.labels, frame.dims);
+  const turn = { runs: F.encode(half.labels), dims: half.dims, cellMm: cellMm * 2 };
+  say('3D figure ready');
+  postMessage({ type: 'figure', id, cellMm, factor: s, stats, scale: r.scale, cupping: r.cupping, clumps: r.clumps, clustered: r.clustered, notes: r.notes,
+    cut: { data: cut.data, width: cut.width, height: cut.height }, anchors, field: F.fieldOnScreen(R3.field), xray: { data: xr.data, width: xr.width, height: xr.height }, turn },
+  [cut.data.buffer, xr.data.buffer, turn.runs.buffer]);
+}
+
+/** Turntable frames of one or more saved figure grids: 120 see-through views a full turn apart, each sample cropped to
+    the box its frames share. Posted one frame at a time ('figureFrame'), then 'figureTurn'. */
+function sendTurntable({ id, grids, frames = 120 }) {
+  const F = self.VBFigure, el = (F.VIEW.el * Math.PI) / 180, t = Math.tan(el), cs = Math.cos(el);
+  // The box every frame of a sample fits: the part's widest radius about the turning axis and its height.
+  const samples = grids.map((g) => {
+    const { nx, ny, nz } = g.dims, L = F.decode(g.runs, nx * ny * nz), side = Math.ceil(Math.hypot(nx, ny)) + 2;
+    let r = 0, z0 = nz, z1 = -1;
+    for (let z = 0, i = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++, i++) {
+      if (!L[i]) continue;
+      r = Math.max(r, Math.hypot(x - (nx - 1) / 2, y - (ny - 1) / 2)); if (z < z0) z0 = z; if (z > z1) z1 = z;
+    }
+    const o = (side - 1) / 2, H = Math.floor(nz + side * t) + 2, pad = 3;
+    const vLo = z0 + Math.round((o - r) * t) - pad, vHi = z1 + Math.round((o + r) * t) + pad;
+    const box = { x0: Math.max(0, Math.floor(o - r) - pad), x1: Math.min(side, Math.ceil(o + r) + pad + 1),
+      y0: Math.max(0, Math.floor((H - 1 - vHi) * cs)), y1: Math.min(Math.round(H * cs), Math.ceil((H - 1 - vLo + 1) * cs) + 1) };
+    return { L, dims: g.dims, side, box };
+  });
+  for (let f = 0; f < frames; f++) {
+    if (f % 10 === 0) say(`Turntable: frame ${f + 1} of ${frames}`);
+    const images = samples.map((smp) => {
+      const R3 = F.rotate(smp.L, smp.dims, (360 * f) / frames, smp.side);
+      const v = F.xray(R3.labels, R3.dims, F.VIEW.el, F.TURN_ALPHA);
+      return F.toRGBA(v.rgb, v.width, { ...smp.box, y1: Math.min(v.height, smp.box.y1) });
+    });
+    postMessage({ type: 'figureFrame', id, frame: f, images }, images.map((o) => o.data.buffer));
+  }
+  say('Turntable ready');
+  postMessage({ type: 'figureTurn', id, frames });
+}
+
 onmessage = ({ data }) => {
   try {
     if (data.type === 'volume') {
@@ -256,6 +347,13 @@ onmessage = ({ data }) => {
       const r = self.VBFiller.analyzeFiller({ getSlice: (z) => smoothed[z], dims: vol.full, filled: body.filled, binnedDims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm, circle: vol.circle,
         poreThreshold: data.settings.poreThreshold, k: data.k, minVoxels: data.minVoxels, threshold: data.threshold });
       postMessage({ type: 'filler', id: data.id, ...r }, r.nn_mm ? [r.nn_mm.buffer] : []);
+    } else if (data.type === 'figure') {
+      if (ensureBody(data)) sendModel();
+      sendFigure(data);
+    } else if (data.type === 'figureGrid') {
+      if (figurePending && figurePending.data.id === data.id) figureGrid(data);
+    } else if (data.type === 'figureTurn') {
+      sendTurntable(data);
     } else if (data.type === 'cad') {
       if (ensureBody(data)) sendModel();
       const r = self.VBCad.compareToCad({ gray: vol.gray, filled: body.filled, dims: vol.dims, bin: vol.bin, voxelMm: vol.voxelMm, circle: vol.circle, airGray,

@@ -26,6 +26,7 @@
     { id: 'cad', section: 'step6', label: 'CAD' },
     { id: 'filler', section: 'step7', label: 'filler' },
     { id: 'walls', section: 'step8', label: 'walls' },
+    { id: 'figure', section: 'step9', label: '3D figure' },
     { id: 'dragonfly', section: 'step4', label: 'Dragonfly', anchor: 'dfPanel' },
   ];
 

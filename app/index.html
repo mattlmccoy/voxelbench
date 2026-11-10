@@ -40,7 +40,7 @@
       <div class="libquiet" id="libQuiet">
         <label class="link quiet">Open a .VOX file…<input type="file" id="libVox" accept=".vox,.VOX,.xml" multiple></label>
         <label class="link quiet" title="A folder of TIFF slices, a scan folder, or a folder of scan folders; its records go to a project file you save">Open a folder of slices…<input type="file" id="libFolder" webkitdirectory multiple></label>
-        <details class="demomenu" id="libDemos"><summary class="link quiet">Try a demo scan</summary><div class="demolist"><button id="trySynthetic" title="A generated 160-voxel cube with 40 known pores; nothing to download">Synthetic test scan</button><button id="trySyntheticDense" title="A 16 mm cylinder at 0.1 mm voxels, its middle 30 % of the length 10 % denser and its pores kept away from the ends, for trying gray-value zones">With a dense band</button><button id="trySyntheticPhantoms" title="The same scan with two phantom rods (0.50 and 1.40 g/cm³) for trying the density calibration">With phantom rods</button><button id="trySyntheticFiller" title="The synthetic scan with 50 bright spheres and 20 short fibers lying within 8° of x, for trying the filler analysis">With filler</button><button id="trySyntheticCad" title="A generated L-shaped part, shrunk 3 % with its upright bent 0.12 mm, and its nominal STL, for trying the CAD comparison">With a CAD model</button></div></details>
+        <details class="demomenu" id="libDemos"><summary class="link quiet">Try a demo scan</summary><div class="demolist"><button id="trySynthetic" title="A generated 160-voxel cube with 40 known pores; nothing to download">Synthetic test scan</button><button id="trySyntheticDense" title="A 16 mm cylinder at 0.1 mm voxels, its middle 30 % of the length 10 % denser and its pores kept away from the ends, for trying gray-value zones">With a dense band</button><button id="trySyntheticPhantoms" title="The same scan with two phantom rods (0.50 and 1.40 g/cm³) for trying the density calibration">With phantom rods</button><button id="trySyntheticFiller" title="The synthetic scan with 50 bright spheres and 20 short fibers lying within 8° of x, for trying the filler analysis">With filler</button><button id="trySyntheticDoped" title="A 16 mm cube at 0.08 mm voxels: a cylinder whose middle reads 14 % denser (a doped core) with a porous crust on top, clusters of clumps and enclosed pores, for trying the 3D figure">With a doped core</button><button id="trySyntheticCad" title="A generated L-shaped part, shrunk 3 % with its upright bent 0.12 mm, and its nominal STL, for trying the CAD comparison">With a CAD model</button></div></details>
         <button class="link quiet" id="tourStartup" type="button" title="Walks through the eight steps on generated test scans with known answers">Guided tour</button>
       </div>
       <p class="notice" id="libHint" hidden>Click a scan to see its details.</p>
@@ -413,6 +413,46 @@
         </div>
       </details>
 
+      <details class="step" name="steps" id="step9">
+        <summary><span class="num">9</span>3D figure <span class="tag" id="figTag">optional</span></summary>
+        <div class="body">
+          <p class="hint">The part in 3D for slides and papers: an opaque view with the near quarter cut away, each phase colored (dense and porous, doped and base material, enclosed gas, clumps), and a see-through view with gas red and clumps green. Phases on a relative density scale (air 0, dense base material 1) after a 0.8-voxel smoothing: pore below 0.40, porous 0.40 to 0.85, dense from 0.85. Doped where the dense phase reads above the split or clustered clumps are within 1.5 mm. Enclosed gas: pores outside air does not reach. Needs only the sample mask; drawn on a grid of about 80 µm. Takes up to a minute on a large part.</p>
+          <div class="row">
+            <label>Field along <select id="figField"><option value="x">x</option><option value="y">y</option></select></label>
+            <label><input type="checkbox" id="figTop" checked> First slice on top</label>
+            <label>Dense = 1 <select id="figScale"><option value="auto">found in the part</option></select></label>
+          </div>
+          <div class="row">
+            <label>Doped split <input type="number" id="figSplit" value="1.07" step="0.01" min="0.9" max="2" style="width:58px"></label>
+            <label><input type="checkbox" id="figCupping" checked> Divide out depth cupping</label>
+          </div>
+          <div class="row">
+            <label>Names: doped <input id="figNameDoped" value="doped" style="width:70px"></label>
+            <label>base <input id="figNameBase" value="natural" style="width:90px"></label>
+            <label>clump <input id="figNameClump" value="clump" style="width:90px"></label>
+          </div>
+          <div class="row">
+            <label>Doped charge in <input type="number" id="figMassIn" step="0.01" min="0" placeholder="g" style="width:64px"> g</label>
+            <label>Part out <input type="number" id="figMassOut" step="0.01" min="0" placeholder="g" style="width:64px"> g</label>
+            <label>Base dense <input type="number" id="figBaseDensity" value="1.01" step="0.01" min="0.1" style="width:58px"> g/cm³</label>
+          </div>
+          <div class="row"><button id="runFigure" disabled>Make 3D figure</button><span class="mono muted" id="figState"></span></div>
+          <p class="error" id="figWarn" hidden></p>
+          <div id="figOut" hidden>
+            <p class="mono" id="figNumbers"></p>
+            <canvas id="figCut" style="width:100%;background:#fff;border-radius:6px"></canvas>
+            <canvas id="figSee" style="width:100%;background:#fff;border-radius:6px;margin-top:6px"></canvas>
+            <div class="row"><button id="figCutPng">Cutaway (PNG)</button><button id="figSeePng">See-through (PNG)</button><button id="figAdd">Add to figure set</button><span class="mono muted" id="figNote"></span></div>
+            <p class="hint" id="figProv"></p>
+          </div>
+          <p class="calhead">Figure set <span class="mono muted" id="figSetCount"></span></p>
+          <p class="hint">Samples added here are kept in this browser and drawn together at one scale: a row of cutaways with their numbers, and a turntable film of the see-through views.</p>
+          <div class="tablewrap"><table id="figSet"></table></div>
+          <div class="row"><button id="figRowPng" disabled>Same-scale row (PNG)</button><button id="figFilm" disabled>Turntable film</button><span class="mono muted" id="figSetNote"></span></div>
+          <canvas id="figPreview" hidden style="width:100%;background:#fff;border-radius:6px"></canvas>
+        </div>
+      </details>
+
       <details id="secScan">
         <summary>Scan information <span class="tag" id="scanTag"></span></summary>
         <div class="body">
@@ -546,6 +586,8 @@
 <script src="vb_fillerrail.js"></script>
 <script src="vb_dimrail.js"></script>
 <script src="vb_wallrail.js"></script>
+<script src="vb_figure.js"></script>
+<script src="vb_figurerail.js"></script>
 <script src="vb_comparerail.js"></script>
 <script src="vb_bookmarks.js"></script>
 <script src="vb_batch.js"></script>

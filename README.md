@@ -28,6 +28,14 @@ and a PDF review sheet. Scans are read on your computer and never uploaded.
 - Wall thickness (step 8): distribution and the thinnest places of the part's walls, each a click from its slice.
 - Lab workflow: measured lengths checked against a nominal and tolerance band; a before/after table of two scans'
   saved runs; batch runs over every scan in a folder with one summary CSV; view bookmarks; named setting presets.
+- 3D figure (step 9): the part drawn for slides and papers. Phases on a relative density scale after a 0.8-voxel
+  smoothing (pore below 0.40, porous 0.40 to 0.85, dense from 0.85), clumps (compact mid-density blobs inside dense
+  material), the doped material (the dense phase reading above a split, 1.07 by default, or clustered clumps nearby)
+  and enclosed gas (pores outside air does not reach). Two renders on a grid of about 80 µm: an opaque view with the
+  near quarter cut away, callouts, the field arrow and a scale bar, and a see-through view (gas red, clumps green).
+  Under each: % dense and % enclosed gas of the doped volume and the grams of base material fused on (weighed, or from
+  CT). A figure set kept in the browser draws several samples at one scale: a row of cutaways with their numbers and
+  a turntable film. Try it on **With a doped core**. See [docs/FIGURES.md](docs/FIGURES.md).
 - Exports: pore, region, zone, CAD-deviation, filler, wall and batch tables (CSV), a slice image (PNG) and a review sheet (PDF).
 - Three looks under Appearance in the top bar: Lab (the original instrument look, default), Mac (a Mac-style
   inspector) and Glass (frosted panels floating on a blurred copy of the scan), each light or dark (Mode: System
