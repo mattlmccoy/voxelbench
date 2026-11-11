@@ -38,13 +38,21 @@ at the visible point deepest inside each class's patch, the field arrow (the sca
 and clumps kept where any of the 8 cells holds them), 120 frames, played at 24 frames per second.
 
 ## Numbers
-- % dense: dense doped cells over the doped volume (dense, porous, pores and clumps).
-- % gas: enclosed doped pores over the doped volume without clumps.
+- % dense: the share of the weighed doped charge that ended as dense core (the lab's composition v2). The dense-phase
+  level is the mean relative density of the cells above 0.85 within 2.4 mm (where at least 30 % of the window is that
+  dense); N is its median 4 mm or more from clumps; the core is where the level is above N x 1.075, undecided cells
+  taking the nearest decision, opened by 0.24 mm, the largest piece kept, grown back and its holes filled in the
+  planes across the field axis. Its mass (relative density x base density / 0.9715) over the doped charge in; blank
+  until the charge is entered. It is not the share of cells above 0.85: that cut sits well below full doped density,
+  so melted but still porous doped material passes it (the detail line shows it as "above 0.85", by volume).
+- % gas: enclosed doped pores over the whole doped body (dense, porous, clumps, enclosed gas and gas open to the
+  surface), as the lab's composition table.
 - Fused on: part out minus doped charge in when both weights are entered (saved with the sample), else the base
   material's mass in view from CT: relative density x base density (1.01 g/cm³ by default).
 
 ## Differences from the lab scripts
 - The second clump pass (opened cores beside pores) is not run; it only adds clumps to the figure, and the lab's
-  composition used the first pass.
+  composition used the first pass. The dense core's "4 mm from clumps" rule therefore sees fewer clumps than
+  composition v2 did, which moves the core mass by under 1 %.
 - The part's frame: the lab scripts used a PCA frame; here level the part first (Scan information > Orientation).
 - The figure set lives in this browser (IndexedDB), not in the project file.

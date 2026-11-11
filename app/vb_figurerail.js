@@ -73,13 +73,8 @@
   }
 
   // ---------- numbers ----------
-  function numbersOf(r, rec) {
-    const s = r.stats, m = (rec && rec.figure) || {};
-    const weighed = Number.isFinite(m.mass_in_g) && Number.isFinite(m.mass_out_g) ? m.mass_out_g - m.mass_in_g : null;
-    return { dense: s.dense_percent_of_doped, gas: s.gas_percent_of_doped, fused: weighed ?? s.base_mass_g, fusedSource: weighed !== null ? 'weighed' : 'CT' };
-  }
-  const pct = (v) => (v === null || !Number.isFinite(v) ? 'n/a' : v.toFixed(v < 10 ? 1 : 0));
-  const numbersLine = (nb, n) => `${pct(nb.dense)} % dense · ${pct(nb.gas)} % gas · ${Number.isFinite(nb.fused) ? nb.fused.toFixed(1) : 'n/a'} g ${n.base} fused on${nb.fusedSource === 'CT' ? ' (CT)' : ''}`;
+  const numbersOf = (r, rec) => F.figureNumbers(r.stats, (rec && rec.figure) || {});
+  const pct = F.pct, numbersLine = F.numbersLine;
 
   // ---------- drawing ----------
   function imageCanvas(img) {
@@ -165,10 +160,11 @@
     if (!r) return;
     drawCutaway($('figCut'), r); drawSee($('figSee'), r);
     const rec = state.samples.get(r.folder), nb = numbersOf(r, rec), s = r.stats;
-    $('figNumbers').textContent = `${numbersLine(nb, r.names)} | doped ${(s.doped_mm3 / 1000).toFixed(2)} cm³: ${pct(s.dense_percent_of_doped)} % dense, ${pct(s.porous_percent_of_doped)} % porous, ${pct(s.clump_percent_of_doped)} % ${r.names.clump}; open pores ${(s.volume_mm3.open_pores / 1000).toFixed(3)} cm³ left out`;
+    const core = Number.isFinite(s.core_mass_g) ? `dense core ${s.core_mass_g.toFixed(2)} g; ` : '';
+    $('figNumbers').textContent = `${numbersLine(nb, r.names)} | ${core}${r.names.doped} body ${(s.doped_mm3 / 1000).toFixed(2)} cm³ by volume: ${pct(s.dense_percent_of_doped)} % above 0.85, ${pct(s.porous_percent_of_doped)} % porous, ${pct(s.clump_percent_of_doped)} % ${r.names.clump}, ${pct(s.gas_percent_of_doped)} % enclosed gas; open pores ${(s.volume_mm3.open_pores / 1000).toFixed(3)} cm³ not drawn`;
     $('figProv').textContent = `Grid ${(r.cellMm * 1000).toFixed(0)} µm; dense = 1 from ${r.scale.source} (gray ${Math.round(r.scale.denseGray)}, air ${Math.round(r.scale.airGray)}); `
       + `${r.cupping ? `depth cupping divided out (${r.cupping.length} bands)` : 'no cupping correction'}; ${r.clumps} ${r.names.clump}s, ${r.clustered} clustered; doped split ${r.options.classify.split}. `
-      + `Dense and gas are shares of the doped volume; gas is enclosed gas only. ${nb.fusedSource === 'weighed' ? `Fused on: part out − doped charge in (weighed).` : `Fused on: ${r.names.base} mass in view from CT (${r.options.baseDensity} g/cm³ at dense = 1); enter the weighed masses to use them instead.`} `
+      + `Dense: the dense core's mass (the largest piece reading at full ${r.names.doped} density over 2.4 mm) over the weighed ${r.names.doped} charge. Gas: enclosed gas over the whole ${r.names.doped} body, open pores included. ${nb.fusedSource === 'weighed' ? `Fused on: part out − doped charge in (weighed).` : `Fused on: ${r.names.base} mass in view from CT (${r.options.baseDensity} g/cm³ at dense = 1); enter the weighed masses to use them instead.`} `
       + `${r.notes.join(' ')} ${r.provenance}`;
   }
 

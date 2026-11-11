@@ -21,6 +21,7 @@
   const DEFAULTS = {
     sigmaVox: 0.8, poreBelow: 0.40, denseFrom: 0.85, split: 1.07, windowMm: 1.2, denseShare: 0.6, fovEdgeMm: 2, coneBandMm: 7,
     clusterMm: 4, nearClumpMm: 1.5, endClumpMm: 2.5, majorityMm: 0.88, clumpMm3: [0.1, 20], clumpLevel: [0.45, 0.80], cupping: true,
+    levelMm: 2.4, coreSplit: 1.075, coreOpenMm: 0.24, // dense core (composition v2)
   };
 
   // ---------- grid helpers ----------
@@ -431,31 +432,130 @@
     return open;
   }
 
-  /** Numbers under each figure: volumes (mm³) and shares of the doped volume; masses from the relative density
-      (base material dense = 1, times baseDensity g/cm³; doped voxels divided by dopedMassFactor). */
-  function figureStats({ labels, rho, cellMm, openVoxels, baseDensity = 1.01, dopedMassFactor = 0.9715 }) {
+  /** Numbers under each figure: volumes (mm³) and shares of the doped body; masses from the relative density
+      (base material dense = 1, times baseDensity g/cm³; doped voxels divided by dopedMassFactor). The doped body is
+      every doped voxel before the open pores were removed (openDopedVoxels of them), as the lab's composition table:
+      dense, porous, clumps, enclosed gas and gas open to the surface. core, when given, is the dense core (denseCore). */
+  function figureStats({ labels, rho, cellMm, openVoxels, openDopedVoxels = 0, core = null, baseDensity = 1.01, dopedMassFactor = 0.9715 }) {
     const counts = new Float64Array(8);
-    let massBase = 0, massDoped = 0;
+    let massBase = 0, massDoped = 0, massCore = 0;
     for (let i = 0; i < labels.length; i++) {
       const c = labels[i]; counts[c]++;
+      if (core && core[i]) massCore += Math.max(0, rho[i]);
       if (!c) continue;
       const r = Math.max(0, rho[i]);
       if (c === 3 || c === 4 || c === 7) massBase += r; else massDoped += r;
     }
     const vox = cellMm ** 3;
-    const doped = counts[1] + counts[2] + counts[5] + counts[6], dopedNoClump = counts[1] + counts[2] + counts[5];
-    const mm3 = (k) => counts[k] * vox;
+    const doped = counts[1] + counts[2] + counts[5] + counts[6] + openDopedVoxels;
+    const mm3 = (k) => counts[k] * vox, share = (k) => (doped ? (100 * counts[k]) / doped : null);
+    const gramsDoped = (m) => (m * vox * baseDensity) / dopedMassFactor / 1000;
     return {
       cell_mm: cellMm,
-      volume_mm3: { doped_dense: mm3(1), doped_porous: mm3(2), base_dense: mm3(3), base_porous: mm3(4), enclosed_gas_doped: mm3(5), clump: mm3(6), enclosed_gas_base: mm3(7), open_pores: openVoxels * vox },
+      volume_mm3: { doped_dense: mm3(1), doped_porous: mm3(2), base_dense: mm3(3), base_porous: mm3(4), enclosed_gas_doped: mm3(5), clump: mm3(6), enclosed_gas_base: mm3(7),
+        open_pores: openVoxels * vox, open_pores_doped: openDopedVoxels * vox },
       doped_mm3: doped * vox,
-      dense_percent_of_doped: doped ? (100 * counts[1]) / doped : null,
-      porous_percent_of_doped: doped ? (100 * counts[2]) / doped : null,
-      clump_percent_of_doped: doped ? (100 * counts[6]) / doped : null,
-      gas_percent_of_doped: dopedNoClump ? (100 * counts[5]) / dopedNoClump : null,
+      dense_percent_of_doped: share(1),
+      porous_percent_of_doped: share(2),
+      clump_percent_of_doped: share(6),
+      gas_percent_of_doped: share(5),
       base_mass_g: (massBase * vox * baseDensity) / 1000,
-      doped_mass_g: (massDoped * vox * baseDensity) / dopedMassFactor / 1000,
+      doped_mass_g: gramsDoped(massDoped),
+      core_mass_g: core ? gramsDoped(massCore) : null,
     };
+  }
+
+  /** The numbers printed under a figure: dense = dense core mass over the weighed doped charge (null without one),
+      enclosed gas share of the doped body, and the base material fused on (weighed out minus in, else from CT). */
+  function figureNumbers(stats, masses = {}) {
+    const has = (v) => Number.isFinite(v);
+    const weighed = has(masses.mass_in_g) && has(masses.mass_out_g) ? masses.mass_out_g - masses.mass_in_g : null;
+    const dense = has(stats.core_mass_g) && has(masses.mass_in_g) && masses.mass_in_g > 0 ? (100 * stats.core_mass_g) / masses.mass_in_g : null;
+    return { dense, gas: stats.gas_percent_of_doped, fused: weighed ?? stats.base_mass_g, fusedSource: weighed !== null ? 'weighed' : 'CT' };
+  }
+
+  const pct = (v) => (v === null || !Number.isFinite(v) ? 'n/a' : v.toFixed(v < 10 ? 1 : 0));
+  /** The line printed under each part, e.g. '45 % dense · 2.3 % gas · 3.3 g base fused on'. */
+  function numbersLine(nb, names) {
+    const dense = nb.dense === null || !Number.isFinite(nb.dense) ? `dense: enter the ${names.doped} charge` : `${pct(nb.dense)} % dense`;
+    const fused = `${Number.isFinite(nb.fused) ? nb.fused.toFixed(1) : 'n/a'} g ${names.base} fused on${nb.fusedSource === 'CT' ? ' (CT)' : ''}`;
+    return `${dense} · ${pct(nb.gas)} % gas · ${fused}`;
+  }
+
+  // ---------- dense core (the lab's composition v2) ----------
+  /** One step of erosion (or dilation) by the 6-neighbor cross; outside the grid counts as empty. */
+  function crossStep(mask, dims, grow) {
+    const { nx, ny, nz } = dims, plane = nx * ny, out = new Uint8Array(mask.length);
+    for (let z = 0, i = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++, i++) {
+      const a = x > 0 ? mask[i - 1] : 0, b = x < nx - 1 ? mask[i + 1] : 0, c = y > 0 ? mask[i - nx] : 0;
+      const d = y < ny - 1 ? mask[i + nx] : 0, e = z > 0 ? mask[i - plane] : 0, f = z < nz - 1 ? mask[i + plane] : 0;
+      out[i] = grow ? (mask[i] || a || b || c || d || e || f ? 1 : 0) : (mask[i] && a && b && c && d && e && f ? 1 : 0);
+    }
+    return out;
+  }
+
+  /** Fill the holes of mask in each plane across axis ('x', 'y' or 'z'): what the plane's border can't reach through
+      empty cells (4-connected) is filled. */
+  function fillHolesInPlanes(mask, dims, axis) {
+    const { nx, ny } = dims, out = Uint8Array.from(mask);
+    const [U, V, W] = axis === 'x' ? [ny, dims.nz, nx] : axis === 'y' ? [nx, dims.nz, ny] : [nx, ny, dims.nz];
+    const idx = axis === 'x' ? (u, v, w) => (v * ny + u) * nx + w : axis === 'y' ? (u, v, w) => (v * ny + w) * nx + u : (u, v, w) => (w * ny + v) * nx + u;
+    const seen = new Uint8Array(U * V), stack = [];
+    for (let w = 0; w < W; w++) {
+      seen.fill(0);
+      const push = (u, v) => { const k = v * U + u; if (!seen[k] && !mask[idx(u, v, w)]) { seen[k] = 1; stack.push(k); } };
+      for (let u = 0; u < U; u++) { push(u, 0); push(u, V - 1); }
+      for (let v = 0; v < V; v++) { push(0, v); push(U - 1, v); }
+      while (stack.length) {
+        const k = stack.pop(), u = k % U, v = (k - u) / U;
+        if (u > 0) push(u - 1, v); if (u < U - 1) push(u + 1, v); if (v > 0) push(u, v - 1); if (v < V - 1) push(u, v + 1);
+      }
+      for (let v = 0; v < V; v++) for (let u = 0; u < U; u++) if (!seen[v * U + u]) out[idx(u, v, w)] = 1;
+    }
+    return out;
+  }
+
+  /** The dense core: the doped material that reached full composite density (the lab's composition v2). The dense-
+      phase level is the mean relative density of dense voxels within a 2.4 mm window (where at least 30 % of it is
+      dense); N is its median 4 mm or more from clumps (the base material's melt); the core is where the level is above
+      N x 1.075, undecided voxels taking the nearest decision, opened by 0.24 mm, the largest piece kept, grown back
+      within the decision, and holes filled in the planes across the field axis. */
+  function denseCore({ rho, envelope, clump, dims, cellMm, fillAxis = 'x', options = {} }) {
+    const o = { ...DEFAULTS, ...options }, n = rho.length, none = () => new Uint8Array(n);
+    const dense = new Float32Array(n), dRho = new Float32Array(n);
+    for (let i = 0; i < n; i++) if (envelope[i] && rho[i] >= o.denseFrom) { dense[i] = 1; dRho[i] = rho[i]; }
+    const w = Math.max(3, Math.round(o.levelMm / cellMm) | 1);
+    const num = boxMean(dRho, dims, w), den = boxMean(dense, dims, w);
+    const level = new Float32Array(n).fill(NaN);
+    for (let i = 0; i < n; i++) if (envelope[i] && den[i] > 0.3) level[i] = num[i] / Math.max(den[i], 1e-6);
+    let anyClump = false;
+    for (let i = 0; i < n && !anyClump; i++) if (clump[i]) anyClump = true;
+    const far = anyClump ? distanceFrom(clump, dims).distance : null, list = [];
+    for (let i = 0; i < n; i++) if (Number.isFinite(level[i]) && (!far || far[i] * cellMm > o.clusterMm)) list.push(level[i]);
+    if (!list.length) return { core: none(), level: null, split: null };
+    const N = median(list), split = N * o.coreSplit;
+    const decided = new Uint8Array(n), side = new Uint8Array(n);
+    for (let i = 0; i < n; i++) if (Number.isFinite(level[i])) { decided[i] = 1; side[i] = level[i] > split ? 2 : 1; }
+    const filled = distanceFrom(decided, dims, side).carry;
+    const doped = new Uint8Array(n);
+    for (let i = 0; i < n; i++) doped[i] = envelope[i] && filled[i] === 2 ? 1 : 0;
+    const r = Math.max(1, Math.round(o.coreOpenMm / cellMm));
+    let m = doped;
+    for (let k = 0; k < r; k++) m = crossStep(m, dims, false);
+    for (let k = 0; k < r; k++) m = crossStep(m, dims, true);
+    const { labels, n: pieces } = label6(m, dims);
+    if (!pieces) return { core: none(), level: N, split };
+    const size = new Float64Array(pieces + 1);
+    for (let i = 0; i < n; i++) if (labels[i]) size[labels[i]]++;
+    let best = 1;
+    for (let l = 2; l <= pieces; l++) if (size[l] > size[best]) best = l;
+    let core = none();
+    for (let i = 0; i < n; i++) core[i] = labels[i] === best ? 1 : 0;
+    for (let k = 0; k < r; k++) core = crossStep(core, dims, true);
+    for (let i = 0; i < n; i++) core[i] = core[i] && doped[i] ? 1 : 0;
+    core = fillHolesInPlanes(core, dims, fillAxis);
+    for (let i = 0; i < n; i++) if (!envelope[i]) core[i] = 0;
+    return { core, level: N, split };
   }
 
   // ---------- orientation and rendering ----------
@@ -651,5 +751,5 @@
   }
 
   return { CODE, COLORS, XRAY_ALPHA, TURN_ALPHA, VIEW, DEFAULTS, TARGET_MM, planFactor, boundsOf, blockGrid, sliceGrid, maskOnGrid, gaussian3, boxMean, label6, distanceFrom, depthInside, distance2,
-    findClumps, clusteredIds, classify, closePores, figureStats, toFigureFrame, rotate, cutQuarter, opaque, xray, maskBox, toRGBA, anchors, fieldOnScreen, halve, encode, decode };
+    findClumps, clusteredIds, classify, closePores, figureStats, figureNumbers, numbersLine, pct, denseCore, fillHolesInPlanes, toFigureFrame, rotate, cutQuarter, opaque, xray, maskBox, toRGBA, anchors, fieldOnScreen, halve, encode, decode };
 }));

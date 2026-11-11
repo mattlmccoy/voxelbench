@@ -239,9 +239,16 @@ function finishFigure({ id, options }, grid, cellMm, zMm, factor) {
   const F = self.VBFigure, baseMm = vol.bin * vol.voxelMm, s = factor;
   const r = F.classify({ gray: grid.gray, envelope: grid.envelope, outside: grid.outside, dims: grid.dims, cellMm, airGray, denseGray: options.denseGray,
     zMm: options.coneBand === false ? null : zMm, scanMm: vol.dims.nz * baseMm, options: options.classify || {}, progress: (t) => say(`3D figure: ${t}`) });
+  say('3D figure: dense core');
+  const n = r.labels.length, clump = new Uint8Array(n);
+  let dopedPores = 0;
+  for (let i = 0; i < n; i++) { if (r.labels[i] === F.CODE.CLUMP) clump[i] = 1; else if (r.labels[i] === F.CODE.DOPED_PORE) dopedPores++; }
+  const core = F.denseCore({ rho: r.rho, envelope: grid.envelope, clump, dims: grid.dims, cellMm, fillAxis: options.fieldAxis === 'y' ? 'y' : 'x', options: options.classify || {} }).core;
   say('3D figure: enclosed gas');
   const open = F.closePores(r.labels, grid.dims);
-  const stats = F.figureStats({ labels: r.labels, rho: r.rho, cellMm, openVoxels: open, baseDensity: options.baseDensity, dopedMassFactor: options.dopedMassFactor });
+  let enclosed = 0;
+  for (let i = 0; i < n; i++) if (r.labels[i] === F.CODE.DOPED_PORE) enclosed++;
+  const stats = F.figureStats({ labels: r.labels, rho: r.rho, cellMm, openVoxels: open, openDopedVoxels: dopedPores - enclosed, core, baseDensity: options.baseDensity, dopedMassFactor: options.dopedMassFactor });
   say('3D figure: rendering');
   const frame = F.toFigureFrame(r.labels, grid.dims, { fieldAxis: options.fieldAxis, upIsLowZ: options.upIsLowZ !== false });
   const R3 = F.rotate(frame.labels, frame.dims, F.VIEW.az);

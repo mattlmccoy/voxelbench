@@ -99,3 +99,60 @@ test('distanceFrom is Euclidean and carries the nearest source value', () => {
   assert.equal(carry[at(1, 1, 1)], 2);
   assert.equal(carry[at(10, 8, 5)], 1);
 });
+
+test('figureStats: enclosed gas is a share of the whole doped body, open doped pores and clumps included', () => {
+  const L = new Uint8Array(95);
+  L.fill(F.CODE.DOPED_DENSE, 0, 80); L.fill(F.CODE.CLUMP, 80, 90); L.fill(F.CODE.DOPED_PORE, 90, 95); // 5 enclosed
+  const s = F.figureStats({ labels: L, rho: new Float32Array(95).fill(1), cellMm: 0.1, openVoxels: 5, openDopedVoxels: 5 });
+  assert.ok(Math.abs(s.gas_percent_of_doped - 5) < 1e-9, `${s.gas_percent_of_doped}`); // 5 of 80 + 10 + 5 + 5 open
+  assert.ok(Math.abs(s.doped_mm3 - 0.1) < 1e-9, `${s.doped_mm3}`);
+});
+
+// Base material (1.0) around a large composite body (1.14) and a separate small composite block: the dense core is
+// the large body only.
+function corePhantom() {
+  const dims = { nx: 160, ny: 100, nz: 60 }, n = dims.nx * dims.ny * dims.nz, rho = new Float32Array(n), env = new Uint8Array(n);
+  const inBox = (x, y, z, b) => x >= b[0] && x < b[1] && y >= b[2] && y < b[3] && z >= b[4] && z < b[5];
+  const BODY = [20, 80, 25, 75, 15, 45], SMALL = [115, 145, 35, 65, 15, 45];
+  for (let z = 0, i = 0; z < dims.nz; z++) for (let y = 0; y < dims.ny; y++) for (let x = 0; x < dims.nx; x++, i++) {
+    if (x < 5 || x >= 155 || y < 5 || y >= 95 || z < 5 || z >= 55) continue;
+    env[i] = 1;
+    rho[i] = inBox(x, y, z, BODY) || inBox(x, y, z, SMALL) ? 1.14 : 1.0;
+  }
+  return { dims, rho, env, clump: new Uint8Array(n), BODY, SMALL, inBox };
+}
+
+test('denseCore: the largest piece reading at composite level; a smaller separate block and the base material are left out', () => {
+  const p = corePhantom();
+  const { core } = F.denseCore({ rho: p.rho, envelope: p.env, clump: p.clump, dims: p.dims, cellMm: 0.1 });
+  const at = (x, y, z) => core[(z * p.dims.ny + y) * p.dims.nx + x];
+  assert.equal(at(50, 50, 30), 1, 'the body center');
+  assert.equal(at(130, 50, 30), 0, 'the small block');
+  assert.equal(at(10, 50, 30), 0, 'base material');
+  // The 2.4 mm level window (12 cells either side) blurs the body's faces, so the core is inset; every body cell whose
+  // window lies wholly inside the body is core, and the core stays inside the body.
+  const B = p.BODY, deep = [B[0] + 12, B[1] - 12, B[2] + 12, B[3] - 12, B[4] + 12, B[5] - 12];
+  let missing = 0, outside = 0, n = 0;
+  for (let i = 0; i < core.length; i++) {
+    const x = i % 160, y = Math.floor(i / 160) % 100, z = Math.floor(i / 16000);
+    if (core[i]) { n++; if (!p.inBox(x, y, z, B)) outside++; } else if (p.inBox(x, y, z, deep)) missing++;
+  }
+  assert.equal(missing, 0, 'deep body cells left out');
+  assert.ok(n > 0 && outside / n < 0.01, `${outside} of ${n} core cells outside the body`);
+});
+
+test('figureNumbers: dense is the core mass over the weighed charge; n/a without a charge weight', () => {
+  const stats = { core_mass_g: 3, gas_percent_of_doped: 2.5, base_mass_g: 4 };
+  const a = F.figureNumbers(stats, { mass_in_g: 6, mass_out_g: 11 });
+  assert.equal(a.dense, 50);
+  assert.equal(a.gas, 2.5);
+  assert.equal(a.fused, 5); assert.equal(a.fusedSource, 'weighed');
+  const b = F.figureNumbers(stats, {});
+  assert.equal(b.dense, null); assert.equal(b.fused, 4); assert.equal(b.fusedSource, 'CT');
+});
+
+test('numbersLine: the line under each part, as the deck prints it; says what is missing instead of a bare n/a', () => {
+  const names = { doped: 'doped', base: 'base', clump: 'clump' };
+  assert.equal(F.numbersLine({ dense: 44.6, gas: 2.34, fused: 3.27, fusedSource: 'weighed' }, names), '45 % dense · 2.3 % gas · 3.3 g base fused on');
+  assert.equal(F.numbersLine({ dense: null, gas: 12.5, fused: 2, fusedSource: 'CT' }, names), 'dense: enter the doped charge · 13 % gas · 2.0 g base fused on (CT)');
+});
